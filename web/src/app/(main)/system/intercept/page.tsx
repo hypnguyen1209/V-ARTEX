@@ -647,7 +647,7 @@ export default function InterceptPage() {
           ) : (
             <>
               <Badge variant="secondary" className="shrink-0">
-                {scopeTools.length} tools
+                {scopeTools.length} {scopeTools.length === 1 ? "tool" : "tools"}
               </Badge>
               <span className="truncate text-muted-foreground" title={scopeTools.join(", ")}>
                 {scopeTools.join(", ")}

@@ -564,7 +564,7 @@ export default function TrafficPage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger size="sm" className="w-28">
+          <SelectTrigger size="sm" className="w-36">
             <SelectValue placeholder="Status Code" />
           </SelectTrigger>
           <SelectContent>

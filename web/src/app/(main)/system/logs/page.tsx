@@ -215,8 +215,14 @@ export default function LogsPage() {
             Clear
           </Button>
           <span className="ml-auto text-xs text-muted-foreground">
-            {counts.total} lines · <span className="text-amber-600 dark:text-amber-400">{counts.warn} warnings</span> ·{" "}
-            <span className="text-red-600 dark:text-red-400">{counts.error} errors</span>
+            {counts.total} {counts.total === 1 ? "line" : "lines"} ·{" "}
+            <span className="text-amber-600 dark:text-amber-400">
+              {counts.warn} {counts.warn === 1 ? "warning" : "warnings"}
+            </span>{" "}
+            ·{" "}
+            <span className="text-red-600 dark:text-red-400">
+              {counts.error} {counts.error === 1 ? "error" : "errors"}
+            </span>
           </span>
         </div>
 
