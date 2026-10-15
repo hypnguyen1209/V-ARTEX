@@ -6,6 +6,8 @@ import (
 	"github.com/Autumn-27/artex/agent"
 	"github.com/Autumn-27/artex/db"
 	"github.com/Autumn-27/artex/intercept"
+	"github.com/Autumn-27/artex/traffic"
+	actool "github.com/Autumn-27/norma/tool"
 )
 
 func migrateEnglishDefaults(ctx context.Context, pg *db.DB) error {
@@ -18,5 +20,19 @@ func legacyEnglishDefaults() db.LegacyEnglishDefaults {
 		current[key] = text
 	}
 	current["judge"] = intercept.DefaultJudgePrompt
-	return db.NewLegacyEnglishDefaults(current)
+	defaults := db.NewLegacyEnglishDefaults(current)
+	defaults.ToolDefaults = make(map[string]db.EnglishToolDefault)
+	for _, seed := range agent.BuiltinToolSeeds() {
+		defaults.ToolDefaults[seed.Key] = db.EnglishToolDefault{Description: seed.Desc, Schema: seed.Schema}
+	}
+	// Constructors only capture handlers; metadata does not require live stores.
+	s := &Server{}
+	for _, group := range [][]actool.CoreTool{
+		traffic.SeedToolMetas(), s.orchestrationTools(), s.platformTools(), s.findingRetestTools(),
+	} {
+		for _, tool := range group {
+			defaults.ToolDefaults[tool.Name()] = db.EnglishToolDefault{Description: tool.Description(), Schema: tool.InputSchema()}
+		}
+	}
+	return defaults
 }

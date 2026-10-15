@@ -1,0 +1,2088 @@
+[
+  {
+    "key": "graph_overview",
+    "descriptions": [
+      "(\u63a2\u7d22\u94fe\u8def\u56fe)\u63a2\u7d22\u6001\u52bf\u84b8\u998f\u6458\u8981\uff1a\u8d44\u4ea7\u8ba1\u6570\u3001\u65e0\u63a5\u53e3\u7684\u7ad9\u70b9\u3001frontier\u3001\u53d1\u73b0\u3001hints(\u4eba\u7c7b/\u4e3b agent \u7684\u6218\u7565\u63d0\u793a\uff0c\u751f\u6210\u610f\u56fe\u65f6\u987b\u7eb3\u5165)\u3002\u89c4\u5212\u65f6\u5148\u8c03\u5b83\u3002"
+    ],
+    "schema": []
+  },
+  {
+    "key": "list_findings",
+    "descriptions": [
+      "\u5217\u672c\u4efb\u52a1\u53ca\u76f4\u63a5\u5173\u8054\u4efb\u52a1\u7684\u3010\u786e\u8ba4\u6f0f\u6d1e\u3011(\u7d27\u51d1\uff1aid+task_id+intent_id+vulnclass+severity+\u6458\u8981+\u72b6\u6001)\u3002\u5173\u8054\u4efb\u52a1\u6761\u76ee\u5e26 source_task_id/inherited=true \u4e14\u53ea\u8bfb\u3002\u8fd9\u91cc\u53ea\u542b\u6f0f\u6d1e\uff1b\u666e\u901a\u63a2\u7d22\u4e8b\u5b9e\u7528 list_facts\uff0c\u8be6\u60c5\u7528 node_detail(id)\u3002"
+    ],
+    "schema": []
+  },
+  {
+    "key": "list_facts",
+    "descriptions": [
+      "\u5206\u9875\u5217\u672c\u4efb\u52a1\u53ca\u76f4\u63a5\u5173\u8054\u4efb\u52a1\u7684\u3010\u63a2\u7d22\u4e8b\u5b9e/\u7ed3\u8bba\u3011\uff0c\u6700\u65b0\u5728\u524d(\u7d27\u51d1\uff1aid+\u6458\u8981+\u72b6\u6001\uff0c\u6458\u8981\u8fc7\u957f\u4f1a\u622a\u65ad\uff0c\u5168\u6587\u7528 node_detail(id))\u3002\u53c2\u6570\u5747\u53ef\u9009\uff1alimit(\u9ed8\u8ba4 20\uff0c\u4e0a\u9650 100)\u3001before(\u6e38\u6807\uff0c\u4f20\u4e0a\u4e00\u9875\u8fd4\u56de\u7684 next_before \u53d6\u66f4\u65e7\u7684\u4e00\u9875\uff1b\u7701\u7565/0=\u6700\u65b0\u4e00\u9875)\u3001q(\u6309\u6458\u8981\u5173\u952e\u8bcd\u8fc7\u6ee4)\u3002\u8fd4\u56de {facts, total, has_more, next_before}\uff1atotal \u662f\u8fc7\u6ee4\u540e\u7684\u603b\u6570\uff0chas_more=true \u65f6\u7528 next_before \u7ee7\u7eed\u7ffb\u9875\u3002\u5173\u8054\u4efb\u52a1\u6761\u76ee\u5e26 source_task_id/inherited=true \u4e14\u53ea\u8bfb\u3002\u6f0f\u6d1e\u770b list_findings\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "before",
+          "description"
+        ],
+        "value": "\u5206\u9875\u6e38\u6807\uff1a\u53ea\u8fd4\u56de id \u5c0f\u4e8e\u8be5\u503c\u7684\u66f4\u65e7\u4e8b\u5b9e\uff1b\u7701\u7565\u6216 0 = \u6700\u65b0\u4e00\u9875"
+      },
+      {
+        "path": [
+          "properties",
+          "limit",
+          "description"
+        ],
+        "value": "\u8fd4\u56de\u6761\u6570\uff0c\u9ed8\u8ba4 20\uff0c\u4e0a\u9650 100"
+      },
+      {
+        "path": [
+          "properties",
+          "q",
+          "description"
+        ],
+        "value": "\u6309\u4e8b\u5b9e\u6458\u8981\u5173\u952e\u8bcd\u8fc7\u6ee4\uff08\u4e0d\u533a\u5206\u5927\u5c0f\u5199\uff09\uff1b\u7701\u7565 = \u4e0d\u8fc7\u6ee4"
+      }
+    ]
+  },
+  {
+    "key": "node_detail",
+    "descriptions": [
+      "\u6309 id \u53d6\u672c\u4efb\u52a1\u6216\u76f4\u63a5\u5173\u8054\u4efb\u52a1\u7684\u3010\u63a2\u7d22\u56fe\u8282\u70b9\u3011\u5b8c\u6574\u5185\u5bb9\u3002\u7ee7\u627f\u8282\u70b9\u5e26 source_task_id/inherited=true \u4e14\u53ea\u8bfb\u3002\u4ec5\u9650 list_facts/list_findings/graph_overview \u8fd4\u56de\u7684\u63a2\u7d22\u8282\u70b9 id\uff1b\u8d44\u4ea7\u8bf7\u7528 list_assets/asset_neighbors\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "id",
+          "description"
+        ],
+        "value": "\u63a2\u7d22\u56fe\u8282\u70b9 id(\u975e\u8d44\u4ea7 id)"
+      }
+    ]
+  },
+  {
+    "key": "expand_digest",
+    "descriptions": [
+      "\u5c55\u5f00\u4e00\u4e2a cold digest\uff1a\u8fd4\u56de\u5b83\u6298\u53e0\u7684\u6210\u5458\u7d27\u51d1\u5217\u8868\uff08id/summary/state/confidence\uff09\uff0c\u4e0e\u6982\u89c8 recent_facts/recent_done_intents \u540c\u5f62\u72b6\u3002\u8981\u67d0\u6761\u5b8c\u6574\u7ec6\u8282/\u8bc1\u636e\u7528 node_detail(member_id)\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "id",
+          "description"
+        ],
+        "value": "digest \u8282\u70b9 id\uff08\u6765\u81ea\u6982\u89c8 cold_digests\uff09"
+      }
+    ]
+  },
+  {
+    "key": "get_worker_output",
+    "descriptions": [
+      "\u53d6\u672c\u4efb\u52a1\u6216\u76f4\u63a5\u5173\u8054\u4efb\u52a1\u67d0\u6761\u610f\u56fe(work)\u7684\u6700\u7ec8\u8f93\u51fa\u7ed3\u8bba\u3002\u5173\u8054\u4efb\u52a1\u7ed3\u679c\u5e26 source_task_id/inherited=true \u4e14\u53ea\u8bfb\u3002\u6b63\u5e38\u7ed3\u675f\u8fd4\u56de\u5176\u603b\u7ed3\uff1b\u88ab\u7ec8\u6b62(stopped)/\u5f02\u5e38\u7684 work \u8fd4\u56de\u5176\u622a\u81f3\u4e2d\u6b62\u65f6\u7684\u6700\u540e\u8f93\u51fa\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "intent_id",
+          "description"
+        ],
+        "value": "\u610f\u56fe id\uff08= work \u53e5\u67c4\uff09"
+      }
+    ]
+  },
+  {
+    "key": "get_worker_trace",
+    "descriptions": [
+      "\u67e5\u770b\u67d0\u6761\u610f\u56fe(work)\u7684\u3010\u6267\u884c\u8fc7\u7a0b\u3011\uff08\u533a\u522b\u4e8e get_worker_output \u53ea\u7ed9\u6700\u7ec8\u7ed3\u8bba\uff09\u3002\u4e09\u79cd\u7528\u6cd5\uff1a\n\u2460 \u53ea\u4f20 intent_id \u2192 \u8fd4\u56de\u8be5 work \u6bcf\u4e00\u6b65\u7684\u6458\u8981\u6d41\uff08summary\u2264100\u5b57\uff0c\u542b step_id\uff1b\u53ea\u662f\u52a8\u4f5c\u8f6e\u5ed3\uff0c\u4e0d\u542b\u5b8c\u6574\u8f93\u51fa\uff09\uff1b\n\u2461 intent_id + q \u2192 \u53ea\u8fd4\u56de\u547d\u4e2d\u5173\u952e\u5b57\u7684\u6b65\u9aa4\u6458\u8981\uff08\u5728\u6458\u8981\u548c\u5b8c\u6574\u8f93\u51fa\u91cc\u90fd\u641c\uff1b\u4ecd\u53ea\u7ed9 summary\uff0c\u8981\u770b\u5185\u5bb9\u7528\u2462\uff09\uff1b\n\u2462 intent_id + step_ids \u2192 \u8fd4\u56de\u8fd9\u4e9b\u6b65\u9aa4\u7684\u5b8c\u6574\u5185\u5bb9(detail)\uff1b\u4e00\u6b21\u6700\u591a\u53d6 5 \u4e2a\uff0c\u8d85\u51fa\u53ea\u8fd4\u56de\u524d 5 \u4e2a\u5e76\u5728 notice/omitted_step_ids \u91cc\u544a\u77e5\u672a\u53d6\u7684\u3002\n\u5178\u578b\u6d41\u7a0b\uff1a\u5148\u2460/\u2461\u5b9a\u4f4d\u53ef\u7591\u6b65\u9aa4\u7684 step_id\uff0c\u518d\u7528\u2462\u53d6\u5176\u5b8c\u6574\u8f93\u51fa\u3002\u4e0d\u542b\u601d\u8003(thinking)\u6b65\u9aa4\u3002\u652f\u6301\u76f4\u63a5\u5173\u8054\u4efb\u52a1\u7684\u5386\u53f2 trace\uff1b\u5176\u7ed3\u679c\u5e26 source_task_id/inherited=true \u4e14\u53ea\u8bfb\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "intent_id",
+          "description"
+        ],
+        "value": "\u610f\u56fe id\uff08= work \u53e5\u67c4\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "limit",
+          "description"
+        ],
+        "value": "\u6458\u8981\u6d41/\u68c0\u7d22\u7684\u8fd4\u56de\u4e0a\u9650\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "q",
+          "description"
+        ],
+        "value": "\u5173\u952e\u5b57\uff1a\u53ea\u8fd4\u56de\u6458\u8981/\u5b8c\u6574\u8f93\u51fa\u547d\u4e2d\u5b83\u7684\u6b65\u9aa4\uff08\u53ef\u9009\uff1b\u4e0e step_ids \u4e92\u65a5\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "step_ids",
+          "description"
+        ],
+        "value": "\u8981\u53d6\u5b8c\u6574\u5185\u5bb9\u7684 step_id\uff08\u6765\u81ea\u2460/\u2461\u8fd4\u56de\uff1b\u4e00\u6b21\u6700\u591a\u53d6 5 \u4e2a\uff0c\u591a\u4f20\u53ea\u8fd4\u56de\u524d 5 \u4e2a\uff0c\u5176\u4f59\u5728 omitted_step_ids \u91cc\u5217\u51fa\uff09"
+      }
+    ]
+  },
+  {
+    "key": "search_all_worker_traces",
+    "descriptions": [
+      "\u3010\u901a\u5e38\u4e0d\u63a8\u8350\u4f7f\u7528\uff0c\u56e0\u4e3a\u7cfb\u7edf\u4e2d\u5df2\u7ecf\u7ed9\u4e86\u5927\u90e8\u5206\u4fe1\u606f\u4e86\u3011\u5728\u3010\u672c\u4efb\u52a1\u5176\u4ed6 work \u7684\u6267\u884c\u8fc7\u7a0b\u3011\u91cc\u6309\u5173\u952e\u5b57(q)\u68c0\u7d22\u2014\u2014\u7528\u4e8e\u627e\u56de\u67d0\u4e2a worker \u89c1\u8fc7\u3001\u5374\u6ca1\u5199\u8fdb fact \u7684\u4e1c\u897f\uff08\u67d0\u8def\u5f84/token/\u62a5\u9519\u7b49\uff09\u3002\u5df2\u81ea\u52a8\u6392\u9664\u4f60\u81ea\u5df1\u8fd9\u6761\u610f\u56fe\u7684\u6b65\u9aa4\uff08\u90a3\u4e9b\u672c\u5c31\u5728\u4f60\u4e0a\u4e0b\u6587\u91cc\uff09\u3002\u53ea\u8fd4\u56de\u547d\u4e2d\u6b65\u9aa4\u7684\u6458\u8981(summary\u2264100\u5b57)\uff0c\u6bcf\u6761\u5e26 intent_id\uff1b\u636e\u6b64\u518d\u7528 get_worker_trace(intent_id, step_ids=[...]) \u53d6\u5b8c\u6574\u5185\u5bb9\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "limit",
+          "description"
+        ],
+        "value": "\u8fd4\u56de\u4e0a\u9650\uff0c\u9ed8\u8ba4 100\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "q",
+          "description"
+        ],
+        "value": "\u5173\u952e\u5b57\uff08\u5728\u6240\u6709 work \u6b65\u9aa4\u7684\u6458\u8981+\u5b8c\u6574\u8f93\u51fa\u91cc\u641c\uff09"
+      }
+    ]
+  },
+  {
+    "key": "add_hint",
+    "descriptions": [
+      "\u628a\u4eba\u7c7b/\u4e3b agent \u7684\u6218\u7565\u63d0\u793a\u6302\u5230\u63a2\u7d22\u56fe\uff0c\u89c4\u5212\u8005\u4e0b\u6b21\u751f\u6210\u610f\u56fe\u65f6\u4f1a\u8bfb\u5230\u5b83\u3002\n\u2605\u4f18\u5148\u6279\u91cf\uff1a\u591a\u6761\u63d0\u793a\u653e\u8fdb hints \u6570\u7ec4\u4e00\u6b21\u63d0\u4ea4\uff08\u6bd4\u9010\u6761\u8c03\u7528\u7701\u5f80\u8fd4\uff09\u3002\u8fd4\u56de ids \u6570\u7ec4\uff0c\u4e0e hints \u7b49\u957f\u540c\u5e8f\uff08\u5931\u8d25\u9879 id=0\uff0c\u8be6\u60c5\u89c1 errors\uff09\u3002\u5355\u6761\u5219\u7701\u7565 hints \u76f4\u63a5\u7ed9\u9876\u5c42 text\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "asset_ids",
+          "description"
+        ],
+        "value": "\u951a\u5b9a\u7684\u8d44\u4ea7 id\uff08\u53ef\u9009\uff0c0/1/\u591a\u4e2a\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "description"
+        ],
+        "value": "\u3010\u4f18\u5148\u7528\u8fd9\u4e2a\u3011\u8981\u65b0\u589e\u7684\u63d0\u793a\u6570\u7ec4\uff0c\u6309\u987a\u5e8f\u5904\u7406\u3002\u6bcf\u4e2a\u5143\u7d20\u5b57\u6bb5\u540c\u4e0b\u65b9\u9876\u5c42\u5b57\u6bb5\uff08text/asset_ids/traffic_refs\uff09\u3002\u8fd4\u56de ids \u4e0e\u672c\u6570\u7ec4\u7b49\u957f\u3001\u540c\u5e8f\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "items",
+          "properties",
+          "text",
+          "description"
+        ],
+        "value": "\u63d0\u793a\u5185\u5bb9"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "items",
+          "properties",
+          "traffic_refs",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u5df2\u6838\u5b9e\u4e14\u5bf9\u5e94\u672c\u63d0\u793a\u4e2d\u5177\u4f53\u6f0f\u6d1e\u7684\u6d41\u91cf\u5f15\u7528\uff0c\u4fdd\u7559\u987a\u5e8f\uff1b\u4ea4\u63a5\u540e report_finding \u53ef\u4f20 evidence_hint_id \u643a\u5e26\u8fd9\u4e9b\u5f15\u7528\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "items",
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "note",
+          "description"
+        ],
+        "value": "\u8be5\u6d41\u91cf\u652f\u6301\u4ec0\u4e48\u7ed3\u8bba"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "items",
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "traffic_id",
+          "description"
+        ],
+        "value": "\u771f\u5b9e\u6d41\u91cf ID"
+      },
+      {
+        "path": [
+          "properties",
+          "text",
+          "description"
+        ],
+        "value": "[\u5355\u6761] \u63d0\u793a\u5185\u5bb9\uff0c\u5982'\u91cd\u70b9\u6316\u8ba4\u8bc1\u540e\u63a5\u53e3'"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u5df2\u6838\u5b9e\u4e14\u5bf9\u5e94\u672c\u63d0\u793a\u4e2d\u5177\u4f53\u6f0f\u6d1e\u7684\u6d41\u91cf\u5f15\u7528\uff0c\u4fdd\u7559\u987a\u5e8f\uff1b\u4ea4\u63a5\u540e report_finding \u53ef\u4f20 evidence_hint_id \u643a\u5e26\u8fd9\u4e9b\u5f15\u7528\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "note",
+          "description"
+        ],
+        "value": "\u8be5\u6d41\u91cf\u652f\u6301\u4ec0\u4e48\u7ed3\u8bba"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "traffic_id",
+          "description"
+        ],
+        "value": "\u771f\u5b9e\u6d41\u91cf ID"
+      }
+    ]
+  },
+  {
+    "key": "add_intent",
+    "descriptions": [
+      "\u751f\u6210\u3010\u63a2\u7d22\u65b9\u5411\u3011\u5199\u5165 frontier\uff0c\u5e76\u8fde\u5165\u63a2\u7d22\u94fe\u8def\u3002\u610f\u56fe\u662f\u5f00\u653e\u7684\u63a2\u7d22\u65b9\u5411\uff0c\u4e0d\u662f\u56fa\u5b9a\u7c7b\u578b\u2014\u2014\u7528 summary \u4e00\u53e5\u8bdd\u81ea\u7531\u63cf\u8ff0\u8981\u63a2\u7d22/\u9a8c\u8bc1/\u5229\u7528\u4ec0\u4e48\u3002\n\u2605\u4f18\u5148\u6279\u91cf\uff1a\u4e00\u8f6e\u7b5b\u51fa\u7684\u591a\u4e2a\u65b0\u65b9\u5411\u653e\u8fdb intents \u6570\u7ec4\u4e00\u6b21\u63d0\u4ea4\uff08\u6bd4\u9010\u6761\u8c03\u7528\u7701\u5f80\u8fd4\uff09\u3002\u8fd4\u56de ids \u6570\u7ec4\uff0c\u4e0e intents \u7b49\u957f\u540c\u5e8f\uff08\u5931\u8d25\u9879 id=0\uff0c\u8be6\u60c5\u89c1 errors\uff09\u3002\u5355\u6761\u5219\u7701\u7565 intents \u76f4\u63a5\u7ed9\u9876\u5c42 summary\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "asset_ids",
+          "description"
+        ],
+        "value": "\u672c\u65b9\u5411\u8981\u6d4b\u8bd5/\u653b\u51fb\u7684\u3010\u76ee\u6807\u8d44\u4ea7 id\u3011\uff08**\u5c3d\u91cf\u4f20**\uff0c0/1/\u591a\u4e2a\uff1b\u662f list_assets \u8fd4\u56de\u7684\u8d44\u4ea7 id\uff0c\u4e0d\u662f\u63a2\u7d22\u8282\u70b9 id\uff09\uff1a\u8fd9\u6761\u63a2\u7d22\u65b9\u5411\u9488\u5bf9\u54ea\u4e9b\u8d44\u4ea7\uff08\u7ad9\u70b9/\u63a5\u53e3/\u53c2\u6570/\u4e3b\u673a\u7b49\uff09\u3002\u53ea\u8981\u65b9\u5411\u56f4\u7ed5\u67d0\u4e9b\u5177\u4f53\u8d44\u4ea7\u5c31\u52a1\u5fc5\u4f20\u4e0a\u2014\u2014\u5b83\u662f\u300c\u8fd9\u6761\u63a2\u7d22\u6253\u54ea\u4e9b\u76ee\u6807\u300d\u7684\u7ed3\u6784\u5316\u6807\u8bb0\uff0c\u7528\u4e8e\u8986\u76d6\u53bb\u91cd\u3001\u628a\u610f\u56fe\u8fde\u5165\u8d44\u4ea7\u94fe\u8def\u3002\u4ec5\u5f53\u7eaf\u5168\u5c40\u4fa6\u5bdf\u3001\u786e\u5b9e\u6ca1\u6709\u5177\u4f53\u76ee\u6807\u8d44\u4ea7\u65f6\u624d\u7559\u7a7a\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "intents",
+          "description"
+        ],
+        "value": "\u3010\u4f18\u5148\u7528\u8fd9\u4e2a\u3011\u8981\u65b0\u589e\u7684\u63a2\u7d22\u65b9\u5411\u6570\u7ec4\uff0c\u6309\u987a\u5e8f\u5904\u7406\u3002\u6bcf\u4e2a\u5143\u7d20\u5b57\u6bb5\u540c\u4e0b\u65b9\u9876\u5c42\u5b57\u6bb5\uff08summary/asset_ids/parent_ids/priority\uff09\u3002\u8fd4\u56de ids \u4e0e\u672c\u6570\u7ec4\u7b49\u957f\u3001\u540c\u5e8f\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "parent_ids",
+          "description"
+        ],
+        "value": "\u4e0a\u6e38\u951a\u70b9 id\uff08\u53ef\u9009\uff0c0/1/\u591a\u4e2a\uff09\uff1a\u672c\u65b9\u5411\u7531\u54ea\u4e9b\u3010\u5df2\u786e\u8ba4\u7684\u4e8b\u5b9e(fact)/\u53d1\u73b0(finding)\u3011\u7efc\u5408\u5f97\u51fa\u3002**\u53ea\u80fd\u586b\u5df2\u5b58\u5728\u7684 fact/finding \u8282\u70b9 id,\u4e0d\u80fd\u586b\u610f\u56fe/\u76ee\u6807/\u63d0\u793a**\u2014\u2014\u610f\u56fe\u5fc5\u987b\u951a\u5728\u5df2\u786e\u8ba4\u77e5\u8bc6\u4e0a,\u53d1\u73b0\u9a71\u52a8\u800c\u975e\u51ed\u7a7a\u89c4\u5212\u3002\u591a\u4e2a\u4e8b\u5b9e\u5171\u540c\u4ea7\u751f\u4e00\u4e2a\u65b0\u610f\u56fe\u5c31\u4f20\u591a\u4e2a;\u9876\u5c42\u5168\u65b0\u4fa6\u5bdf\u65b9\u5411\u8bf7\u7559\u7a7a\uff08\u4f1a\u81ea\u52a8\u6302\u5230\u4efb\u52a1\u8d77\u70b9 origin fact\uff09\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "priority",
+          "description"
+        ],
+        "value": "\u4f18\u5148\u7ea7 0-10\uff0c\u9ed8\u8ba45"
+      },
+      {
+        "path": [
+          "properties",
+          "summary",
+          "description"
+        ],
+        "value": "[\u5355\u6761] \u4e00\u53e5\u8bdd\u63cf\u8ff0\u8fd9\u4e2a\u63a2\u7d22\u65b9\u5411\uff1a\u505a\u4ec0\u4e48+\u4e3a\u4ec0\u4e48\u3002\u5df2\u5199\u6e05\u65b9\u5411\u5373\u53ef\uff0c\u4e0d\u4f9d\u8d56\u8d44\u4ea7 id\u3002"
+      }
+    ]
+  },
+  {
+    "key": "steer_work",
+    "descriptions": [
+      "\u7ed9\u4e00\u6761\u6b63\u5728\u8fd0\u884c\u7684\u610f\u56fe(work)\u5b9e\u65f6\u6ce8\u5165\u7ea0\u504f\u6307\u4ee4\uff0c\u4e0d\u6253\u65ad\u5b83\u3001\u4e0d\u4e22\u5df2\u6709\u8fdb\u5c55\uff1aworker \u4f1a\u5728\u4e0b\u4e00\u6b65\u52a8\u4f5c\u524d\u6536\u5230\u4f60\u7684\u6307\u4ee4\u5e76\u636e\u6b64\u8c03\u6574\u3002\u7528\u4e8e'\u522b\u518d\u8d70 X\u3001\u805a\u7126 Y'\u8fd9\u7c7b\u3010\u610f\u56fe\u5185\u3011\u7ea0\u504f\uff1b\u82e5\u65b9\u5411\u6574\u4e2a\u9519\u4e86\u5e94\u6539\u7528 kill_work \u518d\u4e0b\u65b0\u610f\u56fe\u3002\u5efa\u8bae\u5148\u7528 get_worker_output \u770b\u5b83\u5728\u5e72\u561b\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "intent_id",
+          "description"
+        ],
+        "value": "\u8981\u7ea0\u504f\u7684\u610f\u56fe id\uff08= work \u53e5\u67c4\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "message",
+          "description"
+        ],
+        "value": "\u7ed9 worker \u7684\u7ea0\u504f\u6307\u4ee4\uff0c\u660e\u786e\u8ba9\u5b83\u505c\u6b62\u4ec0\u4e48\u3001\u8f6c\u5411\u4ec0\u4e48"
+      }
+    ]
+  },
+  {
+    "key": "set_goals",
+    "descriptions": [
+      "\u7ed9\u3010\u672c\u4efb\u52a1\u3011\u65b0\u589e\u63a2\u7d22\u76ee\u6807(goal)\u3002\u76ee\u6807=\u6700\u7ec8\u53ef\u4ea4\u4ed8/\u53ef\u6838\u9a8c\u7684\u7ed3\u679c,\u4e0d\u662f\u653b\u51fb\u6b65\u9aa4\u6216\u4fa6\u5bdf\u52a8\u4f5c\u3002\n\u2605\u4f18\u5148\u6279\u91cf:\u591a\u4e2a\u76ee\u6807\u653e\u8fdb goals \u6570\u7ec4\u4e00\u6b21\u63d0\u4ea4,\u8fd4\u56de ids \u4e0e\u4e4b\u7b49\u957f\u540c\u5e8f(\u5931\u8d25\u9879 id=0,\u8be6\u60c5\u89c1 errors)\u3002\u5355\u6761\u5219\u7701\u7565 goals \u76f4\u63a5\u7ed9\u9876\u5c42 text\u3002\nvulnclass \u53ef\u9009:\u5bf9\u5e94\u6f0f\u6d1e\u7c7b(\u5982 SQLi/IDOR),\u4e1a\u52a1\u903b\u8f91\u7c7b\u76ee\u6807\u7559\u7a7a\u3002\u76ee\u6807\u662f\u5426\u8fbe\u6210\u7531\u7cfb\u7edf\u5224\u5b9a\u6807\u8bb0 met,\u672c\u5de5\u5177\u53ea\u8d1f\u8d23\u65b0\u589e\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "goals",
+          "description"
+        ],
+        "value": "\u3010\u4f18\u5148\u7528\u8fd9\u4e2a\u3011\u8981\u65b0\u589e\u7684\u76ee\u6807\u6570\u7ec4,\u6309\u987a\u5e8f\u5904\u7406\u3002\u6bcf\u4e2a\u5143\u7d20:text(\u5fc5\u586b,\u4e00\u4e2a\u72ec\u7acb\u53ef\u9a8c\u8bc1\u7684\u6700\u7ec8\u76ee\u6807)+ vulnclass(\u53ef\u9009)\u3002\u8fd4\u56de ids \u4e0e\u672c\u6570\u7ec4\u7b49\u957f\u3001\u540c\u5e8f\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "text",
+          "description"
+        ],
+        "value": "[\u5355\u6761] \u4e00\u4e2a\u72ec\u7acb\u53ef\u9a8c\u8bc1\u7684\u6700\u7ec8\u76ee\u6807"
+      },
+      {
+        "path": [
+          "properties",
+          "vulnclass",
+          "description"
+        ],
+        "value": "[\u5355\u6761] \u5bf9\u5e94\u6f0f\u6d1e\u7c7b(\u82e5\u660e\u786e),\u5982 SQLi/IDOR;\u4e1a\u52a1\u903b\u8f91\u76ee\u6807\u53ef\u7559\u7a7a"
+      }
+    ]
+  },
+  {
+    "key": "set_constraints",
+    "descriptions": [
+      "\u7ed9\u3010\u672c\u4efb\u52a1\u3011\u65b0\u589e\u64cd\u4f5c\u7ea6\u675f,\u7528\u6765\u6846\u5b9a\u63a2\u7d22\u8fb9\u754c:type=allow(\u5141\u8bb8\u505a\u7684\u64cd\u4f5c)\u6216 deny(\u7981\u6b62\u505a\u7684\u64cd\u4f5c)\u3002\n\u7ea6\u675f=\u5bf9\u300e\u53ef\u4ee5/\u4e0d\u53ef\u4ee5\u505a\u54ea\u4e9b\u64cd\u4f5c\u300f\u7684\u89c4\u5b9a(\u5982\u300e\u4ec5\u6d4b\u5f53\u524d\u7aef\u53e3,\u4e0d\u626b\u5176\u4ed6\u7aef\u53e3\u300f\u300e\u7981\u6b62\u5bf9\u751f\u4ea7\u5e93\u505a\u5199\u64cd\u4f5c\u300f\u300e\u53ea\u5141\u8bb8\u88ab\u52a8\u4fa6\u5bdf\u300f),\u4e0d\u662f\u76ee\u6807\u3001\u4e5f\u4e0d\u662f\u653b\u51fb\u6b65\u9aa4\u3002\n\u2605\u4f18\u5148\u6279\u91cf:\u591a\u6761\u653e\u8fdb constraints \u6570\u7ec4\u4e00\u6b21\u63d0\u4ea4,\u8fd4\u56de ids \u4e0e\u4e4b\u7b49\u957f\u540c\u5e8f(\u5931\u8d25\u9879 id=0,\u8be6\u60c5\u89c1 errors)\u3002\u5355\u6761\u5219\u7701\u7565 constraints \u76f4\u63a5\u7ed9\u9876\u5c42 text/type\u3002\n\u53ea\u767b\u8bb0\u4efb\u52a1\u76ee\u6807/\u63cf\u8ff0\u91cc\u3010\u660e\u786e\u5199\u51fa\u3011\u7684\u7ea6\u675f,\u4e0d\u8981\u81c6\u9020;\u62ff\u4e0d\u51c6\u7c7b\u578b\u65f6\u7528 deny(\u66f4\u4fdd\u5b88)\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "constraints",
+          "description"
+        ],
+        "value": "\u3010\u4f18\u5148\u7528\u8fd9\u4e2a\u3011\u8981\u65b0\u589e\u7684\u7ea6\u675f\u6570\u7ec4,\u6309\u987a\u5e8f\u5904\u7406\u3002\u6bcf\u4e2a\u5143\u7d20:text(\u5fc5\u586b,\u4e00\u6761\u7ea6\u675f)+ type(allow|deny)\u3002\u8fd4\u56de ids \u4e0e\u672c\u6570\u7ec4\u7b49\u957f\u3001\u540c\u5e8f\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "text",
+          "description"
+        ],
+        "value": "[\u5355\u6761] \u4e00\u6761\u64cd\u4f5c\u7ea6\u675f\u7684\u5185\u5bb9"
+      },
+      {
+        "path": [
+          "properties",
+          "type",
+          "description"
+        ],
+        "value": "[\u5355\u6761] allow(\u5141\u8bb8)\u6216 deny(\u7981\u6b62);\u7f3a\u7701\u6309 deny \u5904\u7406"
+      }
+    ]
+  },
+  {
+    "key": "insert_assets",
+    "descriptions": [
+      "\u6279\u91cf\u767b\u8bb0\u65b0\u53d1\u73b0\u7684\u8d44\u4ea7\uff0c\u4e00\u6b21\u53ef\u6df7\u5408\u591a\u79cd\u7c7b\u578b\uff08type \u89c1\u679a\u4e3e\uff09\u3002\n\u5404\u7c7b\u578b\u5fc5\u586b\u5b57\u6bb5\uff1aroot_domain\u2192domain\uff1bip\u2192ip\uff08\u987b\u4e3a IPv4/IPv6\uff0c\u975e\u4e3b\u673a\u540d\uff09\uff1bsubdomain\u2192domain\uff1bapp\u2192app_name\uff1bservice(HTTP)\u2192url\uff1bservice(\u975eHTTP)\u2192service_name+port\uff08ip/domain \u81f3\u5c11\u586b\u4e00\u4e2a\uff09\uff1bendpoint\u2192url+method\u3002\u5176\u4f59\u5b57\u6bb5\u542b\u4e49\u89c1\u5404\u81ea\u8bf4\u660e\u3002\nauth/technologies/params \u4e3a\u8ffd\u52a0\u5408\u5e76(append)\uff0c\u4e0d\u8986\u76d6\u539f\u503c\u3002\n\u8fd4\u56de\uff1a{results:[{index,id,type}], errors:[{index,error}]}"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "assets",
+          "description"
+        ],
+        "value": "\u8d44\u4ea7\u6570\u7ec4\uff0c\u6bcf\u4e2a\u5143\u7d20\u5bf9\u5e94\u4e00\u6761\u8d44\u4ea7\u8bb0\u5f55"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "app_icp",
+          "description"
+        ],
+        "value": "\u5e94\u7528 ICP \u5907\u6848\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "app_name",
+          "description"
+        ],
+        "value": "\u5e94\u7528\u540d\u79f0\uff08app \u7c7b\u578b\u5fc5\u586b\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "auth",
+          "description"
+        ],
+        "value": "\u53d1\u73b0\u7684\u8ba4\u8bc1\u4fe1\u606f\u5217\u8868\uff0c\u6bcf\u6761\u542b type/username/password \u7b49\u5b57\u6bb5\uff08\u53ef\u9009\uff0c\u8ffd\u52a0\u4e0d\u8986\u76d6\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "bound_domains",
+          "description"
+        ],
+        "value": "\u8be5 IP \u7ed1\u5b9a\u7684\u57df\u540d\u5217\u8868\uff08ip \u7c7b\u578b\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "bundle_id",
+          "description"
+        ],
+        "value": "Bundle ID\uff08app \u7c7b\u578b\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "category",
+          "description"
+        ],
+        "value": "\u5e94\u7528\u5206\u7c7b\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "company_id",
+          "description"
+        ],
+        "value": "\u5f52\u5c5e\u4f01\u4e1a id\uff08app \u7c7b\u578b\u53ef\u9009\uff1bapp \u65e0\u6cd5\u9760 scope \u81ea\u52a8\u5f52\u56e0\uff0c\u9700\u663e\u5f0f\u6307\u5b9a\u3002id \u7531 add_company_scope \u8fd4\u56de\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "content_length",
+          "description"
+        ],
+        "value": "HTTP \u54cd\u5e94\u4f53\u5b57\u8282\u6570\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "description",
+          "description"
+        ],
+        "value": "\u5e94\u7528\u63cf\u8ff0\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "domain",
+          "description"
+        ],
+        "value": "\u6839\u57df\u540d\u6216\u5b50\u57df\u540d\uff08root_domain/subdomain \u5fc5\u586b\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "favicon_mmh3",
+          "description"
+        ],
+        "value": "favicon MMH3 \u54c8\u5e0c\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "icp",
+          "description"
+        ],
+        "value": "ICP \u5907\u6848\u53f7\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "ip",
+          "description"
+        ],
+        "value": "IP \u5730\u5740\uff0c\u5fc5\u987b\u662f IPv4/IPv6 \u5730\u5740\uff0c\u4e0d\u80fd\u586b\u4e3b\u673a\u540d\uff08\u4e3b\u673a\u540d\u8bf7\u7528 type=subdomain \u7684 domain \u5b57\u6bb5\uff09\uff1bip \u7c7b\u578b\u5fc5\u586b\uff1bservice/endpoint \u7c7b\u578b\u53ef\u586b\uff0c\u7528\u4e8e\u5173\u8054 IP"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "method",
+          "description"
+        ],
+        "value": "HTTP \u65b9\u6cd5\uff1aGET/POST/PUT/PATCH/DELETE \u7b49\uff08endpoint \u5fc5\u586b\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "open_ports",
+          "description"
+        ],
+        "value": "\u5f00\u653e\u7aef\u53e3\u5217\u8868\uff08ip \u7c7b\u578b\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "open_ports",
+          "items",
+          "properties",
+          "port",
+          "description"
+        ],
+        "value": "\u7aef\u53e3\u53f7"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "open_ports",
+          "items",
+          "properties",
+          "service",
+          "description"
+        ],
+        "value": "\u670d\u52a1\u540d\u79f0\uff0c\u5982 http/ssh/mysql \u7b49\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "page_title",
+          "description"
+        ],
+        "value": "\u9875\u9762 <title> \u5185\u5bb9\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "params",
+          "description"
+        ],
+        "value": "\u8bf7\u6c42\u53c2\u6570\u5217\u8868\uff0c\u6bcf\u6761\u542b location(query/body/header/path)/name/value/type\uff08\u53ef\u9009\uff0c\u8ffd\u52a0\u4e0d\u8986\u76d6\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "port",
+          "description"
+        ],
+        "value": "\u7aef\u53e3\u53f7\uff08service \u975e HTTP \u65f6\u5fc5\u586b\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "record_type",
+          "description"
+        ],
+        "value": "DNS \u89e3\u6790\u7c7b\u578b\uff1aA/AAAA/CNAME/MX \u7b49\uff08subdomain \u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "record_value",
+          "description"
+        ],
+        "value": "DNS \u89e3\u6790\u503c\u5217\u8868\uff08subdomain \u53ef\u9009\uff0c\u5982 [\"1.2.3.4\",\"2.3.4.5\"]\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "service_name",
+          "description"
+        ],
+        "value": "\u670d\u52a1\u540d\u79f0\uff0c\u5982 ssh/mysql/redis\uff08service \u975e HTTP \u65f6\u5fc5\u586b\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "status_code",
+          "description"
+        ],
+        "value": "HTTP \u54cd\u5e94\u72b6\u6001\u7801\uff0c\u5982 200/301/403/404\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "technologies",
+          "description"
+        ],
+        "value": "\u6307\u7eb9/\u6280\u672f\u6808\u5217\u8868\uff0c\u5982 [\"Nginx\",\"Vue\",\"Bootstrap\"]\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "type",
+          "description"
+        ],
+        "value": "\u8d44\u4ea7\u7c7b\u578b"
+      },
+      {
+        "path": [
+          "properties",
+          "assets",
+          "items",
+          "properties",
+          "url",
+          "description"
+        ],
+        "value": "\u5b8c\u6574 URL\uff0c\u542b\u534f\u8bae\u548c\u7aef\u53e3\uff08HTTP \u670d\u52a1\u5fc5\u586b\uff1bservice_type \u81ea\u52a8\u8bbe\u4e3a http\uff09"
+      }
+    ]
+  },
+  {
+    "key": "add_company_scope",
+    "descriptions": [
+      "\u628a\u57df\u540d/IP/CIDR/ICP\u5907\u6848/\u4f01\u4e1a\u5173\u952e\u8bcd\u52a0\u5165\u67d0\u516c\u53f8\u7684\u3010\u8d44\u4ea7\u8303\u56f4\u3011\u2014\u2014\u57df\u540d\u3001\u7f51\u7edc\u548cICP\u4f1a\u81ea\u52a8\u8ba4\u9886\u547d\u4e2d\u7684\u8d44\u4ea7\uff0c\u5173\u952e\u8bcd\u53ea\u63d0\u4f9b\u7ed9Agent\u4f5c\u4e3a\u8303\u56f4\u63d0\u793a\u3002\n\u516c\u53f8\u540d\u552f\u4e00\uff1acompany \u4e0d\u5b58\u5728\u5219\u65b0\u5efa\uff0c\u5df2\u5b58\u5728\u5219\u590d\u7528(\u53ea\u628a\u8303\u56f4\u5e76\u8fdb\u53bb)\u3002\nscope \u4e00\u884c\u4e00\u6761\uff0c\u7cfb\u7edf\u81ea\u52a8\u8bc6\u522b\uff1a\u6839\u57df\u540d / URL / \u5355\u4e2a IP / CIDR \u7f51\u6bb5 / ICP\u5907\u6848 / \u4f01\u4e1a\u5173\u952e\u8bcd\u3002\n\u52a1\u5fc5\u7ed9 reason \u8bf4\u660e\u5f52\u5c5e\u4f9d\u636e(whois/\u8bc1\u4e66/ASN \u7b49)\u3002\n\u62a4\u680f\uff1a\u62d2\u7edd\u88f8 TLD \u4e0e\u8fc7\u5bbd\u7f51\u6bb5(IPv4\u524d\u7f00\u9700\u4e3a/16-/32\u3001IPv6\u524d\u7f00\u9700\u4e3a/32-/128)\uff0c\u975e\u6cd5\u884c\u4f1a\u88ab\u8df3\u8fc7\u5e76\u5728 errors \u8fd4\u56de\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "company",
+          "description"
+        ],
+        "value": "\u516c\u53f8\u540d(\u4e0d\u5b58\u5728\u5219\u65b0\u5efa\u3001\u5b58\u5728\u5219\u590d\u7528\uff1b\u540d\u79f0\u552f\u4e00)"
+      },
+      {
+        "path": [
+          "properties",
+          "logo",
+          "description"
+        ],
+        "value": "\u516c\u53f8\u56fe\u6807 URL(\u53ef\u9009\uff1b\u4ec5\u65b0\u5efa\u516c\u53f8\u65f6\u751f\u6548)"
+      },
+      {
+        "path": [
+          "properties",
+          "reason",
+          "description"
+        ],
+        "value": "\u5f52\u5c5e\u4f9d\u636e(\u8bc1\u636e/\u6765\u6e90)\uff0c\u52a1\u5fc5\u586b\u5199"
+      },
+      {
+        "path": [
+          "properties",
+          "scope",
+          "description"
+        ],
+        "value": "\u8d44\u4ea7\u8303\u56f4\uff0c\u4e00\u884c\u4e00\u6761\uff1a\u57df\u540d / URL / IP / CIDR / ICP\u5907\u6848 / \u4f01\u4e1a\u5173\u952e\u8bcd"
+      }
+    ]
+  },
+  {
+    "key": "list_assets",
+    "descriptions": [
+      "\u67e5\u8be2\u8d44\u4ea7\u5e93\uff1aDSL \u8868\u8fbe\u5f0f\u641c\u7d22\uff0c\u6216\u6309 id/ids \u76f4\u53d6\uff1b\u652f\u6301\u5206\u9875\u3002\u53ea\u8fd4\u56de\u3010\u672c\u4efb\u52a1\u53ca\u76f4\u63a5\u5173\u8054\u4efb\u52a1\u3011\u6d4b\u8bd5\u8303\u56f4\u5185\u7684\u8d44\u4ea7\u3002\nDSL\uff1afield=value \u6a21\u7cca(ILIKE) | field==value \u7cbe\u786e | field!=value \u6392\u9664 | \u6570\u5b57\u5b57\u6bb5\u652f\u6301 > >= < <= | \u88f8\u8bcd=\u5168\u6587\u6a21\u7cca\uff1bAND/OR \u7ec4\u5408(AND \u4f18\u5148\u7ea7\u9ad8)\uff0c\u53ef\u7528\u62ec\u53f7\u5206\u7ec4\u3002\u8d44\u4ea7\u7c7b\u578b\u7528\u72ec\u7acb type \u53c2\u6570\uff0c\u4e0d\u5199\u8fdb DSL\u3002\n\u672a\u4f20 id/ids \u65f6 dsl \u5fc5\u987b\u975e\u7a7a\uff08\u4e0d\u5141\u8bb8\u65e0\u6761\u4ef6\u5168\u91cf\u67e5\u8be2\uff09\u3002\n\u53ef\u7528\u5b57\u6bb5\uff1adomain(\u6839/\u5b50/\u670d\u52a1\u57df\u540d)\u3001root_domain\u3001ip\u3001url\u3001page_title\u3001icp\u3001service_name\u3001app_name\u3001method(\u5982 GET/POST)\u3001service_type(http|other)\u3001record_type(\u5982 A/CNAME)\u3001technology(\u6570\u7ec4\uff0c=\u6a21\u7cca ==\u7cbe\u786e)\u3001port/status_code/company_id(\u6574\u6570)\u3002\n\u793a\u4f8b\uff1astatus_code>=400 AND technology=shiro \uff1b(port==80 OR port==443) AND technology=nginx"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "dsl",
+          "description"
+        ],
+        "value": "DSL \u67e5\u8be2\u8868\u8fbe\u5f0f\uff08\u8bed\u6cd5/\u5b57\u6bb5\u89c1\u5de5\u5177\u63cf\u8ff0\uff09\u3002\u672a\u4f20 id/ids \u65f6\u5fc5\u987b\u975e\u7a7a\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "id",
+          "description"
+        ],
+        "value": "\u76f4\u63a5\u6309\u5355\u4e2a\u8d44\u4ea7 id \u53d6\uff08\u53ef\u9009\uff0c\u4e0e dsl/type \u4e92\u65a5\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "ids",
+          "description"
+        ],
+        "value": "\u76f4\u63a5\u6309\u591a\u4e2a\u8d44\u4ea7 id \u53d6\uff08\u53ef\u9009\uff0c\u4e0e dsl/type \u4e92\u65a5\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "limit",
+          "description"
+        ],
+        "value": "\u8fd4\u56de\u4e0a\u9650\uff0c\u9ed8\u8ba4 10\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "offset",
+          "description"
+        ],
+        "value": "\u5206\u9875\u504f\u79fb\uff0c\u9ed8\u8ba4 0\uff08\u53ef\u9009\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "type",
+          "description"
+        ],
+        "value": "\u8d44\u4ea7\u7c7b\u578b\u8fc7\u6ee4\uff1aroot_domain|ip|subdomain|app|service|endpoint\uff08\u72ec\u7acb\u5b57\u6bb5\uff0c\u53ef\u4e0e dsl \u53e0\u52a0\uff1b\u5355\u72ec type \u4e0d\u8db3\u4ee5\u67e5\u8be2\uff0c\u4ecd\u9700 dsl\uff09"
+      }
+    ]
+  },
+  {
+    "key": "report_finding",
+    "descriptions": [
+      "\u8bb0\u5f55\u786e\u8ba4\u7684\u6f0f\u6d1e\uff0c\u7528 evidence \u63d0\u4f9b\u547d\u4ee4\u8f93\u51fa\u3001\u65e5\u5fd7\u7b49\u53ef\u9a8c\u8bc1\u8bc1\u636e\u3002\u4efb\u52a1\u4e0a\u4e0b\u6587\u4f20\u5f53\u524d intent_id\u3002\u8fd4\u56de\u7684 finding_id \u662f\u72ec\u7acb\u6f0f\u6d1e\u8bb0\u5f55 ID\uff0cfinding_node_id \u662f\u63a2\u7d22\u8282\u70b9 ID\uff08\u7b2c\u4e00\u884c\u4fdd\u7559\u8be5\u8282\u70b9\u7f16\u53f7\uff09\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "asset_ids",
+          "description"
+        ],
+        "value": "\u53d7\u5f71\u54cd\u8d44\u4ea7 id"
+      },
+      {
+        "path": [
+          "properties",
+          "evidence",
+          "description"
+        ],
+        "value": "\u8bc1\u636e/PoC \u6587\u672c"
+      },
+      {
+        "path": [
+          "properties",
+          "evidence_hint_id",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u672c\u4efb\u52a1\u4e2d\u5bf9\u5e94\u6b64\u6f0f\u6d1e\u7684\u63d0\u793a\u8282\u70b9 ID\uff0c\u81ea\u52a8\u643a\u5e26\u5176\u7ed3\u6784\u5316 traffic_refs\uff1b\u4e0d\u80fd\u5f15\u7528\u7ee7\u627f\u63d0\u793a\u6216\u5176\u4ed6\u6f0f\u6d1e\u7684\u63d0\u793a"
+      },
+      {
+        "path": [
+          "properties",
+          "intent_id",
+          "description"
+        ],
+        "value": "\u5f53\u524d\u4efb\u52a1\u7684\u610f\u56fe id"
+      },
+      {
+        "path": [
+          "properties",
+          "name",
+          "description"
+        ],
+        "value": "\u6f0f\u6d1e\u540d\u79f0"
+      },
+      {
+        "path": [
+          "properties",
+          "summary",
+          "description"
+        ],
+        "value": "\u53d1\u73b0\u6458\u8981"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1bHTTP/HTTPS \u6f0f\u6d1e\u5148\u68c0\u7d22\u5e76\u9010\u6761\u6838\u5b9e\u8bf7\u6c42/\u54cd\u5e94\u786e\u5b9e\u652f\u6301\u6f0f\u6d1e\u7ed3\u8bba\uff0c\u518d\u6309\u590d\u73b0\u987a\u5e8f\u586b\u5199\u771f\u5b9e ID\u3002TCP \u7b49\u975e HTTP \u6f0f\u6d1e\u3001\u672a\u91c7\u96c6\u6216\u627e\u4e0d\u5230\u786e\u5207\u8bb0\u5f55\u65f6\u7701\u7565\u6216\u4f20 []\uff0c\u4e0d\u963b\u6b62\u4e0a\u62a5\uff1b\u53ef\u5728 evidence \u8bf4\u660e\u539f\u56e0\u5e76\u63d0\u4f9b\u5176\u4ed6\u53ef\u9a8c\u8bc1\u8bc1\u636e\u3002\u4e0d\u8981\u731c\u6d4b ID\u3001\u6309\u57df\u540d/\u65f6\u95f4\u63a8\u5b9a\u5173\u8054\u6216\u4ec5\u4e3a\u8865\u5305\u91cd\u590d\u63a2\u6d4b\u3002\u7528\u9014 baseline \u6b63\u5e38\u5bf9\u7167 / proof \u6f0f\u6d1e\u8bc1\u660e / verification \u8865\u5145\u9a8c\u8bc1 / supporting \u8f85\u52a9\u8bc1\u636e\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "note",
+          "description"
+        ],
+        "value": "\u8be5\u6d41\u91cf\u5982\u4f55\u652f\u6301\u6f0f\u6d1e\u7ed3\u8bba"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "traffic_id",
+          "description"
+        ],
+        "value": "traffic_search \u8fd4\u56de\u7684\u771f\u5b9e\u6d41\u91cf ID"
+      },
+      {
+        "path": [
+          "properties",
+          "vulnclass",
+          "description"
+        ],
+        "value": "\u6f0f\u6d1e\u7c7b\u522b"
+      }
+    ]
+  },
+  {
+    "key": "record_fact",
+    "descriptions": [
+      "\u628a\u63a2\u7d22\u3010\u4e8b\u5b9e/\u7ed3\u8bba\u3011\u5199\u5165\u63a2\u7d22\u56fe\uff0c\u8fde\u5230\u4ea7\u751f\u5b83\u7684\u610f\u56fe\uff08intent_id\uff09\u3002\u7528\u4e8e\u8bb0\u5f55\u63a2\u7d22\u7ed3\u679c\u2014\u2014\u5305\u62ec\u6307\u7eb9/\u679a\u4e3e\u7b49\u3010\u6b63\u5411\u7ed3\u8bba\u3011\uff0c\u548c'\u7aef\u53e3\u5173\u95ed'/'\u53c2\u6570\u4e0d\u53ef\u6ce8\u5165'/'\u672a\u53d1\u73b0\u767b\u5f55\u5165\u53e3'\u7b49\u3010\u5426\u5b9a\u7ed3\u8bba\u3011\u3002\n\u26a0\ufe0f\u4e00\u6b21\u63a2\u7d22\u7684\u591a\u4e2a\u89c2\u5bdf\u8981\u3010\u6c47\u603b\u6210\u4e00\u6761\u4e8b\u5b9e\u3011\uff0c\u4e0d\u8981\u62c6\u6210\u591a\u6761\uff0c\u53ef\u4ee5\u5408\u5e76\u6210\u4e00\u6761\u4e8b\u5b9e\u7684\u5c31\u5c3d\u91cf\u7528\u4e00\u6761\u4e8b\u5b9e\u8868\u793a\uff1asummary=\u5bf9\u672c\u6b21\u7ed3\u8bba\u7684\u603b\u7ed3\u6027\u4e00\u53e5\u8bdd\uff0cdetail=\u76f8\u5173\u7ec6\u8282\uff08\u53ef\u542b\u591a\u4e2a\u5177\u4f53\u9879\uff09\u3002\u4f8b\uff1a\u6307\u7eb9\u610f\u56fe\u2192\u4e00\u6761\u4e8b\u5b9e {summary:'\u8bc6\u522b\u4e86 X \u7ad9\u70b9\u7684\u6280\u672f\u6808\u4e0e\u54cd\u5e94\u7279\u5f81', detail:'nginx 1.25 / Vue3 / 200 / title=.. / body_len=..'}\uff0c\u800c\u4e0d\u662f\u72b6\u6001\u7801\u3001\u6307\u7eb9\u3001\u6807\u9898\u5404\u8bb0\u4e00\u6761\u3002\u4e00\u6761\u610f\u56fe\u901a\u5e38\u53ea\u4ea7\u51fa\u4e00\u6761\u4e8b\u5b9e\uff0c\u62c6\u592a\u788e\u4f1a\u8ba9\u56fe\u8c31\u65e0\u9650\u81a8\u80c0\u3002\n\u2605facts \u6570\u7ec4\u7528\u4e8e\u4e00\u6b21\u5199\u591a\u6761\u3010\u5f7c\u6b64\u4e0d\u540c\u3011\u7684\u7ed3\u8bba\uff08\u6bcf\u6761\u53ef\u7701\u7565 intent_id\uff0c\u9ed8\u8ba4\u7528\u9876\u5c42 intent_id\uff09\u3002\u8fd4\u56de ids \u6570\u7ec4\uff0c\u4e0e facts \u7b49\u957f\u540c\u5e8f\u3002\n\u26a0\ufe0f\u53ea\u5199\u4f60\u5728\u5de5\u5177\u8f93\u51fa\u91cc\u3010\u771f\u5b9e\u770b\u5230\u3011\u7684\u7ed3\u8bba\uff0c\u4e0d\u8981\u8111\u8865\u3002evidence \u4e0e confidence \u7528\u6765\u9632\u6b62\u4e0d\u51c6\u786e\u7684\u7ed3\u8bba\u6c61\u67d3\u56fe\u8c31\uff1a\n  \u00b7 evidence=\u652f\u6491\u672c\u7ed3\u8bba\u7684\u3010\u4e00\u884c\u3011\u5173\u952e\u8bc1\u636e\uff08\u547d\u4ee4+\u6700\u80fd\u8bc1\u660e\u7684\u90a3\u4e00\u4e24\u884c\u8f93\u51fa\uff09\uff0c**\u52a1\u5fc5\u7b80\u6d01**\u2014\u2014\u7ec6\u8282\u5df2\u5728 detail\uff0c\u8fd9\u91cc\u4e0d\u8981\u518d\u7c98\u5927\u6bb5\u8f93\u51fa\u3002\n  \u00b7 confidence=observed\uff08\u8f93\u51fa\u91cc\u76f4\u63a5\u770b\u5230\uff09| inferred\uff08\u636e\u73b0\u8c61\u63a8\u65ad\uff09\u3002\n  \u00b7 **\u5426\u5b9a\u7c7b\u7ed3\u8bba**\uff08\u4e0d\u53ef\u6ce8\u5165/\u7aef\u53e3\u5173\u95ed/\u672a\u53d1\u73b0\u5165\u53e3\u7b49\uff09\u53ea\u5199\"\u89c2\u5bdf + \u8bd5\u63a2\u6027\u8bfb\u6cd5\"\u2014\u2014\u9648\u8ff0\u4f60\u5b9e\u9645\u770b\u5230\u4ec0\u4e48\uff0c\u65b9\u5411\u662f\u5426\u653e\u5f03\u7531\u89c4\u5212\u8005\u7efc\u5408\u5168\u5c40\u5b9a\uff1b\u52a1\u5fc5\u7ed9 evidence\uff0c\u624b\u6bb5\u6ca1\u7a77\u5c3d\u6216\u8bc1\u636e\u5f31\uff08\u542b\u53ea\u63a2\u4e00\u6b21\u3001\u770b\u8d77\u6765\u50cf\uff09\u6807 inferred\uff0c\u786e\u5df2\u7a77\u5c3d\u4e14\u76f4\u63a5\u770b\u5230\u624d\u6807 observed\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "asset_ids",
+          "description"
+        ],
+        "value": "\u76f8\u5173\u8d44\u4ea7 id\uff08\u53ef\u9009\uff0c0/1/\u591a\u4e2a\uff09\uff1a\u8be5\u4e8b\u5b9e\u6d89\u53ca\u54ea\u4e9b\u8d44\u4ea7"
+      },
+      {
+        "path": [
+          "properties",
+          "confidence",
+          "description"
+        ],
+        "value": "observed\uff08\u8f93\u51fa\u91cc\u76f4\u63a5\u770b\u5230\uff09| inferred\uff08\u636e\u73b0\u8c61\u63a8\u65ad\uff09\u3002\u5426\u5b9a\u7ed3\u8bba\u52a1\u5fc5\u5982\u5b9e\u6807\u6ce8\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "detail",
+          "description"
+        ],
+        "value": "\u672c\u4e8b\u5b9e\u7684\u76f8\u5173\u7ec6\u8282\uff1a\u628a\u8fd9\u6b21\u63a2\u7d22\u7684\u591a\u4e2a\u89c2\u5bdf\u4e8b\u5b9e\u90fd\u5199\u8fdb\u8fd9\u91cc"
+      },
+      {
+        "path": [
+          "properties",
+          "evidence",
+          "description"
+        ],
+        "value": "\u3010\u4e00\u884c\u3011\u5173\u952e\u8bc1\u636e\uff1a\u547d\u4ee4 + \u6700\u80fd\u8bc1\u660e\u7ed3\u8bba\u7684\u90a3\u4e00\u4e24\u884c\u8f93\u51fa\u3002\u52a1\u5fc5\u7b80\u6d01\uff0c\u4e0d\u8981\u7c98\u5927\u6bb5\u8f93\u51fa\uff08\u7ec6\u8282\u653e detail\uff09\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "facts",
+          "description"
+        ],
+        "value": "\u3010\u6709\u591a\u6761\u4e0d\u540c\u7ed3\u8bba\u65f6\u7528\u3011\u4e8b\u5b9e\u6570\u7ec4\uff0c\u5143\u7d20\u5b57\u6bb5\u540c\u4e0b\u65b9\u9876\u5c42\u5b57\u6bb5\uff08summary/detail/evidence/confidence/intent_id/asset_ids\uff09\uff1b\u7701\u7565 intent_id \u5219\u7528\u9876\u5c42 intent_id\u3002\u8fd4\u56de ids \u4e0e\u672c\u6570\u7ec4\u7b49\u957f\u3001\u540c\u5e8f\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "intent_id",
+          "description"
+        ],
+        "value": "\u4ea7\u751f\u672c\u4e8b\u5b9e\u7684\u610f\u56fe id\uff08\u4f60\u9886\u5230\u7684\u610f\u56fe\uff1b\u6279\u91cf\u65f6\u4f5c\u4e3a\u5404\u6761\u9ed8\u8ba4\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "summary",
+          "description"
+        ],
+        "value": "\u5bf9\u672c\u6b21\u63a2\u7d22\u7ed3\u8bba\u7684\u3010\u603b\u7ed3\u6027\u4e00\u53e5\u8bdd\u3011\uff08\u662f\u5bf9 detail \u7684\u6982\u62ec\uff09"
+      }
+    ]
+  },
+  {
+    "key": "add_task_scope",
+    "descriptions": [
+      "\u628a\u6d4b\u8bd5\u8303\u56f4\u52a0\u5165\u3010\u672c\u4efb\u52a1\u3011\u2014\u2014\u8fd9\u662f\u672c\u4efb\u52a1\u7684\u6388\u6743\u8fb9\u754c\uff0c\u4e5f\u662f\u8d44\u4ea7\u6d4b\u8bd5\u8986\u76d6\u5ea6\u7684\u5206\u6bcd\u3002\nkind \u652f\u6301\uff1acompany(\u6574\u4e2a\u516c\u53f8\u540d\u4e0b\u8d44\u4ea7) / root_domain(\u6574\u4e2a\u6839\u57df\uff0c\u542b\u6240\u6709\u5b50\u57df) / subdomain(\u5355\u4e2a\u7cbe\u786e\u5b50\u57df) / ip / cidr / icp / keyword\u3002\n\u8bf4\u660e\uff1aworker \u9010\u4e2a\u78b0\u5230\u7684\u4e3b\u673a\u4f1a\u88ab\u7cfb\u7edf\u3010\u81ea\u52a8\u3011\u52a0\u8fdb\u8303\u56f4(\u7cbe\u786e\u5b50\u57df)\uff1b\u672c\u5de5\u5177\u7528\u4e8e\u3010\u4e3b\u52a8\u6269\u5927\u3011\u2014\u2014\u628a\u6574\u4e2a\u6839\u57df/\u6574\u4e2a\u516c\u53f8\u7eb3\u5165\uff0c\u6216\u8865\u5145\u6307\u5b9a\u67d0\u5b50\u57df/IP\u3002\nvalue\uff1acompany \u4f20\u516c\u53f8\u540d\u6216 id(\u516c\u53f8\u987b\u5df2\u5b58\u5728)\uff1broot_domain/subdomain \u4f20\u57df\u540d\uff1bip/cidr \u4f20 IP \u6216\u7f51\u6bb5\uff1bicp/keyword \u4f20\u5907\u6848\u53f7\u6216\u4f01\u4e1a\u5173\u952e\u8bcd\u3002\n\u52a1\u5fc5\u7ed9 reason \u8bf4\u660e\u4f9d\u636e(\u53ef\u5ba1\u8ba1)\u3002\u591a\u6761\u7528 entries \u6570\u7ec4\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "entries",
+          "description"
+        ],
+        "value": "\u6279\u91cf\uff1a[{kind, value}]\u3002kind\u2208company/root_domain/subdomain/ip/cidr/icp/keyword\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "kind",
+          "description"
+        ],
+        "value": "[\u5355\u6761] company / root_domain / subdomain / ip / cidr / icp / keyword"
+      },
+      {
+        "path": [
+          "properties",
+          "reason",
+          "description"
+        ],
+        "value": "\u52a0\u5165\u4f9d\u636e(\u7528\u4e8e\u5ba1\u8ba1)\uff0c\u52a1\u5fc5\u586b\u5199"
+      },
+      {
+        "path": [
+          "properties",
+          "value",
+          "description"
+        ],
+        "value": "[\u5355\u6761] \u516c\u53f8\u540d\u6216id / \u57df\u540d / IP / CIDR / ICP / \u5173\u952e\u8bcd"
+      }
+    ]
+  },
+  {
+    "key": "list_untested_assets",
+    "descriptions": [
+      "\u67e5\u8be2\u3010\u672c\u4efb\u52a1\u53ca\u76f4\u63a5\u5173\u8054\u4efb\u52a1\u3011\u8303\u56f4\u5185\u3001\u8fd8\u6ca1\u88ab\u4e8b\u5b9e\u951a\u70b9\u8986\u76d6\u7684\u8d44\u4ea7\uff08\u5173\u8054\u8303\u56f4\u53ea\u8bfb\uff0c\u4f9b\u4f60\u81ea\u5df1\u5224\u65ad\u8981\u4e0d\u8981\u8865\u6d4b\uff0c\u4e0d\u4ee3\u66ff\u4f60\u51b3\u7b56\uff09\u3002\n\u53ef\u9009\u6309\u8d44\u4ea7\u7c7b\u578b\u8fc7\u6ee4\uff1aroot_domain/subdomain/service/app/endpoint/ip\u3002\n\u5206\u9875\uff1apage \u4ece 1 \u8d77\u3001page_size \u9ed8\u8ba4 10\u3002\u8fd4\u56de {assets:[{id,type,label}], total, page, page_size}\u3002\u4ec5\u4efb\u52a1\u4e0a\u4e0b\u6587\u53ef\u7528\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "page",
+          "description"
+        ],
+        "value": "\u9875\u7801\uff0c\u4ece 1 \u8d77\uff08\u9ed8\u8ba4 1\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "page_size",
+          "description"
+        ],
+        "value": "\u6bcf\u9875\u6570\u91cf\uff08\u9ed8\u8ba4 10\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "type",
+          "description"
+        ],
+        "value": "\u8d44\u4ea7\u7c7b\u578b\u8fc7\u6ee4\uff08\u53ef\u9009\uff09\uff1aroot_domain/subdomain/service/app/endpoint/ip"
+      }
+    ]
+  },
+  {
+    "key": "list_goals",
+    "descriptions": [
+      "\u5217\u51fa\u672c\u4efb\u52a1\u7684\u76ee\u6807\u8282\u70b9\u53ca\u5176\u72b6\u6001\uff08open/met\uff09\uff0c\u7528\u4e8e\u5224\u65ad\u662f\u5426\u8fbe\u6210\u3002"
+    ],
+    "schema": []
+  },
+  {
+    "key": "prove_goal",
+    "descriptions": [
+      "\u5f53\u4f60\u5224\u65ad\u67d0\u4e2a\u53d1\u73b0/\u4e8b\u5b9e\u8bc1\u660e\u4e86\u67d0\u4e2a\u76ee\u6807\u8fbe\u6210\u65f6\u8c03\u7528\uff1a\u628a\u8bc1\u636e\u8282\u70b9\u8fde\u5230\u76ee\u6807\u8282\u70b9\uff0c\u5e76\u6807\u8bb0\u76ee\u6807 met\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "evidence_id",
+          "description"
+        ],
+        "value": "\u8bc1\u660e\u5b83\u7684\u53d1\u73b0/\u4e8b\u5b9e\u8282\u70b9 id"
+      },
+      {
+        "path": [
+          "properties",
+          "goal_id",
+          "description"
+        ],
+        "value": "\u76ee\u6807\u8282\u70b9 id"
+      },
+      {
+        "path": [
+          "properties",
+          "reason",
+          "description"
+        ],
+        "value": "\u4e3a\u4ec0\u4e48\u8fd9\u4e2a\u8bc1\u636e\u6ee1\u8db3\u8be5\u76ee\u6807"
+      }
+    ]
+  },
+  {
+    "key": "goal_met",
+    "descriptions": [
+      "\u3010\u7acb\u5373\u7ed3\u675f\u6574\u4e2a\u4efb\u52a1\u3011\u2014\u2014\u4ec5\u5f53\u4f60\u786e\u8ba4\u4efb\u52a1\u7684\u3010\u5168\u90e8\u76ee\u6807\u90fd\u5df2\u771f\u6b63\u8fbe\u6210\u3001\u6574\u4f53\u6536\u5b98\u3011\u65f6\u624d\u8c03\uff08\u6ce8\u610f\u662f\u4efb\u52a1\u3010\u6574\u4f53\u3011\u5b8c\u6210\uff1b\u4ec5\u4ec5\u8fbe\u6210\u4e86\u5176\u4e2d\u67d0\u4e00\u4e2a\u76ee\u6807/\u67d0\u4e00\u4e2a flag/\u67d0\u4e00\u4e2a\u6f0f\u6d1e\u3010\u4e0d\u7b97\u3011\u2014\u2014\u90a3\u79cd\u60c5\u51b5\u7528 prove_goal \u6807\u8bb0\u8be5\u76ee\u6807\u5373\u53ef\uff09\u3002\u26a0\ufe0f\u5b83\u4e0d\u662f\u7528\u6765\u201c\u7ed3\u675f\u672c\u8f6e\u89c4\u5212\u201d\u7684\uff1a\u672c\u8f6e\u6ca1\u6709\u65b0\u610f\u56fe\u8981\u6d3e\u3001\u6216\u5728\u7b49 worker \u4ea7\u51fa\uff0c\u90fd\u3010\u76f4\u63a5\u7ed3\u675f\u672c\u8f6e\u5373\u53ef\uff0c\u4e0d\u8981\u8c03\u672c\u5de5\u5177\u3011\uff080 \u4e2a\u610f\u56fe\u662f\u5b8c\u5168\u6b63\u5e38\u7684\uff09\u3002\u6b63\u5e38\u5224\u5b9a\u4f18\u5148\u7528 prove_goal \u9010\u4e2a\u8bc1\u660e\u76ee\u6807\uff1bgoal_met \u53ea\u662f\u7ed5\u8fc7\u9010\u4e2a\u8bc1\u660e\u3001\u76f4\u63a5\u4ece\u5168\u5c40\u6536\u5b98\u7684\u624b\u6bb5\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "reason",
+          "description"
+        ],
+        "value": "\u8fbe\u6210\u7406\u7531\uff08\u5fc5\u987b\u662f\u76ee\u6807\u771f\u6b63\u8fbe\u6210\u7684\u8bc1\u636e\uff0c\u4e0d\u80fd\u662f\u201c\u672c\u8f6e\u65e0\u65b0\u65b9\u5411\u201d\u8fd9\u7c7b\u7ed3\u675f\u672c\u8f6e\u7684\u7406\u7531\uff09"
+      }
+    ]
+  },
+  {
+    "key": "kill_work",
+    "descriptions": [
+      "\u7ec8\u6b62\u4e00\u6761\u6b63\u5728\u8fd0\u884c\u7684\u610f\u56fe(work)\u3002\u7528\u4e8e\u53eb\u505c\u8dd1\u504f/\u65e0\u610f\u4e49\u7684\u63a2\u7d22\uff1b\u88ab\u7ec8\u6b62\u7684\u610f\u56fe\u6807\u8bb0\u4e3a stopped\uff0c\u4e0d\u518d\u81ea\u52a8\u91cd\u9886\u3002\u5148\u7528 get_worker_output \u770b\u770b\u5b83\u5728\u5e72\u561b\u518d\u51b3\u5b9a\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "intent_id",
+          "description"
+        ],
+        "value": "\u8981\u7ec8\u6b62\u7684\u610f\u56fe id\uff08= work \u53e5\u67c4\uff09"
+      }
+    ]
+  },
+  {
+    "key": "list_companies",
+    "descriptions": [
+      "\u5217\u51fa\u8d44\u4ea7\u5e93\u4e2d\u7684\u3010\u4f01\u4e1a/\u516c\u53f8\u3011\u53ca\u5176\u8d44\u4ea7\u8303\u56f4(scope)\u4e0e\u5df2\u5f52\u5c5e\u8d44\u4ea7\u6570\u3002\u7528\u4e8e\u67e5\u770b\u6709\u54ea\u4e9b\u516c\u53f8\u3001\u62ff\u5230 company_id\uff08insert_assets \u5173\u8054 app\u3001list_assets \u6309 company_id \u8fc7\u6ee4\u65f6\u7528\uff09\u3002\u53ef\u9009 search \u6309\u516c\u53f8\u540d\u6a21\u7cca\u8fc7\u6ee4(\u4e0d\u533a\u5206\u5927\u5c0f\u5199)\uff0c\u7559\u7a7a\u8fd4\u56de\u5168\u90e8\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "search",
+          "description"
+        ],
+        "value": "\u6309\u516c\u53f8\u540d\u6a21\u7cca\u8fc7\u6ee4(\u53ef\u9009\uff0c\u4e0d\u533a\u5206\u5927\u5c0f\u5199)\uff1b\u7559\u7a7a\u8fd4\u56de\u5168\u90e8"
+      }
+    ]
+  },
+  {
+    "key": "traffic_search",
+    "descriptions": [
+      "\u67e5\u8be2\u8bb0\u5f55\u4ee3\u7406\u5df2\u6293\u53d6\u7684\u76ee\u6807\u6d41\u91cf\uff08\u5fc5\u987b\u6307\u5b9a host\uff1b\u652f\u6301\u88f8\u4e3b\u673a\u3001\u4e3b\u673a:\u7aef\u53e3\u6216\u5b8c\u6574 URL\uff0c\u53ef\u518d\u6309 URL \u5b50\u4e32\u6216\u6b63\u6587\u5173\u952e\u8bcd\u8fc7\u6ee4\uff09\u3002\u6307\u5b9a\u7aef\u53e3\u65f6\u53ea\u8fd4\u56de\u8be5\u670d\u52a1\u7684\u6d41\u91cf\uff0c\u907f\u514d\u540c\u4e00 IP \u7684\u4e0d\u540c\u7aef\u53e3\u4e32\u5305\u3002body_contains \u4f1a\u5728\u5df2\u6293\u53d6\u7684\u8bf7\u6c42/\u54cd\u5e94\u5934\u4e0e\u6b63\u6587\u4e2d\u505a\u5168\u6587\u641c\u7d22\uff0c\u652f\u6301\u4efb\u610f\u5b50\u4e32\u548c\u4e2d\u6587\uff08\u81f3\u5c11 3 \u4e2a\u5b57\u7b26\uff09\u3002\u4ec5\u8fd4\u56de\u6781\u8f7b\u91cf\u7d22\u5f15(id/method/url/status/resp_len)\uff0c\u4e0d\u542b\u54cd\u5e94\u5185\u5bb9\uff1b\u7ed3\u679c\u975e\u7a7a\u540e\u5fc5\u987b\u7528 traffic_get \u9010\u6761\u6838\u5b9e\u8bf7\u6c42/\u54cd\u5e94\uff0c\u518d\u628a\u786e\u5b9e\u652f\u6301\u5f53\u524d\u6f0f\u6d1e\u7684 ID \u4ea4\u7ed9 bind_finding_traffic\u3002\u9ed8\u8ba4\u53ea\u8fd4\u56de 3 \u6761\u3001\u6bcf\u9875\u6700\u591a 10 \u6761\uff1b\u7ed3\u679c\u591a\u65f6\u7528 page \u7ffb\u9875\u3002",
+      "\u67e5\u8be2\u8bb0\u5f55\u4ee3\u7406\u5df2\u6293\u53d6\u7684\u76ee\u6807\u6d41\u91cf\uff08\u5fc5\u987b\u6307\u5b9a host\uff0c\u53ef\u518d\u6309 URL \u5b50\u4e32\u6216\u6b63\u6587\u5173\u952e\u8bcd\u8fc7\u6ee4\uff09\u3002body_contains \u4f1a\u5728\u5df2\u6293\u53d6\u7684\u8bf7\u6c42/\u54cd\u5e94\u5934\u4e0e\u6b63\u6587\u4e2d\u505a\u5168\u6587\u641c\u7d22\uff0c\u652f\u6301\u4efb\u610f\u5b50\u4e32\u548c\u4e2d\u6587\uff08\u81f3\u5c11 3 \u4e2a\u5b57\u7b26\uff09\uff0c\u53ef\u7528\u6765\u627e\u54cd\u5e94\u91cc\u7684\u5bc6\u7801\u3001\u5bc6\u94a5\u3001\u62a5\u9519\u3001\u5185\u7f51\u5730\u5740\u7b49\u3002\u4ec5\u8fd4\u56de\u6781\u8f7b\u91cf\u7d22\u5f15(id/method/url/status/resp_len)\uff0c\u4e0d\u542b\u4efb\u4f55\u54cd\u5e94\u5185\u5bb9\u3002\u9ed8\u8ba4\u53ea\u8fd4\u56de 3 \u6761\u3001\u6bcf\u9875\u6700\u591a 10 \u6761\uff1b\u7ed3\u679c\u591a\u65f6\u7528 page \u7ffb\u9875\uff08page=0 \u8d77\uff09\uff1b\u8981\u770b\u67d0\u6761\u7684\u8bf7\u6c42/\u54cd\u5e94\u539f\u6587\u7528 traffic_get(id)\u3002\u56de\u770b\u5df2\u8bbf\u95ee\u8d44\u6e90\u3001\u627e\u7aef\u70b9\u5148\u7528\u5b83\uff0c\u907f\u514d\u91cd\u590d curl \u540c\u4e00 URL\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "body_contains",
+          "description"
+        ],
+        "value": "\u6b63\u6587\u5168\u6587\u641c\u7d22\uff08\u53ef\u9009\uff0c\u81f3\u5c11 3 \u4e2a\u5b57\u7b26\uff09\uff0c\u5339\u914d\u8bf7\u6c42/\u54cd\u5e94\u7684\u5934\u4e0e\u6b63\u6587\uff0c\u5982 'password' / 'root:x:0' / '\u5185\u7f51\u6d4b\u8bd5'"
+      },
+      {
+        "path": [
+          "properties",
+          "contains",
+          "description"
+        ],
+        "value": "URL \u5b50\u4e32\u8fc7\u6ee4\uff08\u53ef\u9009\uff0c\u5982 'api' / 'login'\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "host",
+          "description"
+        ],
+        "value": "\u6309\u4e3b\u673a\u8fc7\u6ee4\uff08\u5fc5\u586b\uff1b\u5982 '107.172.96.177'\u3001'107.172.96.177:8082' \u6216 'http://107.172.96.177:8082/path'\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "limit",
+          "description"
+        ],
+        "value": "\u6bcf\u9875\u6761\u6570\uff0c\u9ed8\u8ba4 3\uff0c\u6700\u5927 10"
+      },
+      {
+        "path": [
+          "properties",
+          "page",
+          "description"
+        ],
+        "value": "\u9875\u7801\uff0c\u4ece 0 \u5f00\u59cb\uff0c\u9ed8\u8ba4 0\uff08\u6309 ts \u5012\u5e8f\u5206\u9875\uff09"
+      }
+    ]
+  },
+  {
+    "key": "traffic_get",
+    "descriptions": [
+      "\u6309 id \u53d6\u4e00\u6761\u5df2\u6293\u6d41\u91cf\u7684\u8bf7\u6c42/\u54cd\u5e94\u539f\u6587\uff08\u8fc7\u5927\u4f1a\u622a\u65ad\uff09\u3002\u914d\u5408 traffic_search \u7528\uff0c\u907f\u514d\u91cd\u590d curl\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "id",
+          "description"
+        ],
+        "value": "traffic_search \u8fd4\u56de\u7684 id"
+      }
+    ]
+  },
+  {
+    "key": "traffic_blob",
+    "descriptions": [
+      "\u5206\u6bb5\u8bfb\u53d6\u8d85\u5927\u8bf7\u6c42/\u54cd\u5e94\u4f53\u7684\u539f\u6587\u3002traffic_get \u91cc\u663e\u793a\u4e3a '\u2026[truncated] @blob sha256:<hash>' \u7684\u90e8\u5206\u5373\u5b58\u653e\u4e8e\u6b64\uff0c\u628a\u8be5 hash \u4f20\u8fdb\u6765\u5373\u53ef\u53d6\u5b8c\u6574\u5185\u5bb9\u3002\u5355\u6b21\u6700\u591a\u8fd4\u56de 8KB\uff0c\u7528 offset \u7ee7\u7eed\u5f80\u540e\u8bfb\uff08\u8fd4\u56de\u7ed3\u679c\u4f1a\u7ed9\u51fa\u603b\u957f\u5ea6\uff09\u3002\u9002\u5408\u7ffb\u9605\u5907\u4efd\u6587\u4ef6\u3001\u6e90\u7801\u6cc4\u9732\u3001\u5927 JSON \u5bfc\u51fa\u7b49\u8d85\u8fc7\u5185\u8054\u9608\u503c\u7684\u54cd\u5e94\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "hash",
+          "description"
+        ],
+        "value": "traffic_get \u4e2d @blob sha256: \u540e\u9762\u7684 64 \u4f4d\u5341\u516d\u8fdb\u5236\u503c"
+      },
+      {
+        "path": [
+          "properties",
+          "length",
+          "description"
+        ],
+        "value": "\u672c\u6b21\u8bfb\u53d6\u5b57\u8282\u6570\uff0c\u9ed8\u8ba4\u4e14\u6700\u5927 8192"
+      },
+      {
+        "path": [
+          "properties",
+          "offset",
+          "description"
+        ],
+        "value": "\u8d77\u59cb\u5b57\u8282\u504f\u79fb\uff0c\u9ed8\u8ba4 0"
+      }
+    ]
+  },
+  {
+    "key": "list_tasks",
+    "descriptions": [
+      "\u5217\u51fa\u6240\u6709\u4efb\u52a1(id/\u63cf\u8ff0/\u76ee\u6807/\u72b6\u6001/\u8fd0\u884c\u65f6\u957f/\u7236\u4efb\u52a1/LLM \u914d\u7f6e)\uff0c\u7f16\u6392 agent \u7528\u5b83\u638c\u63e1\u5168\u5c40\u3001\u770b\u54ea\u4e9b\u4efb\u52a1\u5361\u592a\u4e45\u3001\u5404\u81ea\u7528\u54ea\u4e2a LLM\u3002\u8fd0\u884c\u65f6\u957f\uff1a\u8fd0\u884c\u4e2d=\u521b\u5efa\u2192\u73b0\u5728\uff0c\u7ec8\u6001=\u521b\u5efa\u2192\u6700\u540e\u6d3b\u52a8(\u79d2)\u3002llm_profile\uff1a\u4efb\u52a1 planner/worker \u7528\u7684\u914d\u7f6e\u540d\uff0c(\u6fc0\u6d3b\u914d\u7f6e)=\u8ddf\u968f\u5168\u5c40\u6fc0\u6d3b\u3002"
+    ],
+    "schema": []
+  },
+  {
+    "key": "list_llm_profiles",
+    "descriptions": [
+      "\u5217\u51fa\u53ef\u7528\u7684 LLM \u914d\u7f6e(profile)\uff1aid\u3001\u540d\u79f0\u3001\u6a21\u578b\u3001\u683c\u5f0f\u3001\u662f\u5426\u4e3a\u5f53\u524d\u6fc0\u6d3b\u914d\u7f6e\u3002\u7528 id \u7ed9 spawn_task \u7684 llm_profile_id \u53c2\u6570\u6307\u5b9a\u5b50\u4efb\u52a1\u4e13\u5c5e LLM\uff08\u5982\u4fa6\u5bdf\u7528\u4fbf\u5b9c\u6a21\u578b\u3001\u5229\u7528\u7528\u5f3a\u6a21\u578b\uff09\u3002\u4e0d\u542b API Key\u3002"
+    ],
+    "schema": []
+  },
+  {
+    "key": "spawn_task",
+    "descriptions": [
+      "\u65b0\u5efa\u4e00\u4e2a\u5b50\u4efb\u52a1\u5e76\u542f\u52a8\u63a2\u7d22\u5f15\u64ce\uff0c\u8fd4\u56de task_id\u3002\u7528\u4e8e\u628a\u4e00\u4ef6\u4e8b(\u5982\u4e00\u9053\u9898/\u4e00\u4e2a\u76ee\u6807)\u6d3e\u6210\u72ec\u7acb\u4efb\u52a1\u3002parent_ref \u53ef\u9009\uff1a\u586b\u5f53\u524d\u7f16\u6392\u5173\u8054\u7684\u7236\u4efb\u52a1 id \u505a\u7236\u5b50\u5173\u8054\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "description",
+          "description"
+        ],
+        "value": "\u4efb\u52a1\u63cf\u8ff0(\u7b80\u77ed\u6807\u9898)"
+      },
+      {
+        "path": [
+          "properties",
+          "goal",
+          "description"
+        ],
+        "value": "\u4efb\u52a1\u76ee\u6807(\u8981\u8fbe\u6210\u4ec0\u4e48)"
+      },
+      {
+        "path": [
+          "properties",
+          "llm_profile_id",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u6307\u5b9a\u672c\u5b50\u4efb\u52a1 planner/worker \u7528\u7684 LLM \u914d\u7f6e id(\u89c1 list_llm_profiles)\uff1b\u7559\u7a7a\u5219\u7ee7\u627f\u7236\u4efb\u52a1\u3001\u518d\u56de\u9000\u5168\u5c40\u6fc0\u6d3b\u914d\u7f6e"
+      },
+      {
+        "path": [
+          "properties",
+          "parent_ref",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u7236\u4efb\u52a1 id(\u505a\u7236\u5b50\u5173\u8054)"
+      },
+      {
+        "path": [
+          "properties",
+          "plan_heartbeat_seconds",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1aplanner \u5fc3\u8df3\u89e6\u53d1\u95f4\u9694(\u79d2)\u3002\u8ddd\u4e0a\u8f6e\u89c4\u5212\u7ed3\u675f/\u4efb\u52a1\u5f00\u59cb\u6ee1\u8be5\u503c\u4e14\u671f\u95f4\u65e0\u89e6\u53d1 \u2192 \u89e6\u53d1\u4e00\u8f6e\u89c4\u5212(\u515c\u5e95\u6b7b\u9501 + \u5524\u9192\u53bb\u76d1\u7763\u98de\u884c\u4e2d\u7684 worker)\u3002\u7559\u7a7a\u6216 0 = \u9ed8\u8ba4 600(10min)\uff1b"
+      },
+      {
+        "path": [
+          "properties",
+          "seed_first_intent",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u5bf9\u4e8e\u7b80\u5355\u4efb\u52a1\u53ef\u5f00\u542f\uff0c\u521b\u5efa\u65f6\u76f4\u63a5\u4e0b\u53d1\u4e00\u6761\u79cd\u5b50\u610f\u56fe(\u5185\u5bb9=\u63cf\u8ff0+\u76ee\u6807)\u8ba9 worker \u514d\u7b49\u9996\u8f6e planner \u76f4\u63a5\u5f00\u8dd1\u6d4b\u8bd5\uff1b\u9ed8\u8ba4 false(\u8d70\u6807\u51c6\u5148\u89c4\u5212\u518d\u6267\u884c)\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "source_task_ids",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u53ea\u8bfb\u7ee7\u627f\u7684\u6765\u6e90\u4efb\u52a1 id \u5217\u8868(\u6700\u591a 8 \u4e2a)\u3002\u5b50\u4efb\u52a1\u53ef\u53ea\u8bfb\u5f15\u7528\u8fd9\u4e9b\u4efb\u52a1\u5df2\u63a2\u660e\u7684\u8d44\u4ea7/\u7ed3\u8bba\u4f5c\u4e3a\u8d77\u70b9\uff1b\u4e0e parent_ref \u7684\u7eaf\u7236\u5b50\u6307\u9488\u4e0d\u540c\uff0c\u8fd9\u662f\u5185\u5bb9\u7ee7\u627f\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "timeout_seconds",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u4efb\u52a1\u7ea7\u8d85\u65f6(\u79d2)\u3002\u5230\u70b9\u540e\u89e6\u53d1\u4f18\u96c5\u6536\u5c3e\u5e76\u8fdb\u5165 timeout \u7ec8\u6001\uff1b\u7559\u7a7a\u6216 0 = \u4e0d\u9650\u65f6"
+      }
+    ]
+  },
+  {
+    "key": "pause_task",
+    "descriptions": [
+      "\u6682\u505c\u6307\u5b9a\u4efb\u52a1(\u505c\u6b62\u5176 planner/worker \u5faa\u73af)\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "task_id",
+          "description"
+        ],
+        "value": "\u8981\u6682\u505c\u7684\u4efb\u52a1 id"
+      }
+    ]
+  },
+  {
+    "key": "get_task_graph",
+    "descriptions": [
+      "\u8bfb\u6307\u5b9a\u4efb\u52a1\u7684\u63a2\u7d22\u56fe\u603b\u89c8(\u540c graph_overview\uff1a\u8d44\u4ea7\u8ba1\u6570/frontier/\u53d1\u73b0/\u8986\u76d6\u7b49)\uff0c\u7528 task_id \u6307\u5b9a\u4efb\u52a1\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "task_id",
+          "description"
+        ],
+        "value": "\u4efb\u52a1 id"
+      }
+    ]
+  },
+  {
+    "key": "list_task_findings",
+    "descriptions": [
+      "\u8bfb\u6307\u5b9a\u4efb\u52a1\u7684\u786e\u8ba4\u6f0f\u6d1e(\u542b flag/PoC\uff1b\u6bcf\u6761\u5e26 id/task_id/intent_id/vulnclass/severity/\u6458\u8981/\u72b6\u6001)\uff0c\u7528 task_id \u6307\u5b9a\u4efb\u52a1\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "task_id",
+          "description"
+        ],
+        "value": "\u4efb\u52a1 id"
+      }
+    ]
+  },
+  {
+    "key": "add_task_hint",
+    "descriptions": [
+      "\u7ed9\u6307\u5b9a\u4efb\u52a1\u6ce8\u5165\u6218\u7565\u63d0\u793a(\u8be5\u4efb\u52a1\u7684 planner \u4e0b\u8f6e\u751f\u6210\u610f\u56fe\u65f6\u4f1a\u8bfb\u5230)\u3002\n\u2605\u4f18\u5148\u6279\u91cf\uff1a\u591a\u6761\u63d0\u793a\u653e\u8fdb hints \u6570\u7ec4\u4e00\u6b21\u63d0\u4ea4\uff08\u8fd4\u56de ids \u6570\u7ec4\uff0c\u4e0e hints \u7b49\u957f\u540c\u5e8f\uff0c\u5931\u8d25\u9879 id=0\uff09\uff1b\u5355\u6761\u5219\u7701\u7565 hints \u76f4\u63a5\u7ed9\u9876\u5c42 text\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "asset_ids",
+          "description"
+        ],
+        "value": "\u951a\u5b9a\u7684\u8d44\u4ea7 id\uff08\u53ef\u9009\uff0c0/1/\u591a\u4e2a\uff1b\u8be5\u4efb\u52a1\u5185\u7684\u8d44\u4ea7 id\uff09"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "description"
+        ],
+        "value": "\u3010\u4f18\u5148\u7528\u8fd9\u4e2a\u3011\u63d0\u793a\u6570\u7ec4\uff0c\u6bcf\u4e2a\u5143\u7d20\u5b57\u6bb5\u540c\u9876\u5c42\uff08text/asset_ids/traffic_refs\uff09\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "items",
+          "properties",
+          "text",
+          "description"
+        ],
+        "value": "\u63d0\u793a\u5185\u5bb9"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "items",
+          "properties",
+          "traffic_refs",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u5df2\u6838\u5b9e\u4e14\u5bf9\u5e94\u672c\u63d0\u793a\u4e2d\u5177\u4f53\u6f0f\u6d1e\u7684\u6d41\u91cf\u5f15\u7528\uff0c\u4fdd\u7559\u987a\u5e8f\uff1b\u4ea4\u63a5\u540e report_finding \u53ef\u4f20 evidence_hint_id \u643a\u5e26\u8fd9\u4e9b\u5f15\u7528\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "items",
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "note",
+          "description"
+        ],
+        "value": "\u8be5\u6d41\u91cf\u652f\u6301\u4ec0\u4e48\u7ed3\u8bba"
+      },
+      {
+        "path": [
+          "properties",
+          "hints",
+          "items",
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "traffic_id",
+          "description"
+        ],
+        "value": "\u771f\u5b9e\u6d41\u91cf ID"
+      },
+      {
+        "path": [
+          "properties",
+          "task_id",
+          "description"
+        ],
+        "value": "\u4efb\u52a1 id"
+      },
+      {
+        "path": [
+          "properties",
+          "text",
+          "description"
+        ],
+        "value": "[\u5355\u6761] \u63d0\u793a\u5185\u5bb9"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u5df2\u6838\u5b9e\u4e14\u5bf9\u5e94\u672c\u63d0\u793a\u4e2d\u5177\u4f53\u6f0f\u6d1e\u7684\u6d41\u91cf\u5f15\u7528\uff0c\u4fdd\u7559\u987a\u5e8f\uff1b\u4ea4\u63a5\u540e report_finding \u53ef\u4f20 evidence_hint_id \u643a\u5e26\u8fd9\u4e9b\u5f15\u7528\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "note",
+          "description"
+        ],
+        "value": "\u8be5\u6d41\u91cf\u652f\u6301\u4ec0\u4e48\u7ed3\u8bba"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "traffic_id",
+          "description"
+        ],
+        "value": "\u771f\u5b9e\u6d41\u91cf ID"
+      }
+    ]
+  },
+  {
+    "key": "get_task_worker_trace",
+    "descriptions": [
+      "\u770b\u6307\u5b9a\u4efb\u52a1\u91cc\u67d0\u4e2a work(\u610f\u56fe)\u7684\u6267\u884c\u8fc7\u7a0b\uff1aget_task_worker_trace(task_id, intent_id) \u770b\u6b65\u9aa4\u6458\u8981\uff1b\u518d\u5e26 step_ids=[...] \u53d6\u90a3\u51e0\u6b65\u5b8c\u6574\u5185\u5bb9(\u4e00\u6b21\u6700\u591a 5 \u4e2a,\u591a\u4f20\u53ea\u8fd4\u56de\u524d 5 \u4e2a)\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "intent_id",
+          "description"
+        ],
+        "value": "\u610f\u56fe id(\u8be5\u4efb\u52a1\u91cc\u7684 work)"
+      },
+      {
+        "path": [
+          "properties",
+          "step_ids",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u8981\u53d6\u5b8c\u6574\u5185\u5bb9\u7684\u6b65\u9aa4 id(\u4e00\u6b21\u6700\u591a 5 \u4e2a,\u591a\u4f20\u53ea\u8fd4\u56de\u524d 5 \u4e2a,\u5176\u4f59\u5728 omitted_step_ids \u91cc\u5217\u51fa)"
+      },
+      {
+        "path": [
+          "properties",
+          "task_id",
+          "description"
+        ],
+        "value": "\u4efb\u52a1 id"
+      }
+    ]
+  },
+  {
+    "key": "list_task_worker_traces",
+    "descriptions": [
+      "\u5217\u51fa\u6307\u5b9a\u4efb\u52a1\u91cc\u8dd1\u8fc7\u54ea\u4e9b work(\u610f\u56fe) + \u5404\u81ea\u6b65\u6570\uff0c\u7528\u4e8e\u53d1\u73b0\u54ea\u4e9b work \u503c\u5f97\u7ffb\u770b(\u518d\u7528 get_task_worker_trace)\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "task_id",
+          "description"
+        ],
+        "value": "\u4efb\u52a1 id"
+      }
+    ]
+  },
+  {
+    "key": "search_task_worker_traces",
+    "descriptions": [
+      "\u5728\u6307\u5b9a\u4efb\u52a1\u91cc\u6309\u5173\u952e\u5b57\u641c\u7d22\u6240\u6709 work \u7684\u6267\u884c\u8fc7\u7a0b(\u8fd4\u56de\u547d\u4e2d\u6b65\u9aa4\u6458\u8981 + intent_id)\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "q",
+          "description"
+        ],
+        "value": "\u641c\u7d22\u5173\u952e\u5b57"
+      },
+      {
+        "path": [
+          "properties",
+          "task_id",
+          "description"
+        ],
+        "value": "\u4efb\u52a1 id"
+      }
+    ]
+  },
+  {
+    "key": "get_task_node_detail",
+    "descriptions": [
+      "\u8bfb\u6307\u5b9a\u4efb\u52a1\u91cc\u67d0\u4e2a\u63a2\u7d22\u56fe\u8282\u70b9\u7684\u5b8c\u6574\u5185\u5bb9(\u53d1\u73b0/\u4e8b\u5b9e/\u610f\u56fe/\u76ee\u6807\uff1a\u6458\u8981 + \u8be6\u60c5/\u8bc1\u636e/PoC)\u3002id \u4e3a\u63a2\u7d22\u8282\u70b9 id(\u5982 report_finding \u8fd4\u56de\u3001\u6216 list_task_findings \u91cc\u7684 id)\u3002\u5199\u6f0f\u6d1e\u62a5\u544a\u524d\u7528\u5b83\u53d6\u8be5\u6f0f\u6d1e\u7684\u5b8c\u6574\u8bc1\u636e\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "id",
+          "description"
+        ],
+        "value": "\u63a2\u7d22\u56fe\u8282\u70b9 id(\u975e\u8d44\u4ea7 id)"
+      },
+      {
+        "path": [
+          "properties",
+          "task_id",
+          "description"
+        ],
+        "value": "\u4efb\u52a1 id"
+      }
+    ]
+  },
+  {
+    "key": "update_finding_report",
+    "descriptions": [
+      "\u4e3a\u5df2\u767b\u8bb0\u7684\u6f0f\u6d1e\u5199\u5165/\u66f4\u65b0\u3010\u8be6\u7ec6\u62a5\u544a\u3011(Markdown \u5168\u6587,\u6574\u6bb5\u8986\u76d6\u65e7\u5185\u5bb9)\u3002finding_id \u4f20 report_finding \u8fd4\u56de\u7684\u90a3\u4e2a id(\"finding recorded: <id>\" \u91cc\u7684\u6570\u5b57)\u3002\u62a5\u544a\u5efa\u8bae\u5305\u542b:\u6f0f\u6d1e\u6982\u8ff0\u3001\u5f71\u54cd\u4e0e\u5371\u5bb3\u3001\u590d\u73b0\u6b65\u9aa4\u3001\u8bc1\u636e/PoC\u3001\u4fee\u590d\u5efa\u8bae\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "evidence_version",
+          "description"
+        ],
+        "value": "get_finding_traffic \u8fd4\u56de\u7684\u8bc1\u636e version\uff1b\u7528\u4e8e\u9632\u6b62\u62a5\u544a\u8986\u76d6\u65b0\u7684\u8bc1\u636e\u53d8\u66f4"
+      },
+      {
+        "path": [
+          "properties",
+          "finding_id",
+          "description"
+        ],
+        "value": "\u76ee\u6807\u6f0f\u6d1e id(report_finding \u8fd4\u56de\u7684 id)"
+      },
+      {
+        "path": [
+          "properties",
+          "report",
+          "description"
+        ],
+        "value": "\u8be6\u7ec6\u62a5\u544a\u5168\u6587,Markdown \u683c\u5f0f"
+      }
+    ]
+  },
+  {
+    "key": "get_finding_traffic",
+    "descriptions": [
+      "\u8bfb\u53d6\u6f0f\u6d1e\u5df2\u7ed1\u5b9a\u7684\u771f\u5b9e\u6d41\u91cf\u8bc1\u636e\uff0c\u4e0d\u4f9d\u8d56\u6355\u83b7\u5f00\u5173\u3002finding_id \u4f7f\u7528 report_finding JSON \u8fd4\u56de\u7684\u72ec\u7acb\u6f0f\u6d1e\u8bb0\u5f55 ID\uff08\u4e0d\u662f\u7b2c\u4e00\u884c\u7684\u63a2\u7d22\u8282\u70b9 ID\uff09\u3002\u5148\u4e0d\u4f20 binding_id \u83b7\u53d6\u6e05\u5355\u53ca version\uff1b\u7a7a\u6e05\u5355\u662f\u6b63\u5e38\u60c5\u51b5\uff0cTCP \u7b49\u975e HTTP \u6f0f\u6d1e\u6216\u672a\u91c7\u96c6\u65f6\u4ecd\u53ef\u4f9d\u636e\u6587\u5b57/\u547d\u4ee4\u8bc1\u636e\u7f16\u5199\u62a5\u544a\uff0c\u4e0d\u5f3a\u5236\u7ed1\u5b9a\u3002\u6709\u7ed1\u5b9a\u65f6\u6309 binding_id\u3001side(request/response)\u3001offset \u5206\u6bb5\u8bfb\u53d6\u6b63\u6587\u3002\u5199\u62a5\u544a\u65f6\u5c06\u8bfb\u53d6\u7684 version \u4f5c\u4e3a evidence_version \u4f20\u7ed9 update_finding_report\uff0c\u540e\u8005 finding_id \u4ecd\u4f7f\u7528\u63a2\u7d22\u8282\u70b9 ID\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "binding_id",
+          "description"
+        ],
+        "value": "\u6e05\u5355\u91cc\u7684\u7ed1\u5b9a ID\uff0c\u7701\u7565\u5219\u8fd4\u56de\u6e05\u5355"
+      },
+      {
+        "path": [
+          "properties",
+          "finding_id",
+          "description"
+        ],
+        "value": "\u72ec\u7acb\u6f0f\u6d1e\u8bb0\u5f55 ID"
+      },
+      {
+        "path": [
+          "properties",
+          "side",
+          "description"
+        ],
+        "value": "request \u6216 response\uff0c\u9ed8\u8ba4 response"
+      }
+    ]
+  },
+  {
+    "key": "bind_finding_traffic",
+    "descriptions": [
+      "\u4e3a\u5df2\u767b\u8bb0\u6f0f\u6d1e\u8865\u7ed1\u7ecf\u6838\u5b9e\u7684\u771f\u5b9e HTTP \u6d41\u91cf\u3002finding_id \u4f7f\u7528\u72ec\u7acb\u6f0f\u6d1e\u8bb0\u5f55 ID\uff1b\u4e0d\u8981\u4f20\u63a2\u7d22\u8282\u70b9 ID\u3002\u540c\u6279\u5f15\u7528\u5168\u90e8\u6210\u529f\u6216\u5168\u90e8\u5931\u8d25\uff0c\u91cd\u590d\u5f15\u7528\u4e0d\u8986\u76d6\u5df2\u6709\u8bf4\u660e\u3002\u8865\u7ed1\u4f1a\u4f7f\u5df2\u6709\u62a5\u544a\u6807\u8bb0\u5f85\u66f4\u65b0\uff1b\u4e0d\u8981\u4e3a\u8865\u5305\u91cd\u65b0\u63a2\u6d4b\u6216\u91cd\u590d\u521b\u5efa\u6f0f\u6d1e\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "finding_id",
+          "description"
+        ],
+        "value": "\u72ec\u7acb\u6f0f\u6d1e\u8bb0\u5f55 ID\uff0c\u4ece list_task_findings / get_task_node_detail \u7684 finding_id \u5b57\u6bb5\u8bfb\u53d6"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "description"
+        ],
+        "value": "\u53ef\u9009\uff1a\u5df2\u6838\u5b9e\u4e14\u5bf9\u5e94\u672c\u63d0\u793a\u4e2d\u5177\u4f53\u6f0f\u6d1e\u7684\u6d41\u91cf\u5f15\u7528\uff0c\u4fdd\u7559\u987a\u5e8f\uff1b\u4ea4\u63a5\u540e report_finding \u53ef\u4f20 evidence_hint_id \u643a\u5e26\u8fd9\u4e9b\u5f15\u7528\u3002"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "note",
+          "description"
+        ],
+        "value": "\u8be5\u6d41\u91cf\u652f\u6301\u4ec0\u4e48\u7ed3\u8bba"
+      },
+      {
+        "path": [
+          "properties",
+          "traffic_refs",
+          "items",
+          "properties",
+          "traffic_id",
+          "description"
+        ],
+        "value": "\u771f\u5b9e\u6d41\u91cf ID"
+      }
+    ]
+  },
+  {
+    "key": "create_skill",
+    "descriptions": [
+      "\u521b\u5efa\u4e00\u4e2a\u65b0 skill(\u5199 SKILL.md\uff0cagentskills.io \u89c4\u8303)\u3002name \u5c0f\u5199\u5b57\u6bcd/\u6570\u5b57/\u8fde\u5b57\u7b26\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "description",
+          "description"
+        ],
+        "value": "skill \u63cf\u8ff0(\u5fc5\u586b\uff0c\u8bf4\u660e\u5b83\u505a\u4ec0\u4e48/\u4f55\u65f6\u7528)"
+      },
+      {
+        "path": [
+          "properties",
+          "instructions",
+          "description"
+        ],
+        "value": "Markdown \u6b63\u6587\u8bf4\u660e(\u53ef\u9009)"
+      },
+      {
+        "path": [
+          "properties",
+          "name",
+          "description"
+        ],
+        "value": "skill \u540d(\u5c0f\u5199\u5b57\u6bcd\u5f00\u5934\uff0c\u5b57\u6bcd/\u6570\u5b57/\u8fde\u5b57\u7b26)"
+      }
+    ]
+  },
+  {
+    "key": "update_skill_file",
+    "descriptions": [
+      "\u5199/\u8986\u76d6\u67d0\u4e2a skill \u5185\u7684\u4e00\u4e2a\u6587\u4ef6(\u9ed8\u8ba4 SKILL.md)\u3002\u7528\u4e8e\u4fee\u6539\u6280\u80fd\u5185\u5bb9\u6216\u52a0\u811a\u672c/\u5f15\u7528\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "content",
+          "description"
+        ],
+        "value": "\u6587\u4ef6\u5b8c\u6574\u5185\u5bb9"
+      },
+      {
+        "path": [
+          "properties",
+          "file",
+          "description"
+        ],
+        "value": "\u76f8\u5bf9\u8def\u5f84(\u53ef\u9009\uff0c\u9ed8\u8ba4 SKILL.md\uff0c\u5982 scripts/run.py)"
+      },
+      {
+        "path": [
+          "properties",
+          "name",
+          "description"
+        ],
+        "value": "skill \u540d"
+      }
+    ]
+  },
+  {
+    "key": "create_custom_tool",
+    "descriptions": [
+      "\u3010\u91cd\u8981\u3011\u5f53\u5b89\u88c5\u4e00\u4e9b\u5e73\u53f0\u6ca1\u6709\u7684\u5de5\u5177\u65f6\uff0c\u8c03\u7528\u8be5\u5de5\u5177\u5c06\u5b89\u88c5\u7684\u5de5\u5177\u653e\u5165\u5e73\u53f0\u4e2d\uff0c\u8ba9\u5e73\u53f0\u53ef\u4ee5\u8c03\u7528\uff01\u521b\u5efa\u4e00\u4e2a\u81ea\u5b9a\u4e49\u5de5\u5177(shell/command/script/http)\u3002shell=bash \u73af\u5883\u58f0\u660e\uff0c\u53ea\u9700 key+description+agents\uff0c\u65e0\u9700 exec/schema\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "agents",
+          "description"
+        ],
+        "value": "\u7ed1\u5b9a\u7684 agent key(\u53ef\u9009)"
+      },
+      {
+        "path": [
+          "properties",
+          "deferred",
+          "description"
+        ],
+        "value": "\u662f\u5426\u5ef6\u8fdf(shell \u7c7b\u578b\u65e0\u6548\uff1b\u4ec5 command/script/http \u7684\u4e0d\u5e38\u7528\u5de5\u5177\u624d\u5f00)"
+      },
+      {
+        "path": [
+          "properties",
+          "description",
+          "description"
+        ],
+        "value": "\u53d1\u7ed9\u6a21\u578b\u7684\u63cf\u8ff0"
+      },
+      {
+        "path": [
+          "properties",
+          "enabled",
+          "description"
+        ],
+        "value": "\u662f\u5426\u542f\u7528(\u9ed8\u8ba4 true)"
+      },
+      {
+        "path": [
+          "properties",
+          "exec",
+          "description"
+        ],
+        "value": "\u6267\u884c\u89c4\u683c(shell \u7c7b\u578b\u4e0d\u9700\u8981): command\u2192{command}; script\u2192{code}; http\u2192{method,url,headers,body,proxy,use_recording_proxy}"
+      },
+      {
+        "path": [
+          "properties",
+          "key",
+          "description"
+        ],
+        "value": "\u5de5\u5177 key(\u5c0f\u5199\u5b57\u6bcd\u5f00\u5934\uff0c\u5b57\u6bcd/\u6570\u5b57/\u4e0b\u5212\u7ebf)"
+      },
+      {
+        "path": [
+          "properties",
+          "kind",
+          "description"
+        ],
+        "value": "shell | command | script(\u4ec5Python) | http\u3002shell=bash \u73af\u5883\u58f0\u660e(\u4ec5\u544a\u77e5\u6a21\u578b\u8be5\u5de5\u5177\u53ef\u5728 bash \u4e2d\u76f4\u63a5\u8c03\u7528\uff0c\u65e0\u9700 exec/schema)\uff1b\u5176\u4f59\u4e09\u79cd\u9700\u63d0\u4f9b exec"
+      },
+      {
+        "path": [
+          "properties",
+          "schema",
+          "description"
+        ],
+        "value": "\u53c2\u6570 JSON-Schema(shell/command/script \u53ef\u7559\u7a7a; http \u5fc5\u586b\u4e14\u9700\u542b properties)"
+      }
+    ]
+  },
+  {
+    "key": "update_custom_tool",
+    "descriptions": [
+      "\u4fee\u6539\u4e00\u4e2a\u5df2\u6709\u7684\u81ea\u5b9a\u4e49\u5de5\u5177(\u6309 key)\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "agents",
+          "description"
+        ],
+        "value": "\u7ed1\u5b9a\u7684 agent key(\u53ef\u9009)"
+      },
+      {
+        "path": [
+          "properties",
+          "deferred",
+          "description"
+        ],
+        "value": "\u662f\u5426\u5ef6\u8fdf(shell \u7c7b\u578b\u65e0\u6548\uff1b\u4ec5 command/script/http \u7684\u4e0d\u5e38\u7528\u5de5\u5177\u624d\u5f00)"
+      },
+      {
+        "path": [
+          "properties",
+          "description",
+          "description"
+        ],
+        "value": "\u53d1\u7ed9\u6a21\u578b\u7684\u63cf\u8ff0"
+      },
+      {
+        "path": [
+          "properties",
+          "enabled",
+          "description"
+        ],
+        "value": "\u662f\u5426\u542f\u7528(\u9ed8\u8ba4 true)"
+      },
+      {
+        "path": [
+          "properties",
+          "exec",
+          "description"
+        ],
+        "value": "\u6267\u884c\u89c4\u683c(shell \u7c7b\u578b\u4e0d\u9700\u8981): command\u2192{command}; script\u2192{code}; http\u2192{method,url,headers,body,proxy,use_recording_proxy}"
+      },
+      {
+        "path": [
+          "properties",
+          "key",
+          "description"
+        ],
+        "value": "\u8981\u4fee\u6539\u7684\u81ea\u5b9a\u4e49\u5de5\u5177 key"
+      },
+      {
+        "path": [
+          "properties",
+          "kind",
+          "description"
+        ],
+        "value": "shell | command | script(\u4ec5Python) | http\u3002shell=bash \u73af\u5883\u58f0\u660e(\u4ec5\u544a\u77e5\u6a21\u578b\u8be5\u5de5\u5177\u53ef\u5728 bash \u4e2d\u76f4\u63a5\u8c03\u7528\uff0c\u65e0\u9700 exec/schema)\uff1b\u5176\u4f59\u4e09\u79cd\u9700\u63d0\u4f9b exec"
+      },
+      {
+        "path": [
+          "properties",
+          "schema",
+          "description"
+        ],
+        "value": "\u53c2\u6570 JSON-Schema(shell/command/script \u53ef\u7559\u7a7a; http \u5fc5\u586b\u4e14\u9700\u542b properties)"
+      }
+    ]
+  },
+  {
+    "key": "create_mcp",
+    "descriptions": [
+      "\u521b\u5efa\u4e00\u4e2a MCP \u670d\u52a1\u5668(stdio/http/sse)\u3002\u521b\u5efa\u540e\u5176\u5de5\u5177\u9700\u6309 agent \u53ef\u89c1\u6027\u6388\u6743\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "args",
+          "description"
+        ],
+        "value": "\u547d\u4ee4\u53c2\u6570\u6570\u7ec4"
+      },
+      {
+        "path": [
+          "properties",
+          "command",
+          "description"
+        ],
+        "value": "stdio \u7684\u542f\u52a8\u547d\u4ee4(\u5982 npx)"
+      },
+      {
+        "path": [
+          "properties",
+          "enabled",
+          "description"
+        ],
+        "value": "\u662f\u5426\u542f\u7528(\u9ed8\u8ba4 true)"
+      },
+      {
+        "path": [
+          "properties",
+          "env",
+          "description"
+        ],
+        "value": "\u73af\u5883\u53d8\u91cf {KEY:VALUE}"
+      },
+      {
+        "path": [
+          "properties",
+          "insecure",
+          "description"
+        ],
+        "value": "http: \u8df3\u8fc7 TLS \u8bc1\u4e66\u6821\u9a8c(\u81ea\u7b7e\u8bc1\u4e66\u65f6\u7f6e true, \u9ed8\u8ba4 false)"
+      },
+      {
+        "path": [
+          "properties",
+          "name",
+          "description"
+        ],
+        "value": "MCP \u670d\u52a1\u5668\u540d"
+      },
+      {
+        "path": [
+          "properties",
+          "url",
+          "description"
+        ],
+        "value": "http/sse \u7684 URL"
+      }
+    ]
+  },
+  {
+    "key": "update_mcp",
+    "descriptions": [
+      "\u4fee\u6539\u4e00\u4e2a\u5df2\u6709\u7684 MCP \u670d\u52a1\u5668(\u6309 id)\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "args",
+          "description"
+        ],
+        "value": "\u547d\u4ee4\u53c2\u6570\u6570\u7ec4"
+      },
+      {
+        "path": [
+          "properties",
+          "command",
+          "description"
+        ],
+        "value": "stdio \u7684\u542f\u52a8\u547d\u4ee4(\u5982 npx)"
+      },
+      {
+        "path": [
+          "properties",
+          "enabled",
+          "description"
+        ],
+        "value": "\u662f\u5426\u542f\u7528(\u9ed8\u8ba4 true)"
+      },
+      {
+        "path": [
+          "properties",
+          "env",
+          "description"
+        ],
+        "value": "\u73af\u5883\u53d8\u91cf {KEY:VALUE}"
+      },
+      {
+        "path": [
+          "properties",
+          "id",
+          "description"
+        ],
+        "value": "\u8981\u4fee\u6539\u7684 MCP \u670d\u52a1\u5668 id"
+      },
+      {
+        "path": [
+          "properties",
+          "insecure",
+          "description"
+        ],
+        "value": "http: \u8df3\u8fc7 TLS \u8bc1\u4e66\u6821\u9a8c(\u81ea\u7b7e\u8bc1\u4e66\u65f6\u7f6e true, \u9ed8\u8ba4 false)"
+      },
+      {
+        "path": [
+          "properties",
+          "name",
+          "description"
+        ],
+        "value": "MCP \u670d\u52a1\u5668\u540d"
+      },
+      {
+        "path": [
+          "properties",
+          "url",
+          "description"
+        ],
+        "value": "http/sse \u7684 URL"
+      }
+    ]
+  },
+  {
+    "key": "delete_assets_by_host",
+    "descriptions": [
+      "\u6309 host \u7cbe\u786e\u5220\u9664\u8d44\u4ea7\uff1a\u5220\u6389\u8be5 host \u7684\u57df\u540d/\u5b50\u57df\u540d\uff0c\u4ee5\u53ca\u5176\u4e0b\u7684\u670d\u52a1(service)\u3001\u63a5\u53e3(endpoint)\u3002\nhost \u5b8c\u5168\u5339\u914d(\u5c0f\u5199\u3001\u53bb\u7a7a\u683c)\uff0c\u4e0d\u662f\u6a21\u7cca/\u901a\u914d\u3002\n\u4f20\u6839\u57df\u540d(\u5982 example.com)\u4f1a\u8fde\u5e26\u5220\u9664\u5b83\u7684\u5b50\u57df\u540d\u53ca\u5176\u670d\u52a1/\u63a5\u53e3\uff1b\u4f20\u5b50\u57df\u540d(\u5982 a.example.com)\u6216 IP \u53ea\u5220\u8be5 host \u81ea\u8eab\u53ca\u5176\u670d\u52a1/\u63a5\u53e3\u3002\n\u26a0\ufe0f \u786c\u5220\u9664\u3001\u4f5c\u7528\u4e8e\u5168\u5c40\u8d44\u4ea7\u5e93(\u8de8\u4efb\u52a1\u5171\u4eab)\u3001\u4e0d\u53ef\u64a4\u9500\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "host",
+          "description"
+        ],
+        "value": "\u8981\u5220\u9664\u7684 host\uff1a\u57df\u540d/\u5b50\u57df\u540d/IP\u3002\u5b8c\u5168\u5339\u914d\uff0c\u5982 example.com \u6216 a.example.com \u6216 1.2.3.4"
+      }
+    ]
+  },
+  {
+    "key": "get_finding_retest_context",
+    "descriptions": [
+      "\u8bfb\u53d6\u5f53\u524d\u590d\u6d4b\u4f1a\u8bdd\u5173\u8054\u7684\u6f0f\u6d1e\u8bc1\u636e\u5feb\u7167\u3001\u590d\u6d4b\u72b6\u6001\u3001\u8865\u5145\u8bf4\u660e\u4e0e\u5f53\u524d\u4efb\u52a1\u7ea6\u675f\u3002\u65e0\u53c2\u6570\uff0c\u53ea\u80fd\u8bfb\u53d6\u672c\u4f1a\u8bdd\u3002"
+    ],
+    "schema": []
+  },
+  {
+    "key": "record_finding_retest_result",
+    "descriptions": [
+      "\u4e3a\u5f53\u524d\u590d\u6d4b\u4f1a\u8bdd\u4fdd\u5b58\u552f\u4e00\u7ed3\u8bba\uff1b\u539f\u6f0f\u6d1e\u8bc1\u636e\u4e0e\u62a5\u544a\u4fdd\u6301\u4e0d\u53d8\u3002\u4f1a\u8bdd\u6210\u529f\u7ed3\u675f\u4e14\u7ed3\u8bba\u4e3a fixed \u65f6\uff0c\u7cfb\u7edf\u81ea\u52a8\u5c06\u6f0f\u6d1e\u72b6\u6001\u6539\u4e3a\u5df2\u4fee\u590d\uff1b\u5176\u4ed6\u7ed3\u8bba\u4fdd\u7559\u539f\u72b6\u6001\u3002\u5fc5\u987b\u63d0\u4f9b\u672c\u6b21\u5b9e\u9645\u68c0\u67e5\u7684\u8bc1\u636e\uff0c\u65e0\u6cd5\u786e\u8ba4\u65f6\u5199\u660e\u963b\u585e\u539f\u56e0\u3002"
+    ],
+    "schema": [
+      {
+        "path": [
+          "properties",
+          "evidence",
+          "description"
+        ],
+        "value": "Markdown\uff1a\u672c\u6b21\u5b9e\u9645\u6b65\u9aa4\u3001\u89c2\u5bdf\u3001\u5bf9\u7167\u3001\u7ed3\u8bba\u4f9d\u636e\uff1b\u65e0\u6cd5\u786e\u8ba4\u5219\u5217\u51fa\u5df2\u68c0\u67e5\u5185\u5bb9\u548c\u963b\u585e\u539f\u56e0"
+      },
+      {
+        "path": [
+          "properties",
+          "summary",
+          "description"
+        ],
+        "value": "\u672c\u6b21\u590d\u6d4b\u7ed3\u8bba\u6458\u8981"
+      }
+    ]
+  }
+]

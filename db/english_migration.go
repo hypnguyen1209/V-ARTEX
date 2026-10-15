@@ -155,12 +155,13 @@ AND p.updated_by='system' AND p.note IN ($1,$2)`, legacyBuiltinPromptNote, legac
 }
 
 // LegacyEnglishDefaults supplies current English replacements without coupling db
-// to the packages that own model-facing prompts. Keys are frozen legacy SHA-256s.
+// to the packages that own model-facing prompts and tools. Prompt keys are frozen SHA-256s.
 type LegacyEnglishDefaults struct {
 	PromptBySHA256      map[string]string
 	WrapupBySHA256      map[string]string
 	TaskTimeoutBySHA256 map[string]string
 	JudgeBySHA256       map[string]string
+	ToolDefaults        map[string]EnglishToolDefault
 }
 
 // NewLegacyEnglishDefaults binds approved legacy fingerprints to current text.
@@ -232,7 +233,7 @@ func withEnglishMigrationTransaction(ctx context.Context,
 }
 
 // MigrateLegacyEnglishDefaults serializes startup migrations with schema changes
-// and commits all guarded prompt replacements together.
+// and commits all guarded prompt and tool replacements together.
 func (d *DB) MigrateLegacyEnglishDefaults(ctx context.Context, defaults LegacyEnglishDefaults) error {
 	return withEnglishMigrationTransaction(ctx, d.BeginTx, func(tx *sql.Tx) error {
 		return migrateLegacyEnglishDefaults(ctx, tx, defaults)
@@ -278,6 +279,9 @@ func migrateEnglishTextRows(ctx context.Context, store englishMigrationStore,
 }
 
 func migrateLegacyEnglishDefaults(ctx context.Context, store englishMigrationStore, defaults LegacyEnglishDefaults) error {
+	if err := migrateLegacyEnglishToolMetadata(ctx, store, defaults.ToolDefaults); err != nil {
+		return fmt.Errorf("system tool metadata: %w", err)
+	}
 	if err := migrateEnglishTextRows(ctx, store, defaults.PromptBySHA256,
 		`SELECT p.id,p.template_text FROM agent_prompts p JOIN agents a
 ON a.current_prompt_id=p.id AND a.id=p.agent_id
