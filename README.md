@@ -39,7 +39,7 @@ Autonomous AI penetration testing system (Go backend + Next.js frontend)
 | :---: | :---: |
 | ![Agent](screenshots/agents.png) | ![LLM](screenshots/llm.png) |
 
-| Interception Approvals | Backend Logs |
+| Interception Rules | Backend Logs |
 | :---: | :---: |
 | ![Interception](screenshots/intercept.png) | ![Logs](screenshots/logs.png) |
 
