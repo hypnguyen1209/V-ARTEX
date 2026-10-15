@@ -481,10 +481,10 @@ export default function TrafficPage() {
           <EraserIcon className="size-3.5" />
           Clear all
         </Button>
-        <div className="relative max-w-sm flex-1">
+        <div className="relative min-w-36 max-w-sm flex-1">
           <SearchIcon className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search all (URL / method / type / status code…)"
+            placeholder="Search traffic"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="h-8 pl-8"
@@ -549,7 +549,7 @@ export default function TrafficPage() {
         <span className="pl-1 text-xs font-medium text-muted-foreground">Advanced Filters</span>
         <div className="relative w-56">
           <Input
-            placeholder="Response body keyword (at least 3 characters)"
+            placeholder="Body keyword (min. 3 chars)"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             className="h-8"

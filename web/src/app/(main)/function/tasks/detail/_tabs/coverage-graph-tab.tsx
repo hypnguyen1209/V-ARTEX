@@ -534,10 +534,12 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
     void (async () => {
       const { Graph } = await import("@antv/g6");
       if (destroyed || !containerRef.current) return;
+      const labelContext = document.createElement("canvas").getContext("2d");
+      if (labelContext) labelContext.font = "10px system-ui, sans-serif";
       graph = new Graph({
         container: containerRef.current,
         autoResize: true,
-        autoFit: "view",
+        autoFit: { type: "view", options: { when: "overflow" } },
         background: "#f0f2f7",
         node: {
           style: {
@@ -564,7 +566,14 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
         },
         layout: {
           type: "d3-force",
-          collide: { radius: (d: unknown) => (nd(d).size ? nd(d).size : 20) + 8 },
+          collide: {
+            radius: (d: unknown) => {
+              const node = nd((d as { _original?: G6NodeDatum })._original ?? d);
+              const halfLabelWidth = (labelContext?.measureText(node.lbl).width ?? node.lbl.length * 10) / 2 + 3;
+              // Reserve the bottom label and its padding as well as the circle.
+              return Math.max(node.size + 8, Math.hypot(halfLabelWidth, node.size / 2 + 16) + 8);
+            },
+          },
           link: {
             distance: (edge: unknown) => {
               // Space top-level company/root-domain nodes farther from children, and leaves closer. edge.source may be an ID or a resolved node.

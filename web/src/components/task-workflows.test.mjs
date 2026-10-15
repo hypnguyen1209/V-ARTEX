@@ -69,3 +69,28 @@ test("service graph labels retain truthy fallbacks when domain or IP fields are 
     ":443 · Portal · 200",
   );
 });
+
+test("coverage collision bounds include labels for wrapped d3-force node data", () => {
+  const path = new URL("../app/(main)/function/tasks/detail/_tabs/coverage-graph-tab.tsx", import.meta.url);
+  const source = readFileSync(path, "utf8");
+  const ast = ts.createSourceFile(path.pathname, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let radius;
+  function visit(node) {
+    if (ts.isPropertyAssignment(node) && node.name.getText(ast) === "radius") radius = node.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  const script = ts.transpileModule(`(${radius.getText(ast)})`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const measure = vm.runInNewContext(script, {
+    nd: (node) => node,
+    labelContext: { measureText: () => ({ width: 148 }) },
+  });
+  const service = { size: 26, lbl: ":443 · Acme homepage · 200" };
+  const direct = measure(service);
+  const wrapped = measure({ id: "a:5", _original: service });
+  assert.ok(Number.isFinite(wrapped));
+  assert.equal(wrapped, direct);
+  assert.ok(wrapped > Math.hypot(148 / 2 + 3, 26 / 2 + 16));
+});
