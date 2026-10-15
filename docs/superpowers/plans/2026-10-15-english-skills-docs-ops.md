@@ -132,7 +132,9 @@ Preserve environment variable names, image tags, service names, ports, paths, fl
 Run:
 
 ```bash
-bash -n build.sh dev.sh install.sh reset-password.sh start.sh update.sh
+for script in build.sh dev.sh install.sh reset-password.sh start.sh update.sh; do
+  bash -n "$script" || exit
+done
 python3 -m json.tool config.example.json >/dev/null
 docker compose -f docker-compose.yml config >/dev/null
 docker compose -f docker-compose.bench.yml config >/dev/null
