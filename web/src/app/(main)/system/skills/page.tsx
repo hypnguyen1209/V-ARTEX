@@ -175,7 +175,7 @@ function SkillsOverview({
     return (
       <div className="flex h-full items-center justify-center">
         <p className="text-sm text-muted-foreground">
-          No skills yet. Click Create or Upload archive on the left to get started.
+          No skills yet. Click New skill or Upload archive in the sidebar to get started.
         </p>
       </div>
     );
@@ -961,7 +961,7 @@ export default function SkillsPage() {
               })}
 
               {skills.length === 0 && (
-                <p className="p-3 text-xs text-muted-foreground">No skills yet. Click Create to get started.</p>
+                <p className="p-3 text-xs text-muted-foreground">No skills yet. Click New skill to get started.</p>
               )}
             </div>
           </ScrollArea>

@@ -91,8 +91,8 @@ export const CHANNEL_FIELDS: Record<string, FieldDef[]> = {
       label: "Request body template",
       kind: "textarea",
       help:
-        "Leave blank for the built-in template. Variables: {{.Title}} {{.Batch}} {{.Count}} {{.HomeURL}} {{.SentAt}}," +
-        "plus .Name/.VulnClass/.Severity/.Summary/.Assets/.DetailURL/.StatusLabel inside range .Items." +
+        "Leave blank for the built-in template. Variables: {{.Title}} {{.Batch}} {{.Count}} {{.HomeURL}} {{.SentAt}}, " +
+        "plus .Name/.VulnClass/.Severity/.Summary/.Assets/.DetailURL/.StatusLabel inside range .Items. " +
         "Use {{json .Xxx}} to insert strings rather than {{.Xxx}}, so quotes in titles do not break JSON.",
     },
   ],
