@@ -8,7 +8,7 @@ import (
 
 func TestTruncateUTF8PreservesValidEncoding(t *testing.T) {
 	t.Parallel()
-	input := strings.Repeat("额度不足", 400)
+	input := strings.Repeat("\u989d\u5ea6\u4e0d\u8db3", 400)
 	got := truncateUTF8(input, 1000)
 	if len(got) > 1000 {
 		t.Fatalf("truncated value has %d bytes, want at most 1000", len(got))

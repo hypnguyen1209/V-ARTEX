@@ -16,7 +16,7 @@ type LLMProfile struct {
 	Name          string  `json:"name"`
 	Format        string  `json:"format"`
 	BaseURL       string  `json:"base_url,omitempty"`
-	Proxy         string  `json:"proxy,omitempty"` // LLM 出站代理(http/https/socks5);空=用环境变量
+	Proxy         string  `json:"proxy,omitempty"` // Outbound LLM proxy (http/https/socks5); empty uses environment variables.
 	Model         string  `json:"model"`
 	APIKey        string  `json:"-"` // never serialized to UI
 	APIKeyHint    string  `json:"api_key_hint,omitempty"`
@@ -25,11 +25,11 @@ type LLMProfile struct {
 	// ContextWindowK is the model's context window in K tokens, used to size
 	// compaction thresholds. 0 = use a 200K default; capped at 1000 (1M).
 	ContextWindowK int `json:"context_window_k"`
-	// ThinkingType 独立控制思考「开关」(thinking.type):"" = 不发送(默认);
-	// "disabled" = 显式关闭; "enabled" = 开启. 与 ReasoningEffort 解耦.
+	// ThinkingType independently controls thinking.type: "" omits it (default);
+	// "disabled" explicitly disables it; "enabled" enables it. Independent of ReasoningEffort.
 	ThinkingType string `json:"thinking_type"`
-	// ReasoningEffort 独立控制思考「强度」:"" = 不发送(默认);
-	// "low"/"medium"/"high"/"xhigh"/"max" = 对应强度. 见 agent.Config.NewProvider.
+	// ReasoningEffort independently controls intensity: "" omits it (default);
+	// "low"/"medium"/"high"/"xhigh"/"max" select effort. See agent.Config.NewProvider.
 	ReasoningEffort string `json:"reasoning_effort"`
 	IsDefault       bool   `json:"is_default"`
 	// Priority orders the failover chain: higher goes first. The ACTIVE profile
@@ -68,7 +68,7 @@ type LLMProfile struct {
 }
 
 // RetryOverride is one profile's optional override of the three retry layers
-// that are per-endpoint: 建连(connect) / 空响应(empty) / 同 provider 安全窗口
+// that are per-endpoint: connection (connect) / empty response (empty) / same-provider safe window
 // (stream). Each rule's zero value means "inherit the global policy"; see
 // RetryRule for the -1 / 0 / >0 semantics.
 type RetryOverride struct {
@@ -445,20 +445,20 @@ type Agent struct {
 	Role             string `json:"role"`
 	Builtin          bool   `json:"builtin"`
 	Enabled          bool   `json:"enabled"`
-	LLMProfileID     *int64 `json:"llm_profile_id"`    // 绑定的 LLM 配置;nil=跟随任务/会话 pin,再回退全局激活
-	MaxTurns         int    `json:"max_turns"`         // 单次运行最大轮次;0=不限制
-	RunSecs          int    `json:"run_seconds"`       // worker 单次运行墙钟上限(秒);0=不限制
-	WebSearch        bool   `json:"web_search"`        // 是否启用网络搜索(受系统全局开关门控)
-	InteractiveShell bool   `json:"interactive_shell"` // 是否启用交互式 shell(持久 PTY 会话工具族)
-	WrapupPrompt     string `json:"wrapup_prompt"`     // 收尾提示词(超时/步数耗尽时的 settlement 提示);空=用代码内置默认
-	WrapupMaxTurns   int    `json:"wrapup_max_turns"`  // 收尾阶段自身的轮数预算;0=用代码内置默认(按 agent)
-	// 任务级超时收尾词(与 per-run 两套;仅 worker/planner 用);空/0=用代码内置默认。
+	LLMProfileID     *int64 `json:"llm_profile_id"`    // Bound LLM profile; nil follows task/session pin, then the global active profile.
+	MaxTurns         int    `json:"max_turns"`         // Maximum turns per run; 0=unlimited.
+	RunSecs          int    `json:"run_seconds"`       // Worker wall-clock limit per run in seconds; 0=unlimited.
+	WebSearch        bool   `json:"web_search"`        // Enable web search (subject to the global system toggle).
+	InteractiveShell bool   `json:"interactive_shell"` // Enable interactive shell (persistent PTY session tools).
+	WrapupPrompt     string `json:"wrapup_prompt"`     // Settlement prompt when time/turns run out; empty uses the built-in code default.
+	WrapupMaxTurns   int    `json:"wrapup_max_turns"`  // Settlement turn budget; 0 uses the per-agent built-in default.
+	// Task-timeout settlement prompt (separate from per-run settlement; worker/planner only); empty/0 uses defaults.
 	TaskTimeoutWrapupPrompt   string `json:"task_timeout_wrapup_prompt"`
 	TaskTimeoutWrapupMaxTurns int    `json:"task_timeout_wrapup_max_turns"`
-	// P3 触发后处理策略(仅自定义 agent 有意义):
-	// TriggerRunMode  serial|parallel — 串行排队 / 每次触发各自并发一个会话
-	// TriggerMergeMode by_task|all|none — 仅 serial 用:同任务合并 / 全部合并 / 不合并
-	// TriggerMaxParallel — 仅 parallel 用的每 agent 并发上限;0=不限
+	// P3 post-trigger policy (custom agents only):
+	// TriggerRunMode serial|parallel: queued serial execution / one concurrent session per trigger.
+	// TriggerMergeMode by_task|all|none: serial only; merge by task / merge all / no merge.
+	// TriggerMaxParallel: per-agent concurrency cap for parallel mode; 0=unlimited.
 	TriggerRunMode     string `json:"trigger_run_mode"`
 	TriggerMergeMode   string `json:"trigger_merge_mode"`
 	TriggerMaxParallel int    `json:"trigger_max_parallel"`
@@ -468,7 +468,7 @@ const agentCols = `id,key,name,COALESCE(description,''),role,builtin,enabled,COA
 
 func scanAgent(sc interface{ Scan(...any) error }) (*Agent, error) {
 	var a Agent
-	var prof sql.NullInt64 // llm_profile_id 可空:未绑定时为 NULL
+	var prof sql.NullInt64 // llm_profile_id is nullable: NULL when unbound.
 	err := sc.Scan(&a.ID, &a.Key, &a.Name, &a.Description, &a.Role, &a.Builtin, &a.Enabled, &a.MaxTurns, &a.RunSecs, &a.WebSearch, &a.InteractiveShell, &a.WrapupPrompt, &a.WrapupMaxTurns, &a.TaskTimeoutWrapupPrompt, &a.TaskTimeoutWrapupMaxTurns, &a.TriggerRunMode, &a.TriggerMergeMode, &a.TriggerMaxParallel, &prof)
 	if err == nil && prof.Valid {
 		v := prof.Int64
@@ -508,7 +508,7 @@ func (d *DB) GetAgentByKey(key string) (*Agent, error) {
 // AgentBindingCounts returns per-agent binding counts in a few grouped queries
 // (NO N+1): visible MCP servers and skills keyed by agent id, and bound tools
 // keyed by agent key (tools.agents is a JSONB array of agent keys). Missing keys
-// mean zero. Used to show "MCP N · Skill N · 工具 N" on the agent cards.
+// mean zero. Used to show "MCP N · Skill N · Tools N" on agent cards.
 func (d *DB) AgentBindingCounts() (mcp map[int64]int, skill map[int64]int, tools map[string]int, err error) {
 	mcp, skill, tools = map[int64]int{}, map[int64]int{}, map[string]int{}
 	byID := func(q string, into map[int64]int) error {
@@ -643,7 +643,7 @@ func (d *DB) SetAgentWebSearch(key string, on bool) error {
 }
 
 // SetAgentInteractiveShell toggles whether an agent gets the interactive shell
-// (持久 PTY 会话) tool family + Bash 提示词联动(见 docs/交互式shell设计.md §14.2).
+// (persistent PTY sessions) tool family and Bash prompt integration; see the interactive shell design, section 14.2.
 func (d *DB) SetAgentInteractiveShell(key string, on bool) error {
 	_, err := d.Exec(`UPDATE agents SET interactive_shell=$1 WHERE key=$2`, on, key)
 	return err
@@ -680,9 +680,9 @@ func (d *DB) SetAgentRunSeconds(key string, runSecs int) error {
 	return err
 }
 
-// SetAgentTriggerBehavior stores an agent's P3 trigger post-processing策略:
-// runMode(serial|parallel) / mergeMode(by_task|all|none) / maxParallel(parallel 用,0=不限)。
-// 枚举做白名单校验,非法值回落默认,避免脏数据把调度 pump 带偏。
+// SetAgentTriggerBehavior stores an agent's P3 post-trigger policy:
+// runMode(serial|parallel) / mergeMode(by_task|all|none) / maxParallel(parallel only, 0=unlimited).
+// Validate enums against allowlists; invalid values fall back to defaults to keep the scheduling pump stable.
 func (d *DB) SetAgentTriggerBehavior(key, runMode, mergeMode string, maxParallel int) error {
 	switch runMode {
 	case "serial", "parallel":
@@ -753,7 +753,7 @@ func (d *DB) SeedPromptIfEmpty(agentID int64, tmpl string) error {
 }
 
 // ResetPromptToDefault appends the code-default template as a new version and
-// points current at it — the explicit "恢复为内置默认" action.
+// points current at it: the explicit "Restore built-in default" action.
 func (d *DB) ResetPromptToDefault(agentID int64, tmpl string) (int, error) {
 	return d.SavePrompt(agentID, tmpl, "Restored built-in default", "system")
 }

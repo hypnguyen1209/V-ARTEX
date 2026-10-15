@@ -15,6 +15,42 @@ type archiveJSONTestRows struct {
 	next   int
 }
 
+func TestRestoreInterceptRowsModelPrefixes(t *testing.T) {
+	d, err := Open(testDSN(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	tx, err := d.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for _, reason := range []string{"[Model] confirmation required", "[\u6a21\u578b] confirmation required"} {
+		var id int64
+		if err := tx.QueryRow(`INSERT INTO intercept_pending(tool_name,status,reason) VALUES('Bash','denied',$1) RETURNING id`, reason).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		var snapshot []byte
+		if err := tx.QueryRow(`SELECT jsonb_build_array(to_jsonb(ip)-'decision_source') FROM intercept_pending ip WHERE id=$1`, id).Scan(&snapshot); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(`DELETE FROM intercept_pending WHERE id=$1`, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := restoreInterceptRows(tx, snapshot); err != nil {
+			t.Fatal(err)
+		}
+		var source, storedReason string
+		if err := tx.QueryRow(`SELECT decision_source,reason FROM intercept_pending WHERE id=$1`, id).Scan(&source, &storedReason); err != nil {
+			t.Fatal(err)
+		}
+		if source != "model" || storedReason != reason {
+			t.Errorf("restored approval for %q = %q/%q, want model with unchanged reason", reason, source, storedReason)
+		}
+	}
+}
+
 func (r *archiveJSONTestRows) Next() bool {
 	if r.next >= len(r.values) {
 		return false
@@ -271,7 +307,7 @@ VALUES($1,$2,0,'quota_exhausted','balance exhausted',$3,$4,$3)`, task.ID, llmPro
 	}
 	warningFound := false
 	for _, warning := range warnings {
-		if strings.Contains(warning, fmt.Sprintf("任务企业 %d 已删除", companyID)) {
+		if strings.Contains(warning, fmt.Sprintf("Task company %d was deleted", companyID)) {
 			warningFound = true
 		}
 	}

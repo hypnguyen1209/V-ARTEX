@@ -5,6 +5,48 @@ import (
 	"testing"
 )
 
+func TestInterceptSourceModelPrefixes(t *testing.T) {
+	for _, reason := range []string{"[Model] confirmation required", "[\u6a21\u578b] confirmation required"} {
+		if got := interceptSource(0, reason); got != "model" {
+			t.Errorf("source for %q = %q, want model", reason, got)
+		}
+		if got := interceptSource(1, reason); got != "rule" {
+			t.Errorf("rule source for %q = %q, want rule", reason, got)
+		}
+	}
+}
+
+func TestOpenApprovalModelPrefixes(t *testing.T) {
+	dsn := testDSN(t)
+	d, err := Open(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	for _, reason := range []string{"[Model] confirmation required", "[\u6a21\u578b] confirmation required"} {
+		id, err := d.CreateDecidedIntercept(0, 0, "", "test", "Bash", []byte(`{}`), "denied", reason)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer d.Exec(`DELETE FROM intercept_pending WHERE id=$1`, id)
+		if _, err := d.Exec(`UPDATE intercept_pending SET decision_source='' WHERE id=$1`, id); err != nil {
+			t.Fatal(err)
+		}
+		upgraded, err := Open(dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		upgraded.Close()
+		var source, storedReason string
+		if err := d.QueryRow(`SELECT decision_source,reason FROM intercept_pending WHERE id=$1`, id).Scan(&source, &storedReason); err != nil {
+			t.Fatal(err)
+		}
+		if source != "model" || storedReason != reason {
+			t.Errorf("upgraded approval for %q = %q/%q, want model with unchanged reason", reason, source, storedReason)
+		}
+	}
+}
+
 func TestInterceptApprovalFilters(t *testing.T) {
 	d, err := Open(testDSN(t))
 	if err != nil {
@@ -38,14 +80,17 @@ func TestInterceptApprovalFilters(t *testing.T) {
 						ruleID = rule.ID
 					}
 					if source == "model" {
-						reason = "[模型] fixture"
+						reason = "[Model] fixture"
+						if i == 0 {
+							reason = "[\u6a21\u578b] fixture"
+						}
 					}
 					id, err := d.CreateDecidedIntercept(ruleID, 0, task, "test", "Bash", []byte(`{"command":"fixture"}`), status, reason)
 					if err != nil {
 						t.Fatal(err)
 					}
 					// Legacy source fields and tied timestamps must filter/page consistently.
-					if i == 0 {
+					if i <= 1 {
 						if _, err = d.Exec(`UPDATE intercept_pending SET decision_source='' WHERE id=$1`, id); err != nil {
 							t.Fatal(err)
 						}
