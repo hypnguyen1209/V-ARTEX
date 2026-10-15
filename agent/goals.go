@@ -14,7 +14,7 @@ import (
 	"github.com/Autumn-27/norma/transcript"
 )
 
-// goalsDefaultTmpl is the built-in EDITABLE body (段 [A]) of the goals-decomposer
+// goalsDefaultTmpl is the built-in EDITABLE body (section [A]) of the goals-decomposer
 // prompt, seeded into agent_prompts. No template vars are used today.
 const goalsDefaultTmpl = `You decompose penetration testing objectives. Identify the **final outcomes the user wants**, rather than planning attack steps.
 
@@ -52,19 +52,19 @@ Submit the result with set_goals.`
 // on released DBs and can't be edited away — same pattern as the trafficTool tail.
 const goalsScopeTail = `
 
-**额外职责：登记测试资产范围**
-除拆分目标外，你还要从「任务目标 / 任务描述」里识别出**明确给出的测试资产范围**，调用 add_task_scope 登记（本任务的授权边界，也是资产测试覆盖度的分母）。**最小范围原则：只登记用户明确点到的那一个目标，绝不擅自放大。**
-- 目标是 URL 或带主机名的地址（如 https://xxx.example.com/path、app.example.com）→ 取其**完整主机名**，kind=subdomain，value=完整主机名。
-  例：目标 https://a1b2c3.lab.example.net/path → kind=subdomain，value=a1b2c3.lab.example.net（**不是** example.net）。
-  **严禁**把带子域的主机名缩成根域名——看到 xxx.example.com 就登记整个 example.com 会把范围扩到用户目标之外，违背最小范围原则。
-- 仅当用户给的就是**裸根域名、且不含任何子域**（如直接写 example.com），或明确说“整个站点 / 所有子域 / 全域名” → 才用 kind=root_domain，value=example.com。
-- 纯 IP 或网段 → kind=ip / cidr，value=IP 或 CIDR。
-- **不要**登记公司范围（company）——任务刚建立、资产系统里通常还没有这家公司，登记不上，公司级范围交由后续 plan 阶段处理。
-其它规则：
-- 只登记**目标/描述里明确写出**的范围；严禁臆造或推断未提及的域名/IP。
-- reason 简述依据来自哪句话，便于审计。
-- 若目标/描述中没有任何明确资产范围，则**不要**调用 add_task_scope。
-先用 add_task_scope 登记范围（如有），再调用 set_goals 提交目标。`
+**Additional responsibility: register test asset scope**
+In addition to decomposing goals, identify the **explicit test asset scope** in the task goal/description and register it with add_task_scope (the task's authorization boundary and asset-coverage denominator). **Minimum-scope rule: register only the precise target explicitly named by the user; never expand it on your own.**
+- For a URL or hostname-bearing address (e.g. https://xxx.example.com/path, app.example.com), use its **complete hostname**, kind=subdomain, value=complete hostname.
+  Example: https://a1b2c3.lab.example.net/path -> kind=subdomain, value=a1b2c3.lab.example.net (**not** example.net).
+  **Never** reduce a hostname containing subdomains to its root domain. Registering all of example.com for xxx.example.com exceeds the user's target and violates the minimum-scope rule.
+- Use kind=root_domain, value=example.com only if the user supplies a **bare root domain without any subdomain** (e.g. example.com), or explicitly requests the "entire site / all subdomains / whole domain".
+- An IP or network -> kind=ip / cidr, value=IP or CIDR.
+- **Do not** register company scope (company): at task creation the company usually does not yet exist in the asset system. Leave company-level scope for later planning.
+Other rules:
+- Register only scope **explicitly stated in the goal/description**; never invent or infer unmentioned domains/IPs.
+- In reason, briefly cite the statement supporting the scope for auditability.
+- If the goal/description specifies no asset scope, **do not** call add_task_scope.
+First register scope with add_task_scope (if any), then submit goals with set_goals.`
 
 // GoalSpec is one decomposed objective.
 type GoalSpec struct {
@@ -82,7 +82,7 @@ type GoalSpec struct {
 // shares the rate limiter, gets recorded by llmrec, and participates in LLM
 // failover instead of quietly bypassing all three.
 //
-// desc is the task's free-text description (背景：靶标范围/flag 数量/交战说明等).
+// desc is the task's free-text description (target scope, flag count, rules of engagement, etc.).
 // It is fed alongside the goal so the decomposer no longer splits blind — the
 // prompt still forbids inventing anything the two texts don't state.
 //
@@ -111,12 +111,12 @@ func DecomposeGoalsWithProvider(ctx context.Context, prov llm.Provider, dataDir,
 	if prov == nil {
 		return nil
 	}
-	// 目标拆解是一次性调用：不挂 transcript store，所以 agentcore 不会往 ctx 上挂
-	// session id（它只在有 writer 时才挂，见 agentcore.Prompt）。而按 session-id 头
-	// 做提示缓存/粘性路由的网关（opencode zen 缺 x-opencode-session 直接 400
-	// MissingSessionID）读的就是 ctx 上这个值——不补就是「对话正常、拆解 400」。
-	// 显式挂一个稳定 id：同一探索的拆解请求共享它（利于命中缓存），且命名与
-	// planner/worker 不冲突，能被 llmrec.parseSession 正确归因。
+	// Goal decomposition is a one-shot call without a transcript store, so agentcore does not attach a
+	// session ID to ctx (it does so only with a writer; see agentcore.Prompt). Gateways using session
+	// headers for caching or sticky routing read that value; opencode zen returns 400 MissingSessionID
+	// without x-opencode-session, making decomposition fail even while chat works.
+	// Attach a stable ID shared by decomposition requests for the same exploration to support caching,
+	// without colliding with planner/worker IDs, so llmrec.parseSession attributes it correctly.
 	if ts != nil {
 		ctx = transcript.WithSessionID(ctx, fmt.Sprintf("exp%d-goals", ts.ID()))
 	}
@@ -128,8 +128,8 @@ func DecomposeGoalsWithProvider(ctx context.Context, prov llm.Provider, dataDir,
 	// {{.EngagementDescription}} template var — else a prompt that references the var
 	// would inject the description twice. System prompt stays pure static instructions.
 	sys := renderSystem("goals", goalsDefaultTmpl, GoalsVars{DataDir: dataDir, Now: nowStr()})
-	// set_constraints 始终可用(不依赖 asset store):正文已含「先抽操作约束再拆目标」这步
-	// (可在 agent 编辑页改措辞),这里只需接上工具。
+	// set_constraints is always available, independent of the asset store. The editable prompt already
+	// instructs extracting operating constraints before goals; wire only the tool here.
 	tools := []actool.CoreTool{tsx.setGoals(), tsx.setConstraints()}
 	// Wire add_task_scope only when we have a real asset store + task to write to.
 	// The scope-extraction tail is appended in lockstep so the prompt never asks for
@@ -138,9 +138,9 @@ func DecomposeGoalsWithProvider(ctx context.Context, prov llm.Provider, dataDir,
 		tools = append(tools, tsx.addTaskScope())
 		sys += goalsScopeTail
 	}
-	userMsg := "任务目标：\n" + goalText
+	userMsg := "Task goal:\n" + goalText
 	if d := strings.TrimSpace(desc); d != "" {
-		userMsg += "\n\n任务描述（背景信息，可能含靶标范围/flag 数量/交战说明；仅供参考，不要臆造其中未提及的内容）：\n" + d
+		userMsg += "\n\nTask description (background that may include target scope, flag count, or rules of engagement; for reference only, do not invent unmentioned details):\n" + d
 	}
 	// Use captureRun so every LLM step is emitted as an activity record (visible in
 	// the plan tab under the round-0 marker). Falls back gracefully when emit is nil.
@@ -156,10 +156,10 @@ func DecomposeGoalsWithProvider(ctx context.Context, prov llm.Provider, dataDir,
 		Tools:                  tools,
 		PermissionMode:         acperm.ModeBypass,
 		DisableBackgroundTasks: true,
-		// 3 步(抽约束 → 登记范围 → 拆目标)各需一次工具调用,给足回合避免收尾前漏调 set_goals。
+		// Each step (extract constraints, register scope, decompose goals) needs a tool call; allow enough turns for set_goals.
 		MaxTurns:     8,
-		NonStreaming: nonStreaming, // 该 profile 选非流式时走 Provider.Complete
-		MaxTokens:    maxTokens,    // 0 = 不发上限,由服务端默认值决定
+		NonStreaming: nonStreaming, // Use Provider.Complete when this profile selects non-streaming mode.
+		MaxTokens:    maxTokens,    // 0 omits the output cap, using the server default.
 	}, userMsg, captureEmit)
 	// set_goals persisted the goals directly; read them back so the caller sees what
 	// was written (empty slice ⇒ the LLM produced nothing ⇒ caller falls back).

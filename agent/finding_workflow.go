@@ -8,7 +8,7 @@ import (
 	actool "github.com/Autumn-27/norma/tool"
 )
 
-const findingIDGuidance = "\n\n**漏洞编号约定**：finding_id 是独立漏洞记录 ID；finding_node_id 是探索节点 ID。list_findings / list_task_findings / node_detail / get_task_node_detail 的 id 保留为探索节点 ID，应从同一返回的 finding_id 读取独立编号。get_finding_traffic / bind_finding_traffic 用独立 finding_id。旧 update_finding_report 的 finding_id 参数仍传 finding_node_id。不要把 report_finding 第一行的数字用于证据工具，也不要遇到编号错误后猜测其他数字。"
+const findingIDGuidance = "\n\n**Finding ID convention**: finding_id is the standalone finding record ID; finding_node_id is the exploration node ID. The id in list_findings / list_task_findings / node_detail / get_task_node_detail remains an exploration node ID; read the standalone ID from finding_id in the same response. get_finding_traffic / bind_finding_traffic use the standalone finding_id. The legacy finding_id parameter of update_finding_report still takes finding_node_id. Do not use the number on the first line of report_finding with evidence tools, or guess other numbers after an ID error."
 
 // The server supplies the persisted setting. A missing setting/host is off.
 // Consulted at assembly and again on writes so an already-running session
@@ -53,9 +53,9 @@ func findingWorkflowTools(agentKey string, tools []actool.CoreTool) ([]actool.Co
 		note := ""
 		switch tool.Name() {
 		case "report_finding":
-			note = "\n默认由报告 Agent 在编写报告前核对并绑定流量。上报者在 evidence 中保留验证命令、关键输出、已有的真实流量 ID 及其用途，供报告 Agent 对照执行记录核实；无需为绑定额外查包。兼容显式即时绑定：traffic_refs 或 evidence_hint_id 可提交已核实的引用，后者读取本任务指定 hint 的结构化引用；任一无效则本次上报全部失败。TCP/无包不需要这些可选参数。返回 finding_id 与 finding_node_id 分别表示独立记录和探索节点。"
+			note = "\nBy default, the report Agent verifies and binds traffic before writing the report. The reporter of a finding should preserve verification commands, key output, known real traffic IDs, and their purposes in evidence so the report Agent can check them against execution records; no extra traffic lookup is required just for binding. Explicit immediate binding remains supported: traffic_refs or evidence_hint_id may supply verified references; the latter reads structured references from the specified hint in this task. Any invalid reference fails the entire submission. These optional parameters are unnecessary for TCP or findings without captures. Returned finding_id and finding_node_id identify the standalone record and exploration node, respectively."
 		case "add_hint", "add_task_hint":
-			note = "\n交接已确认漏洞时，在对应提示的 traffic_refs 中保留已核实流量的 ID、用途、说明和顺序（单条放顶层，批量放对应 hints 元素），并在 text 中说明它证明的具体漏洞。调用方不能只交接文字而丢弃已有流量引用。未核实的候选不能作为证据传递。"
+			note = "\nWhen handing off a confirmed finding, retain verified traffic IDs, roles, notes, and order in traffic_refs of the corresponding hint (top-level for a single hint, or in the matching hints element for a batch), and describe the specific finding it proves in text. Do not hand off only prose and discard existing traffic references. Unverified candidates must not be passed as evidence."
 		case "get_finding_traffic", "bind_finding_traffic", "list_findings", "list_task_findings", "node_detail", "get_task_node_detail", "update_finding_report":
 			note = findingIDGuidance
 		}
@@ -65,16 +65,16 @@ func findingWorkflowTools(agentKey string, tools []actool.CoreTool) ([]actool.Co
 	}
 	guidance := ""
 	if has["report_finding"] || has["add_task_hint"] || has["add_hint"] {
-		guidance = "\n\n**流量证据交接（可选）**：自动绑定默认由报告 Agent 在漏洞入库后、编写报告前完成。上报者应在 evidence 保留验证命令、关键输出、已有真实流量 ID 及其用途，任务中带 intent_id，便于报告 Agent 追溯；不必为了绑定额外查包。Auto / Planner 代为上报时不要丢弃执行者已有的引用。add_hint / add_task_hint 可用 traffic_refs 交接；显式即时绑定仍兼容 report_finding 的 traffic_refs / evidence_hint_id。TCP 或无包时正常登记，不能猜测 ID，也不能仅为补包重复探测。"
+		guidance = "\n\n**Traffic evidence handoff (optional)**: By default, the report Agent binds traffic after the finding is stored and before writing the report. Preserve verification commands, key output, known real traffic IDs, and their purposes in evidence; include intent_id in a task for traceability. No extra traffic lookup is required just for binding. Auto / Planner must retain the executor's existing references when submitting on their behalf. add_hint / add_task_hint can hand off traffic_refs; report_finding still supports explicit immediate binding through traffic_refs / evidence_hint_id. Record TCP findings or findings without captures normally; never guess IDs or repeat probing solely to obtain a capture."
 		if has["add_task_hint"] && !has["add_hint"] {
-			guidance += "\n平台对话没有任务上下文时，不直接调用 report_finding；通过 add_task_hint 向已有对应任务交接，由任务 Agent 登记，并用 list_task_findings 核对结果。"
+			guidance += "\nIn a platform conversation without task context, do not call report_finding directly. Hand off to an existing relevant task through add_task_hint so its Agent records the finding, then verify the result with list_task_findings."
 		}
 		if has["prove_goal"] || has["goal_met"] {
-			guidance += "\n判定目标完成前，先完成本次已有证据的上报/交接。不要在证据交接尚未完成时仅因文字漏洞已登记就结束任务、取消 Worker；无包不要求等待或强行抓包。"
+			guidance += "\nBefore declaring the goal complete, finish submitting or handing off the evidence already available. Do not end the task or cancel Workers merely because the prose finding was recorded while evidence handoff remains incomplete. Findings without captures do not require waiting or forcing a capture."
 		}
 	}
 	if has["update_finding_report"] && has["bind_finding_traffic"] && has["get_finding_traffic"] {
-		guidance += "\n\n**报告前自动关联流量（已开启）**：你负责为本次触发的漏洞核对并绑定流量，再撰写报告。先从 report_finding 返回 JSON 或 get_task_node_detail / list_task_findings 取得明确的 finding_id 与 finding_node_id。读取漏洞详情、对应意图的执行记录及已有证据清单，优先使用上报者交接的真实 ID。若本次验证为 HTTP 且流量工具可用，用 traffic_search 筛选候选，再用 traffic_get 逐条核实请求/响应确实支持该漏洞；域名和时间只用于筛选，不证明归属。将确认的证据按复现顺序用 bind_finding_traffic(finding_id, traffic_refs) 关联，选择 baseline / proof / verification / supporting 并说明用途。只能操作本次漏洞，不重复创建漏洞或重新探测目标。绑定成功后重新调用 get_finding_traffic 获取最新 version，读取所需正文，再将实际读取的 version 作为 evidence_version 传给 update_finding_report（其 finding_id 参数仍用 finding_node_id）。已有绑定不必重复追加。TCP、未采集、工具不可用或没有确切匹配时，跳过自动绑定，依据文字/命令证据正常写报告并说明原因，不得为凑齐流量而猜测。绑定失败不宣称成功；保留已有证据并在报告说明未绑定原因。"
+		guidance += "\n\n**Automatic traffic association before reporting (enabled)**: Verify and bind traffic for the finding that triggered this run, then write the report. First obtain explicit finding_id and finding_node_id from the report_finding JSON response or get_task_node_detail / list_task_findings. Read the finding details, its intent's execution records, and existing evidence list; prefer real IDs handed off by the reporting Agent. If verification used HTTP and traffic tools are available, filter candidates with traffic_search, then inspect each request/response with traffic_get to confirm it supports this finding. Domain and time only filter candidates; they do not prove association. Bind confirmed evidence in reproduction order with bind_finding_traffic(finding_id, traffic_refs), choosing baseline / proof / verification / supporting and explaining its purpose. Operate only on this finding; do not create duplicates or probe the target again. After successful binding, call get_finding_traffic again for the latest version, read the required bodies, and pass the version you actually read as evidence_version to update_finding_report (its finding_id parameter still takes finding_node_id). Do not append existing bindings again. For TCP, missing captures, unavailable tools, or no exact match, skip automatic binding and write the report using prose/command evidence, explaining why. Never guess to fill out traffic evidence. If binding fails, do not claim success; preserve existing evidence and explain the failure in the report."
 	}
 	if guidance != "" || has["get_finding_traffic"] || has["update_finding_report"] {
 		guidance += findingIDGuidance
@@ -104,7 +104,7 @@ func stripTrafficParameters(schema map[string]any) {
 
 // HintTrafficSchema is shared by the task-local and cross-task hint tools.
 func HintTrafficSchema() map[string]any {
-	return map[string]any{"type": "array", "description": "可选：已核实且对应本提示中具体漏洞的流量引用，保留顺序；交接后 report_finding 可传 evidence_hint_id 携带这些引用。", "items": obj(map[string]any{"traffic_id": str("真实流量 ID"), "role": str("baseline / proof / verification / supporting"), "note": str("该流量支持什么结论")}, "traffic_id")}
+	return map[string]any{"type": "array", "description": "Optional: verified traffic references for the specific finding in this hint, in order. After handoff, report_finding can carry these references via evidence_hint_id.", "items": obj(map[string]any{"traffic_id": str("Real traffic ID"), "role": str("baseline / proof / verification / supporting"), "note": str("Conclusion supported by this traffic")}, "traffic_id")}
 }
 
 func (t *ToolSet) findingRefsFromHint(hintID int64, explicit []db.TrafficRef) ([]db.TrafficRef, error) {
@@ -116,7 +116,7 @@ func (t *ToolSet) findingRefsFromHint(hintID int64, explicit []db.TrafficRef) ([
 		return nil, err
 	}
 	if n == nil || n.Kind != db.KindHint {
-		return nil, fmt.Errorf("evidence_hint_id=%d 必须是本任务的提示节点（继承提示不可直接用于绑定）", hintID)
+		return nil, fmt.Errorf("evidence_hint_id=%d must identify a hint node in this task (inherited hints cannot be used directly for binding)", hintID)
 	}
 	var payload struct {
 		Refs []db.TrafficRef `json:"traffic_refs"`

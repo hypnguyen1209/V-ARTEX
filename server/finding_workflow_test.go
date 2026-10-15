@@ -93,7 +93,7 @@ func TestFindingWorkflowAutoHintToPlannerAndSetting(t *testing.T) {
 	ts.SetNotifyFinding(func(int64, string) { notices++ })
 	tools, def, cleanup := agent.AugmentTools(ctx, "planner", ts.PlannerTools())
 	defer cleanup()
-	if !strings.Contains(def.FindingGuidance, "evidence_hint_id") || !strings.Contains(def.FindingGuidance, "取消 Worker") {
+	if !strings.Contains(def.FindingGuidance, "evidence_hint_id") || !strings.Contains(def.FindingGuidance, "cancel Workers") {
 		t.Fatal("Planner missed runtime guidance")
 	}
 	report := workflowTool(t, tools, "report_finding")
@@ -175,7 +175,7 @@ func TestFindingWorkflowAutoHintToPlannerAndSetting(t *testing.T) {
 	if err := json.Unmarshal([]byte(strings.SplitN(offResult, "\n", 2)[1]), &offRecord); err != nil {
 		t.Fatal(err)
 	}
-	if offRecord.FindingID <= 0 || len(offRecord.Traffic.Bindings) != 0 || offRecord.EvidenceStatus != "not_bound" || !strings.Contains(offRecord.EvidenceNote, "已关闭") {
+	if offRecord.FindingID <= 0 || len(offRecord.Traffic.Bindings) != 0 || offRecord.EvidenceStatus != "not_bound" || !strings.Contains(offRecord.EvidenceNote, "disabled") {
 		t.Fatal("disabled binding discarded finding or bound evidence", offResult)
 	}
 	workflowCall(t, ctx, report, map[string]any{"vulnclass": "TCP", "severity": "low", "summary": "no packet needed"}, false)
@@ -277,7 +277,7 @@ func TestFindingWorkflowReporterBindsBeforeWritingReport(t *testing.T) {
 	seedServerEvidenceFlow(t, s, "reporter-baseline", []byte("local normal response"))
 	tools, def, cleanup := agent.AugmentTools(ctx, "reporter", nil)
 	defer cleanup()
-	if !strings.Contains(def.FindingGuidance, "报告前自动关联流量") || !strings.Contains(def.FindingGuidance, "绑定成功后重新调用") {
+	if !strings.Contains(def.FindingGuidance, "Automatic traffic association before reporting") || !strings.Contains(def.FindingGuidance, "After successful binding, call") {
 		t.Fatal("reporter did not receive binding workflow")
 	}
 	for _, name := range []string{"traffic_search", "traffic_get", "get_task_worker_trace", "get_task_node_detail", "bind_finding_traffic", "get_finding_traffic", "update_finding_report"} {
