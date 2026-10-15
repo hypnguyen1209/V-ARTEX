@@ -37,9 +37,9 @@ Thumbs.db
 # Isolated feature worktrees
 /.worktrees/
 
-# 内嵌前端的单二进制产物
+# Single-binary build with the embedded frontend
 /artex
-# 一键更新在可执行文件旁留下的中间产物（暂存件 / 备份 / 失败版本 / 升级标记）
+# One-click update artifacts beside the executable (staging / backup / failed version / upgrade marker)
 /artex.new
 /artex.new.sha256
 /artex.old
@@ -48,16 +48,16 @@ Thumbs.db
 /server/webui/dist/
 /dist/
 
-# JWT 签名密钥（运行时生成，存项目根，绝不提交）
+# JWT signing key (generated at runtime in the project root; never commit)
 /jwt.key
 
-# Docker 部署生成的本地环境（含密码/密钥，不提交）
+# Local Docker deployment environment (contains passwords/keys; do not commit)
 .env
 
-# 调度器运行/模拟产生的事件日志（测试产物，不提交）
+# Scheduler run/simulation event logs (test artifacts; do not commit)
 *-events.csv
 
-# bench 基准测试相关（本地产物，不提交）
+# Benchmark files (local artifacts; do not commit)
 /bench/
 /Dockerfile.bench
 /Dockerfile.bench.v2

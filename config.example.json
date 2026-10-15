@@ -1,7 +1,7 @@
 {
-  "_comment": "复制为 config.json（或用环境变量 ARTEX_CONFIG 指定其它路径）。本文件仅含 database 与 skill_dir 两项；LLM 等其余配置走环境变量或应用内设置，不在此文件。",
+  "_comment": "Copy to config.json (or set ARTEX_CONFIG to another path). This file contains only database and skill_dir; configure LLM and other settings through environment variables or in the application.",
 
-  "_comment_database": "PostgreSQL 连接。优先级：环境变量 ARTEX_PG_DSN > 本文件 database。两种写法二选一：(A) 填下面的分字段；(B) 只填 database.dsn 一个完整连接串。",
+  "_comment_database": "PostgreSQL connection. Precedence: ARTEX_PG_DSN environment variable > database in this file. Choose either (A) the individual fields below or (B) a complete connection string in database.dsn only.",
   "database": {
     "host": "127.0.0.1",
     "port": 5433,
@@ -11,13 +11,13 @@
     "sslmode": "disable"
   },
 
-  "_comment_database_dsn": "写法 (B)：删掉上面的 database，改用完整 DSN。dsn 非空时会忽略分字段。",
+  "_comment_database_dsn": "Option (B): replace database above with a complete DSN. A nonempty dsn overrides individual fields.",
   "_example_database_dsn": {
     "database": {
       "dsn": "postgres://user:pass@db.example.com:5432/artex?sslmode=require"
     }
   },
 
-  "_comment_skill_dir": "skill 根目录（每个子目录一个 skill，含 SKILL.md）。优先级：环境变量 ARTEX_SKILL_DIR > 本字段 > 默认（可执行文件同级的 skills/）。留空或删除本字段即用默认。相对路径相对当前工作目录解析。",
+  "_comment_skill_dir": "Skill root directory (one skill per subdirectory, containing SKILL.md). Precedence: ARTEX_SKILL_DIR environment variable > this field > default (skills/ beside the executable). Leave blank or remove this field to use the default. Relative paths resolve from the current working directory.",
   "skill_dir": "/opt/artex/skills"
 }
