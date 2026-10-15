@@ -138,7 +138,7 @@ export function UpdateCard() {
       `Update to ${info.latest}?\n\n` +
         "The application will restart and running tasks will be interrupted.\n" +
         (info.mode === "docker"
-          ? "\nNote: updating inside a container replaces only the application, not bundled tools such as playwright / nmap;" +
+          ? "\nNote: updating inside a container replaces only the application, not bundled tools such as playwright / nmap; " +
             "if the new version requires new tools, use docker compose pull instead."
           : ""),
     );
@@ -273,9 +273,9 @@ export function UpdateCard() {
 
         {info?.mode === "docker" && info.has_update && (
           <p className="text-xs text-muted-foreground">
-            Docker updates replace only the application, not bundled tools such as playwright / nmap.
-            <span className="font-mono"> docker compose up -d </span>
-            Recreating the container restores the image version. To update the image as well, run
+            Docker updates replace only the application, not bundled tools such as playwright / nmap. Recreating the
+            container with <span className="font-mono">docker compose up -d</span> restores the image version. To update
+            the image as well, run
             <span className="font-mono"> docker compose pull artex &amp;&amp; docker compose up -d artex</span>.
           </p>
         )}

@@ -626,7 +626,7 @@ export default function SystemSettingsPage() {
             {webSearch && (
               <div className="flex items-center justify-between gap-4 border-t pt-4">
                 <p className="text-muted-foreground text-xs">
-                  Search for test using the current provider, proxy, and key to verify availability.
+                  Run a test search using the current provider, proxy, and key to verify availability.
                 </p>
                 <Button
                   type="button"

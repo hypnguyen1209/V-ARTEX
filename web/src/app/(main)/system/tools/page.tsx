@@ -881,7 +881,7 @@ function CustomToolDialog({
           {kind !== "shell" && (
             <div className="grid gap-1.5">
               <Label className="text-xs">
-                Parameter JSON Schema
+                Parameter JSON Schema{" "}
                 {kind === "http"
                   ? "(required for HTTP tools; must contain properties)"
                   : "(blank = automatic {args} wrapper)"}
