@@ -15,13 +15,13 @@ import (
 	"time"
 )
 
-// sumsAsset 是 release.yml 生成的校验和清单，覆盖 Release 里全部 zip。
+// sumsAsset is the release.yml checksum manifest covering all release ZIP archives.
 const sumsAsset = "SHA256SUMS"
 
-// maxBinarySize 限制解压出来的二进制体积，防止畸形 zip 把磁盘写满。
+// maxBinarySize limits extracted binary size to prevent a malformed ZIP filling the disk.
 const maxBinarySize = 512 << 20 // 512 MiB
 
-// Phase 是升级过程中的阶段，直接用作 SSE 事件里的 phase 字段。
+// Phase is the update stage, used directly as the SSE phase field.
 type Phase string
 
 const (
@@ -33,17 +33,14 @@ const (
 	PhaseFailed   Phase = "failed"
 )
 
-// Progress 由调用方提供，用来把进度推给前端。pct 仅在下载阶段有意义（0-100），
-// 其余阶段传 -1。
+// Progress sends progress to the frontend. pct is 0–100 during download and -1 in other phases.
 type Progress func(ph Phase, pct int, msg string)
 
-// Stage 下载指定 Release 的当前平台发布包，校验后把新二进制暂存为 artex.new。
-//
-// 走的是完整 zip 而不是裸二进制，理由有两个：现有 Release 的 SHA256SUMS 本来就
-// 只覆盖 zip，走 zip 不需要改 CI，也能兼容已经发布出去的历史版本；zip 里还带着
-// skills/，为将来同步内置 skill 留了口子。代价只是多下载 skills 那几百 KB。
-//
-// 函数返回即代表暂存完成，调用方随后优雅关闭并以 ExitRestart 退出。
+// Stage downloads and verifies the platform release archive, then stages its binary as artex.new.
+// SHA256SUMS covers ZIPs rather than bare binaries, preserving compatibility with
+// existing releases and CI. Archives also include skills/ for possible future synchronization,
+// at the cost of downloading a few hundred extra KB. On success, the caller shuts down
+// cleanly and exits with ExitRestart.
 func Stage(ctx context.Context, c *http.Client, rel *Release, currentVersion string, prog Progress) error {
 	if prog == nil {
 		prog = func(Phase, int, string) {}
@@ -59,21 +56,21 @@ func Stage(ctx context.Context, c *http.Client, rel *Release, currentVersion str
 	name := AssetName(rel.TagName, runtime.GOOS, runtime.GOARCH)
 	asset, ok := rel.FindAsset(name)
 	if !ok {
-		return fmt.Errorf("该版本没有提供 %s/%s 的发布包（缺少 %s）", runtime.GOOS, runtime.GOARCH, name)
+		return fmt.Errorf("This release has no package for %s/%s (missing %s)", runtime.GOOS, runtime.GOARCH, name)
 	}
 
-	prog(PhaseDownload, 0, "获取校验和清单…")
+	prog(PhaseDownload, 0, "Fetching checksum manifest…")
 	sums, err := fetchSums(ctx, c, rel)
 	if err != nil {
 		return err
 	}
 	want, ok := sums[name]
 	if !ok {
-		return fmt.Errorf("%s 未收录 %s，拒绝安装未经校验的二进制", sumsAsset, name)
+		return fmt.Errorf("%s has no entry for %s; refusing to install an unverified binary", sumsAsset, name)
 	}
 
-	// 临时文件全部落在目标目录里，保证最后的 rename 是同一文件系统内的原子操作
-	// （跨设备 rename 会失败，而 /tmp 常常是独立挂载点）。
+	// Place temporary files in the destination directory so final renames are atomic
+	// within one filesystem; cross-device renames fail and /tmp may be a separate mount.
 	zipPath := p.New + ".zip.part"
 	binPath := p.New + ".part"
 	defer func() {
@@ -81,37 +78,37 @@ func Stage(ctx context.Context, c *http.Client, rel *Release, currentVersion str
 		_ = os.Remove(binPath)
 	}()
 
-	prog(PhaseDownload, 0, fmt.Sprintf("下载 %s（%s）…", name, humanSize(asset.Size)))
+	prog(PhaseDownload, 0, fmt.Sprintf("Downloading %s (%s)…", name, humanSize(asset.Size)))
 	got, err := download(ctx, c, asset, zipPath, prog)
 	if err != nil {
 		return err
 	}
 
-	prog(PhaseVerify, -1, "校验 SHA256…")
+	prog(PhaseVerify, -1, "Verifying SHA256…")
 	if !strings.EqualFold(got, want) {
-		return fmt.Errorf("SHA256 不匹配：期望 %s，实际 %s（下载损坏或被篡改）", short(want), short(got))
+		return fmt.Errorf("SHA256 mismatch: expected %s, got %s (download corrupt or tampered with)", short(want), short(got))
 	}
 
-	prog(PhaseExtract, -1, "解压并冒烟测试…")
+	prog(PhaseExtract, -1, "Extracting and smoke testing…")
 	if err := extractBinary(zipPath, binPath); err != nil {
 		return err
 	}
 	if err := smokeTest(binPath); err != nil {
-		return fmt.Errorf("新版本无法在当前系统上运行: %w", err)
+		return fmt.Errorf("New version cannot run on this system: %w", err)
 	}
 
-	// 暂存件自己的 sha256 单独存一份：下次启动换装前还要再校验一次，
-	// 防止暂存后到重启前这段时间里文件被改动或写坏。
+	// Save the staged binary's own SHA256 for rechecking before the next installation,
+	// protecting against modification or corruption between staging and restart.
 	binSum, err := fileSHA256(binPath)
 	if err != nil {
-		return fmt.Errorf("计算新二进制校验和: %w", err)
+		return fmt.Errorf("Calculate new binary checksum: %w", err)
 	}
 	if err := os.WriteFile(p.Sum, []byte(binSum), 0o644); err != nil {
-		return fmt.Errorf("写入校验和: %w", err)
+		return fmt.Errorf("Write checksum: %w", err)
 	}
 	if err := os.Rename(binPath, p.New); err != nil {
 		_ = os.Remove(p.Sum)
-		return fmt.Errorf("暂存新版本: %w", err)
+		return fmt.Errorf("Stage new version: %w", err)
 	}
 
 	if err := writeMarker(p.Marker, marker{
@@ -119,47 +116,44 @@ func Stage(ctx context.Context, c *http.Client, rel *Release, currentVersion str
 		To:       strings.TrimPrefix(rel.TagName, "v"),
 		StagedAt: time.Now().Unix(),
 	}); err != nil {
-		// 标记只影响自动回滚能力，暂存件本身已就位，不因此中断升级。
-		prog(PhaseStaged, -1, "警告：写入升级标记失败，本次升级将没有自动回滚保护")
+		// Marker failure only removes automatic rollback protection; the staged file is ready, so continue.
+		prog(PhaseStaged, -1, "Warning: could not write update marker; automatic rollback protection is unavailable")
 	}
 
-	prog(PhaseStaged, 100, "新版本已就绪，正在重启…")
+	prog(PhaseStaged, 100, "New version ready; restarting…")
 	return nil
 }
 
-// fetchSums 下载并解析 SHA256SUMS，返回 文件名 → 十六进制摘要。
+// fetchSums downloads SHA256SUMS and returns filename-to-hex-digest entries.
 func fetchSums(ctx context.Context, c *http.Client, rel *Release) (map[string]string, error) {
 	asset, ok := rel.FindAsset(sumsAsset)
 	if !ok {
-		return nil, fmt.Errorf("该 Release 没有 %s，无法校验完整性，拒绝升级", sumsAsset)
+		return nil, fmt.Errorf("Release has no %s; integrity cannot be verified, refusing update", sumsAsset)
 	}
 	body, err := get(ctx, c, asset.URL)
 	if err != nil {
-		return nil, fmt.Errorf("下载 %s: %w", sumsAsset, err)
+		return nil, fmt.Errorf("Download %s: %w", sumsAsset, err)
 	}
 	defer body.Close()
 
 	raw, err := io.ReadAll(io.LimitReader(body, 1<<20))
 	if err != nil {
-		return nil, fmt.Errorf("读取 %s: %w", sumsAsset, err)
+		return nil, fmt.Errorf("Read %s: %w", sumsAsset, err)
 	}
 	out := parseSums(string(raw))
 	if len(out) == 0 {
-		return nil, fmt.Errorf("%s 内容为空或格式无法识别", sumsAsset)
+		return nil, fmt.Errorf("%s is empty or has an unrecognized format", sumsAsset)
 	}
 	return out, nil
 }
 
-// parseSums 解析 sha256sum 风格的清单，返回 文件名 → 十六进制摘要。
-//
-// 第一个字段必须是 64 位十六进制才收录。只按"恰好两个字段"判断是不够的——
-// 任意一行两个单词的说明文字都会被当成合法条目，把垃圾值塞进摘要表，
-// 真正的资产反而可能匹配到错误的摘要。
+// parseSums parses a sha256sum-style manifest into filename-to-hex-digest entries.
+// Require a 64-digit hexadecimal first field: accepting any two-word line could
+// insert invalid digests or match real assets to unrelated prose.
 func parseSums(raw string) map[string]string {
 	out := map[string]string{}
 	for line := range strings.Lines(raw) {
-		// 格式为 "<sha256>  <filename>"（sha256sum 用双空格；shasum 的二进制
-		// 模式会给文件名加 * 前缀）。
+		// Format: <sha256>  <filename>. sha256sum uses two spaces; shasum binary mode prefixes the filename with *.
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) != 2 || !isHexSHA256(fields[0]) {
 			continue
@@ -187,35 +181,35 @@ func isHexSHA256(s string) bool {
 	return true
 }
 
-// download 把资产写入 dst，同时计算 SHA256 并按 Content-Length 汇报进度。
+// download writes the asset to dst, calculates SHA256 and reports progress using Content-Length.
 func download(ctx context.Context, c *http.Client, a Asset, dst string, prog Progress) (string, error) {
 	body, err := get(ctx, c, a.URL)
 	if err != nil {
-		return "", fmt.Errorf("下载 %s: %w", a.Name, err)
+		return "", fmt.Errorf("Download %s: %w", a.Name, err)
 	}
 	defer body.Close()
 
 	f, err := os.Create(dst)
 	if err != nil {
-		return "", fmt.Errorf("创建临时文件: %w", err)
+		return "", fmt.Errorf("Create temporary file: %w", err)
 	}
 	defer f.Close()
 
 	h := sha256.New()
 	pw := &progressWriter{total: a.Size, prog: prog, name: a.Name, last: time.Now()}
 	if _, err := io.Copy(io.MultiWriter(f, h, pw), body); err != nil {
-		return "", fmt.Errorf("下载中断: %w", err)
+		return "", fmt.Errorf("Download interrupted: %w", err)
 	}
 	if err := f.Sync(); err != nil {
-		return "", fmt.Errorf("落盘失败: %w", err)
+		return "", fmt.Errorf("Write to disk: %w", err)
 	}
 	if a.Size > 0 && pw.written != a.Size {
-		return "", fmt.Errorf("下载不完整：期望 %d 字节，实际 %d 字节", a.Size, pw.written)
+		return "", fmt.Errorf("Incomplete download: expected %d bytes, got %d bytes", a.Size, pw.written)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// get 发起一个受白名单约束的 GET，返回响应体。
+// get performs an allowlisted GET and returns the response body.
 func get(ctx context.Context, c *http.Client, rawURL string) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -236,10 +230,9 @@ func get(ctx context.Context, c *http.Client, rawURL string) (io.ReadCloser, err
 	return resp.Body, nil
 }
 
-// extractBinary 从发布包里取出 artex 可执行文件。
-//
-// 包内结构是 artex-<版本>-<os>-<arch>/artex，但这里按**基名**匹配而不是拼完整
-// 路径：版本号在包名里出现过一次，拼错一个字符就整个升级失败，按基名找更耐改。
+// extractBinary extracts artex from the release archive. Its layout is
+// artex-<version>-<os>-<arch>/artex; matching the basename avoids duplicating a
+// version-dependent path and failing the whole update on a naming mismatch.
 func extractBinary(zipPath, dst string) error {
 	want := "artex"
 	if runtime.GOOS == "windows" {
@@ -247,7 +240,7 @@ func extractBinary(zipPath, dst string) error {
 	}
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return fmt.Errorf("打开发布包: %w", err)
+		return fmt.Errorf("Open release archive: %w", err)
 	}
 	defer zr.Close()
 
@@ -257,37 +250,37 @@ func extractBinary(zipPath, dst string) error {
 		}
 		rc, err := entry.Open()
 		if err != nil {
-			return fmt.Errorf("读取 %s: %w", entry.Name, err)
+			return fmt.Errorf("Read %s: %w", entry.Name, err)
 		}
 		defer rc.Close()
 
 		f, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 		if err != nil {
-			return fmt.Errorf("写出新二进制: %w", err)
+			return fmt.Errorf("Write new binary: %w", err)
 		}
 		defer f.Close()
 
 		n, err := io.Copy(f, io.LimitReader(rc, maxBinarySize+1))
 		if err != nil {
-			return fmt.Errorf("解压 %s: %w", entry.Name, err)
+			return fmt.Errorf("Extract %s: %w", entry.Name, err)
 		}
 		if n > maxBinarySize {
-			return fmt.Errorf("发布包内的可执行文件超过 %s，拒绝解压", humanSize(maxBinarySize))
+			return fmt.Errorf("Archive executable exceeds %s; refusing extraction", humanSize(maxBinarySize))
 		}
 		if n == 0 {
-			return fmt.Errorf("发布包内的 %s 是空文件", want)
+			return fmt.Errorf("Archive contains an empty %s", want)
 		}
 		return f.Sync()
 	}
-	return fmt.Errorf("发布包里没有找到 %s", want)
+	return fmt.Errorf("Archive contains no %s", want)
 }
 
-// checkWritable 提前确认目录可写。没有这一步，非 root 运行、或二进制被放在系统
-// 目录时，会在下载完几十 MB 之后才在换装那一刻失败。
+// checkWritable verifies directory permissions before downloading tens of MB,
+// so non-root installs or system directories fail early rather than at replacement.
 func checkWritable(dir string) error {
 	probe, err := os.CreateTemp(dir, ".artex-update-probe-*")
 	if err != nil {
-		return fmt.Errorf("程序目录 %s 不可写，无法自动更新（请检查权限或改用手动升级）: %w", dir, err)
+		return fmt.Errorf("Program directory %s is not writable; automatic update unavailable (check permissions or update manually): %w", dir, err)
 	}
 	name := probe.Name()
 	_ = probe.Close()
@@ -295,7 +288,7 @@ func checkWritable(dir string) error {
 	return nil
 }
 
-// progressWriter 统计已写字节并限频汇报，避免每个 32KiB 分块都推一条 SSE。
+// progressWriter counts written bytes and rate-limits SSE updates rather than sending one per 32KiB chunk.
 type progressWriter struct {
 	total   int64
 	written int64
@@ -314,7 +307,7 @@ func (w *progressWriter) Write(b []byte) (int, error) {
 	if w.total > 0 {
 		pct = int(w.written * 100 / w.total)
 	}
-	w.prog(PhaseDownload, pct, fmt.Sprintf("下载中 %s / %s", humanSize(w.written), humanSize(w.total)))
+	w.prog(PhaseDownload, pct, fmt.Sprintf("Downloading %s / %s", humanSize(w.written), humanSize(w.total)))
 	return len(b), nil
 }
 

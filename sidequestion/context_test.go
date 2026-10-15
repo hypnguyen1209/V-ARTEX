@@ -93,7 +93,7 @@ func TestSideBudgetCountsContentNotJSONCharacters(t *testing.T) {
 		t.Fatal("snapshot mutated")
 	}
 	baseline := EstimateInputTokens(llm.CompletionRequest{Messages: []llm.Message{llm.UserText("x")}})
-	if EstimateInputTokens(llm.CompletionRequest{Messages: []llm.Message{llm.UserText("x")}, System: []string{strings.Repeat("中", 3000)}, Tools: fixture().Tools}) <= baseline+3000 {
+	if EstimateInputTokens(llm.CompletionRequest{Messages: []llm.Message{llm.UserText("x")}, System: []string{strings.Repeat("\u4e2d", 3000)}, Tools: fixture().Tools}) <= baseline+3000 {
 		t.Fatal("system/schema/CJK omitted")
 	}
 }
@@ -104,9 +104,9 @@ func TestSideLongExchangeAndSnapshotCompactionAreBounded(t *testing.T) {
 			snap := Snapshot{Request: fixture(), Model: Model{WindowTokens: 32000}}
 			var history []Exchange
 			if hugeHistory {
-				history = []Exchange{{Ordinal: 1, Question: "earlier", Answer: strings.Repeat("历史依据ABC", 14000), Status: "completed"}}
+				history = []Exchange{{Ordinal: 1, Question: "earlier", Answer: strings.Repeat("\u5386\u53f2\u4f9d\u636eABC", 14000), Status: "completed"}}
 			} else {
-				snap.Request.Messages = append([]llm.Message{llm.UserText(strings.Repeat("old tool evidence 中文", 9000))}, snap.Request.Messages...)
+				snap.Request.Messages = append([]llm.Message{llm.UserText(strings.Repeat("old tool evidence \u4e2d\u6587", 9000))}, snap.Request.Messages...)
 			}
 			original := mustJSON(t, snap)
 			calls, answers := 0, 0
@@ -224,7 +224,7 @@ func TestSideSummaryCancellationAndFailureDoNotAdvanceMemory(t *testing.T) {
 				case "truncated":
 					return assistant("partial"), "length", usage, nil
 				case "too-large":
-					return assistant(strings.Repeat("中", 5000)), "end_turn", usage, nil
+					return assistant(strings.Repeat("\u4e2d", 5000)), "end_turn", usage, nil
 				case "tool":
 					return llm.Message{Role: llm.RoleAssistant, Content: []llm.ContentBlock{{Type: llm.BlockToolUse, ID: "forbidden", Name: "Bash"}}}, "tool_use", usage, nil
 				}
@@ -270,6 +270,31 @@ func TestSideSummaryCallCapAndStaticBudget(t *testing.T) {
 	}
 }
 
+func TestSideSummaryChunkReservesRoundingToken(t *testing.T) {
+	const window = 32000
+	prior := "bounded summary"
+	prefix := "[Prior summary]\n" + prior + "\n[New material segment]\n"
+	req := llm.CompletionRequest{System: []string{summaryInstruction}, Messages: []llm.Message{llm.UserText(prefix)}}
+	overhead := EstimateInputTokens(req)
+	legacyChunk := min(32000, window-2048-overhead-512) * 3
+	req.Messages = []llm.Message{llm.UserText(prefix + strings.Repeat("x", legacyChunk))}
+	if overflow := EstimateInputTokens(req) + 2048 + 512 - window; overflow != 1 {
+		t.Fatalf("fixture must expose a one-token rounding overflow, got %d", overflow)
+	}
+	calls := 0
+	p := fakeProvider{complete: func(_ context.Context, r llm.CompletionRequest) (llm.Message, string, llm.Usage, error) {
+		calls++
+		if got := EstimateInputTokens(r) + r.MaxTokens + 512; got > window {
+			t.Fatalf("summary request uses %d tokens including reserves, window %d", got, window)
+		}
+		return assistant(prior), "end_turn", llm.Usage{}, nil
+	}}
+	b := contextBuilder{service: SideQuestionService{p}, window: window}
+	if _, err := b.summarize(t.Context(), prior, strings.Repeat("x", legacyChunk+100)); err != nil || calls != 2 {
+		t.Fatalf("bounded summary chunks: calls=%d err=%v", calls, err)
+	}
+}
+
 func TestSideTwentyLongRepliesRespectSmallWindow(t *testing.T) {
 	var history []Exchange
 	for i := 1; i <= 20; i++ {
@@ -305,7 +330,7 @@ func TestSideOverflowWithoutReductionDoesNotRepeatAnswer(t *testing.T) {
 	}}
 	snapshot := Snapshot{Request: llm.CompletionRequest{MaxTokens: 128, Messages: []llm.Message{llm.UserText("tiny")}}}
 	out, _, err := (SideQuestionService{p}).Respond(t.Context(), snapshot, "question", Replay{}, ContextOptions{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "未能进一步缩减") || answers != 1 || summaries != 1 || out.Usage.InputTokens != 8 {
+	if err == nil || !strings.Contains(err.Error(), "could not reduce the context further") || answers != 1 || summaries != 1 || out.Usage.InputTokens != 8 {
 		t.Fatalf("no-progress recovery: %d %d %+v %v", answers, summaries, out, err)
 	}
 }

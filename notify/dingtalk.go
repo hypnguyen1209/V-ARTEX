@@ -14,31 +14,27 @@ import (
 	"time"
 )
 
-// dingTalkChannel 实现钉钉自定义机器人。
-//
-// 平台特性（决定了这里的实现取舍）：
-//   - 单机器人限流 20 条/分钟，超发会被静默丢弃（HTTP 仍可能 200），
-//     所以限流必须在客户端做，见 DefaultRatePerMin。
-//   - 安全设置三选一：加签 / 自定义关键词 / IP 白名单。加签是唯一不依赖
-//     消息内容的方案，所以只支持加签（也支持三者都不开的裸 webhook）。
-//   - 成功/失败都返回 HTTP 200，靠 body 里的 errcode 区分——不检查 errcode
-//     会把投递失败记成成功。
+// dingTalkChannel implements DingTalk custom bots. Each bot permits 20 messages
+// per minute; excess messages can be silently dropped even with HTTP 200, so limit
+// on the client. Supported security uses signing (independent of content) or an
+// unsecured webhook, rather than keywords or IP allowlisting. Inspect errcode:
+// both application success and failure can arrive as HTTP 200.
 type dingTalkChannel struct{}
 
 func (dingTalkChannel) Kind() string { return KindDingTalk }
 
 func (dingTalkChannel) DefaultRatePerMin() int { return 20 }
 
-// 钉钉的 Webhook 地址里带 access_token，本身就是凭据，因此整体掩码。
+// DingTalk webhook URLs contain access_token and must be masked in full.
 func (dingTalkChannel) SecretKeys() []string { return []string{"webhook", "secret"} }
 
-// 目标是钉钉的 Webhook 地址本身；改地址必须同时对新地址重新表态加签密钥。
+// Changing the webhook destination requires explicitly supplying its signing secret again.
 func (dingTalkChannel) DestinationKeys() []string { return []string{"webhook"} }
 
 func (dingTalkChannel) Validate(cfg map[string]any) error {
 	hook := cfgString(cfg, "webhook")
 	if hook == "" {
-		return errors.New("缺少 Webhook 地址")
+		return errors.New("Missing Webhook URL")
 	}
 	if err := validateHTTPURL(hook); err != nil {
 		return fmt.Errorf("Invalid Webhook URL: %w", err)
@@ -46,7 +42,7 @@ func (dingTalkChannel) Validate(cfg map[string]any) error {
 	return nil
 }
 
-// Send 投递一次消息。有回链且是单条时用 ActionCard（带按钮），否则用 markdown。
+// Send uses ActionCard with a button for a single item with a detail link, otherwise Markdown.
 func (c dingTalkChannel) Send(ctx context.Context, cfg map[string]any, m Message) (int, error) {
 	hook := cfgString(cfg, "webhook")
 	if err := c.Validate(cfg); err != nil {
@@ -58,7 +54,7 @@ func (c dingTalkChannel) Send(ctx context.Context, cfg map[string]any, m Message
 	}
 
 	title := markdownTitle(m)
-	// 钉钉 markdown 正文无明确字节上限，但仍做上限保护，避免证据字段异常膨胀。
+	// Bound Markdown size even without a documented DingTalk byte limit, to contain oversized evidence.
 	text, kept := markdownBody(m, 20000)
 
 	var payload any
@@ -84,27 +80,25 @@ func (c dingTalkChannel) Send(ctx context.Context, cfg map[string]any, m Message
 	if err != nil {
 		return 0, err
 	}
-	// 钉钉把业务错误藏在 200 响应里。
+	// DingTalk reports application errors inside HTTP 200 responses.
 	var res struct {
 		ErrCode int    `json:"errcode"`
 		ErrMsg  string `json:"errmsg"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
-		return 0, fmt.Errorf("解析钉钉响应失败: %w (%s)", err, snippet(raw))
+		return 0, fmt.Errorf("Parse DingTalk response: %w (%s)", err, snippet(raw))
 	}
 	if res.ErrCode != 0 {
-		// 301000 是签名校验失败、310000 是关键词不匹配——都是配置错误，
-		// 重试不会自愈。
-		return 0, Permanent(fmt.Errorf("钉钉返回错误 %d: %s", res.ErrCode, res.ErrMsg))
+		// 301000 means signature failure and 310000 means keyword mismatch.
+		// Both are configuration errors that retries cannot fix.
+		return 0, Permanent(fmt.Errorf("DingTalk returned error %d: %s", res.ErrCode, res.ErrMsg))
 	}
 	return kept, nil
 }
 
-// dingTalkSignedURL 按官方加签规则给 webhook 追加 timestamp 与 sign 参数。
-//
-// 规则：待签串 = timestamp + "\n" + secret，HMAC-SHA256 的**密钥也是 secret**，
-// 结果 base64 后 URL 编码。timestamp 是毫秒。secret 为空时原样返回，
-// 以支持未开启加签的机器人。
+// dingTalkSignedURL appends timestamp and sign using DingTalk's signing rules.
+// Sign timestamp + newline + secret with HMAC-SHA256 keyed by secret, then base64
+// and URL-encode the result. Timestamp is milliseconds; empty secret leaves the URL unchanged.
 func dingTalkSignedURL(hook, secret string, now time.Time) (string, error) {
 	if secret == "" {
 		return hook, nil
@@ -116,8 +110,8 @@ func dingTalkSignedURL(hook, secret string, now time.Time) (string, error) {
 
 	u, err := url.Parse(hook)
 	if err != nil {
-		// 不透传 err：url.Parse 的错误文本里带完整地址（含 access_token）。
-		return "", fmt.Errorf("解析 Webhook 地址失败: %s", redactRequestTarget(hook))
+		// Do not forward url.Parse errors: they contain the full URL and access_token.
+		return "", fmt.Errorf("Parse Webhook URL: %s", redactRequestTarget(hook))
 	}
 	q := u.Query()
 	q.Set("timestamp", ts)
@@ -126,35 +120,26 @@ func dingTalkSignedURL(hook, secret string, now time.Time) (string, error) {
 	return u.String(), nil
 }
 
-// validateHTTPURL 校验地址可用、协议受支持，并对字面 IP 目标做内网判断。
-//
-// 两点讲究：
-//
-//  1. **错误信息必须脱敏**。url.Parse 自己返回的是 *url.Error，它的 Error() 带
-//     **完整原始地址**，而本功能这几家的地址里就嵌着凭据（钉钉 access_token、
-//     企微 key、Telegram 的 bot token、飞书 hook id）。曾经这里直接 `return err`，
-//     于是「地址格式非法」这条错误就把凭据带了出去，流向测试接口的 400 响应、
-//     每次投递落库的 last_error、服务端日志与投递历史接口。
-//
-//  2. **字面 IP 直接判内网**，域名留给拨号阶段判（blockInternalDial 才是最终
-//     生效点，也能覆盖 DNS 重绑定）。这里做一次是为了让保存配置时就能得到提示，
-//     而不是等到第一次投递失败。
-//
-// 限制协议是防御性的：file:///gopher:// 之类会让 http.Client 产生意料之外的
-// 行为（虽已被 scheme 检查挡下，但没有理由放开这个面）。
+// validateHTTPURL checks parsing, supported schemes and literal-IP destinations.
+// All errors must redact credentials. url.Parse errors expose the original URL,
+// including DingTalk access_token, WeCom key, Telegram bot token or Feishu hook ID,
+// to API responses, last_error, logs and delivery history if forwarded directly.
+// Reject blocked literal IPs here for immediate configuration feedback. Domain
+// addresses are checked at dial time by blockInternalDial, including DNS rebinding.
+// Restrict schemes to HTTP/HTTPS to exclude unexpected file or gopher behavior.
 func validateHTTPURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("地址无法解析（%s）", redactRequestTarget(raw))
+		return fmt.Errorf("Cannot parse URL (%s)", redactRequestTarget(raw))
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("只支持 http/https，收到 %q", u.Scheme)
+		return fmt.Errorf("Only http/https are supported, got %q", u.Scheme)
 	}
 	if u.Host == "" {
-		return errors.New("缺少主机名")
+		return errors.New("Missing hostname")
 	}
 	if ip := net.ParseIP(u.Hostname()); ip != nil && isBlockedDialIP(ip) && !allowLocalTargets() {
-		return fmt.Errorf("拒绝投递到本机/链路本地地址 %s（如确需投递到本机服务，设置 %s=1）", ip, AllowLocalTargetsEnv)
+		return fmt.Errorf("Delivery to loopback/link-local address %s rejected (to allow local services, set %s=1)", ip, AllowLocalTargetsEnv)
 	}
 	return nil
 }
