@@ -449,6 +449,17 @@ function FoldSheet({
 }
 
 // ---------------------------------------------------------------------------
+async function fitCoverageGraph(graph: G6Graph) {
+  if (graph.destroyed) return;
+  const [width, height] = graph.getSize();
+  const { halfExtents } = graph.getCanvas().getBounds();
+  // G6's overflow-only fit checks both dimensions; fit either without enlarging small graphs.
+  const zoom = Math.min(1, width / (halfExtents[0] * 2), height / (halfExtents[1] * 2));
+  if (!Number.isFinite(zoom) || zoom <= 0) return;
+  await graph.zoomTo(zoom, false);
+  if (!graph.destroyed) await graph.fitCenter(false);
+}
+
 function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; coverageEnabled?: boolean }) {
   const [data, setData] = React.useState<{
     nodes: CoverageGraphNode[];
@@ -522,9 +533,12 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
     // render() runs d3-force asynchronously; if unmounted before layout finishes, G6 may access transform on
     // a cleared context (runtime/layout transformDataAfterLayout). Ignore this teardown race;
     // continue logging actual rendering errors while the graph is alive.
-    void graph.render().catch((err) => {
-      if (!graph.destroyed) console.error("[coverage-graph] render:", err);
-    });
+    void graph
+      .render()
+      .then(() => fitCoverageGraph(graph))
+      .catch((err) => {
+        if (!graph.destroyed) console.error("[coverage-graph] render:", err);
+      });
   }, []);
 
   // Create the graph once. Dynamic import avoids window dependencies during SSR/static export.
@@ -539,7 +553,6 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
       graph = new Graph({
         container: containerRef.current,
         autoResize: true,
-        autoFit: { type: "view", options: { when: "overflow" } },
         background: "#f0f2f7",
         node: {
           style: {
@@ -597,6 +610,9 @@ function GraphInner({ taskId, coverageEnabled = true }: { taskId: string; covera
         if (!rn) return;
         if (rn.fold) setSelectedFoldId(rn.key);
         else setSelectedAsset(rn.node);
+      });
+      graph.on("aftersizechange", () => {
+        if (graph) void fitCoverageGraph(graph);
       });
       graphRef.current = graph;
       applyData();

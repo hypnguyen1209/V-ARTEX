@@ -94,3 +94,29 @@ test("coverage collision bounds include labels for wrapped d3-force node data", 
   assert.equal(wrapped, direct);
   assert.ok(wrapped > Math.hypot(148 / 2 + 3, 26 / 2 + 16));
 });
+
+test("coverage fitting keeps natural zoom and shrinks overflow in either dimension", async () => {
+  const { fitCoverageGraph } = loadFunctions("../app/(main)/function/tasks/detail/_tabs/coverage-graph-tab.tsx", [
+    "fitCoverageGraph",
+  ]);
+  assert.equal(typeof fitCoverageGraph, "function");
+  for (const [width, height, expected] of [
+    [600, 400, 1],
+    [1200, 400, 1120 / 1200],
+    [600, 800, 600 / 800],
+    [1200, 800, 600 / 800],
+  ]) {
+    const calls = [];
+    await fitCoverageGraph({
+      destroyed: false,
+      getSize: () => [1120, 600],
+      getCanvas: () => ({ getBounds: () => ({ halfExtents: [width / 2, height / 2] }) }),
+      zoomTo: async (zoom, animation) => calls.push(["zoom", zoom, animation]),
+      fitCenter: async (animation) => calls.push(["center", animation]),
+    });
+    assert.deepEqual(calls, [
+      ["zoom", expected, false],
+      ["center", false],
+    ]);
+  }
+});
