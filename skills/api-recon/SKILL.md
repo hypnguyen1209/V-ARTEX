@@ -70,7 +70,7 @@ All conditions must be met before claiming recon is complete:
 
 - [ ] **Static**: Phase 1 harvest produces `api_static.txt`, `routes.txt`, and `js/`
 - [ ] **Runtime**: At least depth or coverage; coverage/both require **working hooks + the dynamic enumeration loop**
-- [ ] **Shell access**: Business paths stay outside `/login` (account for hash routing)
+- [ ] **App shell rendered**: Business paths stay outside `/login` (account for hash routing)
 - [ ] **Parameters**: coverage/both complete the parameter trigger matrix + `param_samples.json`; Phase 5 merges `params_merged.json`
 - [ ] **Depth** (if module pages are blank): Complete Phase 4 permission-tree reconstruction and rerun until **module-level APIs** appear (not just locale/bootstrap)
 - [ ] **Delivery**: All Phase 5 outputs exist (see the Phase 5 output table); `insert_assets` writes service and endpoint assets
@@ -134,7 +134,7 @@ Check off in order; **do not enter the next phase until the preceding item is co
 3. [ ] **Phase 1b**: Anchor-window expansion + binding layer → `param_candidates.json` → [Phase 1b](#phase-1b--parameter-reverse-engineering)
 4. [ ] **Phase 2**: Three authentication gates → `config.json` → [Phase 2](#phase-2--three-authentication-gates)
 5. [ ] **Gate B**: Adapt runtime scripts → [Phase 3](#phase-3--runtime)
-6. [ ] **Phase 3**: depth / coverage / both; confirm shell access; parameter trigger matrix → `param_samples.json`
+6. [ ] **Phase 3**: depth / coverage / both; confirm the app shell renders; parameter trigger matrix → `param_samples.json`
 7. [ ] **Phase 4** (when needed): Permission tree → patch stubs → rerun Phase 3 → [Phase 4](#phase-4--permission-tree-reconstruction)
 8. [ ] **Phase 5**: Merge outputs + report + `insert_assets` → [Phase 5](#phase-5--merge-and-report)
 
