@@ -91,7 +91,9 @@ Expected: dependency install, Biome, type checking, and the production build all
 Run from repository root:
 
 ```bash
-bash -n build.sh dev.sh install.sh reset-password.sh start.sh update.sh
+for script in build.sh dev.sh install.sh reset-password.sh start.sh update.sh; do
+  bash -n "$script" || exit 1
+done
 python3 -m py_compile skills/api-recon/scripts/harvest_static.py \
   skills/api-recon/scripts/spider_mpa.py
 node --check skills/api-recon/scripts/preload.js
