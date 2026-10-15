@@ -1,11 +1,11 @@
 /**
- * api-recon coverage 模式预加载脚本 — 参考模板
+ * api-recon coverage-mode preload script — reference template
  *
- * ⚠ 非通用成品：须按目标站点调整后再注入。
- * 常见改动：loginPathRe、stubs、neutralize.fields/success、apiPattern、mockTier、forward
+ * ⚠ Not a universal ready-to-run tool: adapt to the target site before injection.
+ * Common changes: loginPathRe, stubs, neutralize.fields/success, apiPattern, mockTier, forward
  *
- * document-start 注入（CDP addScriptToEvaluateOnNewDocument 或 userscript）
- * CONFIG 字段应与 recon/config.json 保持一致
+ * Inject at document start (CDP addScriptToEvaluateOnNewDocument or userscript).
+ * Keep CONFIG fields consistent with recon/config.json.
  */
 (function () {
   'use strict';
@@ -22,15 +22,15 @@
     stubs: [],
     apiPattern: /\/(api|apis|v\d+|dev|internal|graphql)\//i,
     apiFallbackRe: /^\/(api|apis|v\d+|dev|internal)\//i,
-    // API 发现增强：fetch/XHR Hook、请求头与响应录制
-    recordDetail: true,           // 详细录制 method/url/headers/body/响应
+    // Enhanced API discovery: fetch/XHR hooks, request headers, response capture
+    recordDetail: true,           // Detailed method/url/headers/body/response recording
     respMax: 600,
-    extractUrlsFromResponse: true, // 从 JSON 响应里抠嵌套 URL
-    neutralizeVueRouter: true,    // Vue beforeEach/push 登录跳转中和
+    extractUrlsFromResponse: true, // Extract nested URLs from JSON responses
+    neutralizeVueRouter: true,    // Neutralize Vue beforeEach/push login redirects
     observe: {
-      storageReads: false,        // 观察 localStorage.getItem（辅助确认会话键名）
-      cookieReads: false,         // 观察 document.cookie 读取
-      xhrHeaders: true,           // 录制 XHR setRequestHeader
+      storageReads: false,        // Observe localStorage.getItem to confirm session key names
+      cookieReads: false,         // Observe document.cookie reads
+      xhrHeaders: true,           // Record XHR setRequestHeader
     },
   };
 
@@ -79,7 +79,7 @@
     return url && CONFIG.loginPathRe.test(String(url));
   }
 
-  // --- 跳转中和 ---
+  // --- Navigation neutralization ---
   (function neutralizeNativeNavigation() {
     const rawAssign = Location.prototype.assign;
     const rawReplace = Location.prototype.replace;
@@ -119,7 +119,7 @@
     window.close = function () {};
   })();
 
-  // --- Vue Router 登录跳转中和 ---
+  // --- Vue Router login redirect neutralization ---
   function neutralizeVueRouter() {
     if (!CONFIG.neutralizeVueRouter) return;
     try {
@@ -149,7 +149,7 @@
 
   function runPostLoadHooks() {
     neutralizeVueRouter();
-    // 业务层跳转函数（goPage / navigateTo 等）
+    // Application navigation functions (goPage / navigateTo, etc.)
     ['goPage', 'navigateTo', 'jumpTo', 'redirectTo'].forEach(function (name) {
       if (typeof window[name] !== 'function' || window[name].__apiReconWrapped) return;
       const raw = window[name];
@@ -165,7 +165,7 @@
   document.addEventListener('DOMContentLoaded', runPostLoadHooks);
   window.addEventListener('load', runPostLoadHooks);
 
-  // --- 观察 Hook：辅助发现会话键名与请求头（可选，默认关 storage/cookie）---
+  // --- Observation hooks: session keys and request headers (optional; storage/cookie off by default) ---
   if (CONFIG.observe && CONFIG.observe.storageReads) {
     const rawGet = Storage.prototype.getItem;
     Storage.prototype.getItem = function (key) {
@@ -188,8 +188,8 @@
     }
   }
 
-  // --- Mock 辅助 ---
-  const NEGATIVE_RE = /未登录|未授权|授权|not\s*login|unauthorized|forbidden/i;
+  // --- Mock helpers ---
+  const NEGATIVE_RE = /\u672a\u767b\u5f55|\u672a\u6388\u6743|\u6388\u6743|not\s*login|unauthorized|forbidden/i;
   const tier = CONFIG.mockTier || 'L1+L2';
 
   function patchJsonBody(text) {
@@ -244,7 +244,7 @@
     if (s.match && !s._re) s._re = new RegExp(s.match);
   });
 
-  // --- fetch Hook ---
+  // --- fetch hook ---
   const rawFetch = window.fetch;
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
@@ -284,7 +284,7 @@
     return resp;
   };
 
-  // --- XHR Hook ---
+  // --- XHR hook ---
   const rawOpen = XMLHttpRequest.prototype.open;
   const rawSend = XMLHttpRequest.prototype.send;
   const rawSetHeader = XMLHttpRequest.prototype.setRequestHeader;
