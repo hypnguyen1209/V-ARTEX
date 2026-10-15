@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -362,6 +363,9 @@ func NewManager(dir, proxyAddr string) (*Manager, error) {
 	pg, err := pgdb.Open(dsn)
 	if err != nil {
 		return nil, err
+	}
+	if err := migrateEnglishDefaults(context.Background(), pg); err != nil {
+		return nil, errors.Join(fmt.Errorf("migrate legacy English defaults: %w", err), pg.Close())
 	}
 	if err := pg.RecoverFindingRetests(); err != nil {
 		pg.Close()

@@ -4,12 +4,35 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"testing"
 )
 
+func TestMigrateBuiltinEnglishTextRollsBackOnFailure(t *testing.T) {
+	d := englishMigrationDB(t)
+	sentinel := errors.New("stop migration")
+	err := withEnglishMigrationTransaction(t.Context(), d.BeginTx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(t.Context(), `INSERT INTO settings(key,value) VALUES('english_migration_rollback','temporary')`); err != nil {
+			return err
+		}
+		return sentinel
+	})
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("migration error = %v, want sentinel", err)
+	}
+	var count int
+	if err := d.QueryRow(`SELECT count(*) FROM settings WHERE key='english_migration_rollback'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("failed migration committed partial changes")
+	}
+}
+
 const legacyDefaultPromptNote = "\u5185\u7f6e\u9ed8\u8ba4"
 const legacyResetPromptNote = "\u6062\u590d\u4e3a\u5185\u7f6e\u9ed8\u8ba4"
+const legacyGenericWrapup = "\u4f60\u5373\u5c06\u56e0\u9884\u7b97\u8017\u5c3d\u88ab\u7ec8\u6b62。\u8bf7\u5148\u628a\u5df2\u5b8c\u6210\u4f46\u672a\u843d\u5e93\u7684\u7ed3\u679c\u5199\u56de,\u518d**\u5355\u72ec\u7528\u4e00\u53e5\u8bdd\u7eaf\u6587\u672c**\u603b\u7ed3\u4f60\u505a\u4e86\u4ec0\u4e48、\u5f97\u5230\u54ea\u4e9b\u5173\u952e\u7ed3\u8bba(\u8fd9\u53e5\u4f1a\u4f5c\u4e3a\u672c\u6b21\u8fd0\u884c\u7684\u7ed3\u679c\u5c55\u793a)。"
 
 // These fingerprints are frozen from the approved pre-translation defaults.
 var legacyEnglishPromptFingerprints = map[string]string{
@@ -25,6 +48,7 @@ var legacyEnglishPromptFingerprints = map[string]string{
 	"wrapup:planner":       "0afba34ad25d8dfe87bac7596dcaeb59040049ce5c412bd62c04f5881ad5dcce",
 	"wrapup:mainagent":     "52333c82468d757ce3818c8c88379f9d1e7488d9bc388d116abc3423fe9529fa",
 	"wrapup:worker":        "2613bf7d5d9fdc2f549667355eb747d92f53de2be3756a57361732aed8fd7ebe",
+	"wrapup:generic":       "9d0b47458ae54a85cad722d7078eacbe40a11e40e6e7aef774bd8610a61a08b1",
 	"task-timeout:worker":  "bbefbdf2059d09703a0c6c665d4b4734f99c4df270974bb10c795d987b672343",
 	"task-timeout:planner": "d002b51c2a5c42f8197714f5b86b11539f85c3451a19e87472e8483ed0adfd76",
 	"judge":                "d6bf0f5fae9e98f551de5ac73a935a667f1c4eb18b30fd9da2ffb3e851ea2c15",
@@ -119,8 +143,8 @@ func englishMigrationHash(text string) string {
 }
 
 func TestMigrateBuiltinEnglishTextLegacyFingerprints(t *testing.T) {
-	if len(legacyEnglishPromptFingerprints) != 15 {
-		t.Fatalf("legacy fingerprints = %d, want 15", len(legacyEnglishPromptFingerprints))
+	if len(legacyEnglishPromptFingerprints) != 16 {
+		t.Fatalf("legacy fingerprints = %d, want 16", len(legacyEnglishPromptFingerprints))
 	}
 	currentByKey := make(map[string]string, len(legacyEnglishPromptFingerprints))
 	for name, fingerprint := range legacyEnglishPromptFingerprints {
@@ -139,7 +163,7 @@ func TestMigrateBuiltinEnglishTextLegacyFingerprints(t *testing.T) {
 		keys []string
 	}{
 		{"prompts", defaults.PromptBySHA256, []string{"builtin:auto", "builtin:goals", "builtin:mainagent", "builtin:pentest", "builtin:planner", "builtin:worker", "assistant", "reporter", "retester"}},
-		{"wrapups", defaults.WrapupBySHA256, []string{"wrapup:planner", "wrapup:mainagent", "wrapup:worker"}},
+		{"wrapups", defaults.WrapupBySHA256, []string{"wrapup:planner", "wrapup:mainagent", "wrapup:worker", "wrapup:generic"}},
 		{"task-timeouts", defaults.TaskTimeoutBySHA256, []string{"task-timeout:worker", "task-timeout:planner"}},
 		{"judge", defaults.JudgeBySHA256, []string{"judge"}},
 	} {
@@ -160,9 +184,57 @@ func TestMigrateBuiltinEnglishTextLegacyFingerprints(t *testing.T) {
 	if got := englishMigrationHash(assistant); got != legacyEnglishPromptFingerprints["assistant"] {
 		t.Fatalf("legacy assistant fingerprint = %s", got)
 	}
-	// The unchanged generic wrap-up does not need a database replacement.
-	if got := englishMigrationHash("\u4f60\u5373\u5c06\u56e0\u9884\u7b97\u8017\u5c3d\u88ab\u7ec8\u6b62。\u8bf7\u5148\u628a\u5df2\u5b8c\u6210\u4f46\u672a\u843d\u5e93\u7684\u7ed3\u679c\u5199\u56de,\u518d**\u5355\u72ec\u7528\u4e00\u53e5\u8bdd\u7eaf\u6587\u672c**\u603b\u7ed3\u4f60\u505a\u4e86\u4ec0\u4e48、\u5f97\u5230\u54ea\u4e9b\u5173\u952e\u7ed3\u8bba(\u8fd9\u53e5\u4f1a\u4f5c\u4e3a\u672c\u6b21\u8fd0\u884c\u7684\u7ed3\u679c\u5c55\u793a)。"); got != "9d0b47458ae54a85cad722d7078eacbe40a11e40e6e7aef774bd8610a61a08b1" {
+	// A saved copy of this nonempty generic default also needs translation.
+	if got := englishMigrationHash(legacyGenericWrapup); got != legacyEnglishPromptFingerprints["wrapup:generic"] {
 		t.Fatalf("generic wrap-up fingerprint = %s", got)
+	}
+}
+
+func TestMigrateBuiltinEnglishTextMissingReplacements(t *testing.T) {
+	for _, current := range []map[string]string{nil, {}, {"assistant": "", "judge": " \n\t"}} {
+		defaults := NewLegacyEnglishDefaults(current)
+		if len(defaults.PromptBySHA256)+len(defaults.WrapupBySHA256)+len(defaults.TaskTimeoutBySHA256)+len(defaults.JudgeBySHA256) != 0 {
+			t.Fatalf("missing or blank replacements must not populate migration maps: %#v", defaults)
+		}
+	}
+}
+
+func TestOpenSeedPreservesCustomizedBuiltinLabels(t *testing.T) {
+	d := englishMigrationDB(t)
+	a, err := d.GetAgentByKey("planner")
+	if err != nil || a == nil {
+		t.Fatalf("get planner: %v", err)
+	}
+	var description, example string
+	if err := d.QueryRow(`SELECT description,example FROM agent_prompt_vars WHERE agent_id=$1 AND var_name='Goal'`, a.ID).Scan(&description, &example); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := d.Exec(`UPDATE agents SET name=$1,description=$2 WHERE id=$3`, a.Name, a.Description, a.ID); err != nil {
+			t.Error(err)
+		}
+		if _, err := d.Exec(`UPDATE agent_prompt_vars SET description=$1,example=$2 WHERE agent_id=$3 AND var_name='Goal'`, description, example, a.ID); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := d.Exec(`UPDATE agents SET name='Operator planner',description='Operator description' WHERE id=$1`, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec(`UPDATE agent_prompt_vars SET description='Operator variable',example='Operator example' WHERE agent_id=$1 AND var_name='Goal'`, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(testDSN(t))
+	if err != nil {
+		t.Fatalf("reopen available postgres: %v", err)
+	}
+	defer reopened.Close()
+	var got string
+	if err := reopened.QueryRow(`SELECT concat_ws('|',a.name,a.description,v.description,v.example)
+FROM agents a JOIN agent_prompt_vars v ON v.agent_id=a.id WHERE a.id=$1 AND v.var_name='Goal'`, a.ID).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Operator planner|Operator description|Operator variable|Operator example"; got != want {
+		t.Fatalf("customized labels = %q, want %q", got, want)
 	}
 }
 
@@ -535,4 +607,44 @@ func TestMigrateBuiltinEnglishTextJudgeSetting(t *testing.T) {
 		t.Fatal(err)
 	}
 	englishMigrationString(t, tx, "0", `SELECT count(*)::text FROM settings WHERE key='llm_judge_prompt'`)
+}
+
+func TestMigrateBuiltinEnglishTextSavedGenericWrapups(t *testing.T) {
+	d := englishMigrationDB(t)
+	const english = "Persist unsaved results, then summarize your actions and conclusions."
+	defaults := NewLegacyEnglishDefaults(map[string]string{"wrapup:generic": english})
+	for _, tc := range []struct {
+		key              string
+		builtin, upgrade bool
+	}{
+		{"goals", true, true}, {"auto", true, true}, {"pentest", true, true},
+		{"goals", false, false}, {"auto", false, false}, {"pentest", false, false},
+		{"english_migration_custom", false, false},
+		{"english_migration_unrelated_builtin", true, false},
+		{"reporter", false, false}, {"retester", false, false},
+	} {
+		t.Run(fmt.Sprintf("%s/builtin=%t", tc.key, tc.builtin), func(t *testing.T) {
+			tx := englishMigrationTx(t, d)
+			id := englishMigrationAgent(t, tx, tc.key, "Operator label", "Operator description", tc.builtin)
+			englishMigrationExec(t, tx, `UPDATE agents SET wrapup_prompt=$1,wrapup_max_turns=7 WHERE id=$2`, legacyGenericWrapup, id)
+			for run := 1; run <= 2; run++ {
+				if err := migrateLegacyEnglishDefaults(t.Context(), tx, defaults); err != nil {
+					t.Fatalf("migration run %d: %v", run, err)
+				}
+			}
+			want := legacyGenericWrapup
+			if tc.upgrade {
+				want = english
+			}
+			englishMigrationString(t, tx, want, `SELECT wrapup_prompt FROM agents WHERE id=$1`, id)
+			englishMigrationString(t, tx, "7", `SELECT wrapup_max_turns::text FROM agents WHERE id=$1`, id)
+			for _, custom := range []string{"", legacyGenericWrapup + "\nOperator change\t", " " + legacyGenericWrapup} {
+				englishMigrationExec(t, tx, `UPDATE agents SET wrapup_prompt=$1 WHERE id=$2`, custom, id)
+				if err := migrateLegacyEnglishDefaults(t.Context(), tx, defaults); err != nil {
+					t.Fatal(err)
+				}
+				englishMigrationString(t, tx, custom, `SELECT wrapup_prompt FROM agents WHERE id=$1`, id)
+			}
+		})
+	}
 }

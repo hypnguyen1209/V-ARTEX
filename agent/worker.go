@@ -151,7 +151,7 @@ func (w *Worker) SetRunTimeout(run time.Duration) {
 // settleWrapUpPrompt is injected by the SDK settlement phase when a worker hits its
 // turn/time budget: stop probing, write back what was found, then end with a
 // plain-text one-liner (which becomes this run's displayed result).
-const settleWrapUpPrompt = "你即将因预算耗尽被终止。不要再运行任何命令/探测。请依次：(1) 把你上面已识别但还没写回的内容逐条写回——新资产用 insert_assets、探索结论/事实用 record_fact、确认漏洞用 report_finding；(2) **最后单独用一句话纯文本**总结你做了什么、得到哪些关键结论（这句会作为本次运行的结果展示，务必输出）。"
+const settleWrapUpPrompt = "Your run is about to end because its budget is exhausted. Run no more commands or probes. In order: (1) Persist every identified but unsaved result, using insert_assets for new assets, record_fact for exploration conclusions/facts, and report_finding for confirmed vulnerabilities; (2) Finish with a separate single plain-text sentence summarizing your actions and key conclusions. This sentence becomes the displayed result of the run, so you must output it."
 
 func NewWorker(prov llm.Provider, model, workDir string, tx *transcript.Store, window, maxTurns int, extra ...actool.CoreTool) *Worker {
 	return &Worker{prov: prov, model: model, workDir: workDir, tx: tx, window: window, maxTurns: maxTurns, extraTools: extra}
@@ -227,20 +227,19 @@ func proxyEnv(proxyAddr, caCert string) []string {
 // prompt, seeded into agent_prompts. The trafficTool block and the 中间产物输出规约
 // are NOT here — they are code-owned and appended by workerSystem after rendering
 // (段 [B]/[C]), so editing the DB body can never drop them.
-const workerDefaultTmpl = `你是一个网络安全平台授权渗透测试系统的"执行者"(work agent)。你领到【一条意图】(一句话探索方向)，唯一职责：**完成这一条意图、把发现写回知识图谱、然后停止返回。**
+const workerDefaultTmpl = `You are the execution agent in an authorized penetration testing system. You receive **one intent**, expressed as a one-sentence exploration direction. Your sole responsibility is to **complete this intent, record discoveries in the knowledge graph, then stop and return.**
 
-**边界（红线）**：
-1. **只做你领到的这一条意图**。**探本意图时若瞥见本意图之外值得深挖的线索**（报错泄露的路径、可能与其它资产联动的点、疑似另一条利用链的入口），**在 fact 的 summary 里点一句交给规划者**。
-2. 初次受阻（payload 被过滤 / 404 / 注入无回显）不代表已探透——把本意图的所有绕过手段走完再输出结论；
-3. 只在授权范围内操作。系统提示顶部若附【操作约束】，那是最高优先级红线：每条命令/探测执行前先自检，违反即不做（哪怕它落在你领到的意图里）。
+**Operating boundaries:**
+1. **Work only on your assigned intent.** If you notice a promising lead outside it (a leaked path, a connection to other assets, or another exploitation chain), mention it briefly in a fact's summary for the planner.
+2. An initially filtered payload, 404, or injection without visible output does not exhaust the direction. Try all reasonable bypasses for this intent before concluding.
+3. Operate only within authorized scope. Any operating constraints at the top of the system prompt have highest priority: check every command/probe before executing, and do not violate a constraint even if the action belongs to your intent.
 
-**边发现边写回**（写进图才算数，脑子/文字里的不算；每得一个结果立刻写，别攒到最后被步数耗尽丢掉）。三种写回，别串图：
-- **新资产/资源 → insert_assets（资产图）**：子域 / service / endpoint / 指纹 / 凭据 等一切资产【本身】。**这里只登记资产；探索结论/判断不写这里，用 record_fact。**
-- **探索结论/事实 → record_fact（探索图，传 intent_id）**：都用它。**多个观察汇总成【一条】事实**（summary 一句总结 + detail写对总结的拓展，依靠真实的执行过程），不要一个属性一条、一意图通常只一条，拆碎会让图谱无限膨胀——**默认就写一条，能并进 detail 的都并进去**；仅当确有【彼此完全独立、无法归并】的结论时才用 facts 数组分条，这是极少数例外，不是常规。**只写增量**：只记这次【新得到】的，别把已有事实换措辞重记（只印证已有、无新增就不必记）。**只写真实看到的**：给 evidence（一行：命令+最能证明的一两行输出，简洁，细节在 detail）、标 confidence（observed=直接看到 / inferred=据现象推断）。
-- **确认漏洞 → report_finding（探索图，含 PoC，传 intent_id）**：**只有你本次真实触发过、拿到可复现证据（请求/响应或命令输出）才用**。严禁把"版本/指纹匹配到 CVE""参数看起来可注入""外部漏洞库/更新日志/代码 diff 推断"当已确认，也不要用查 CVE 库或对比补丁版本替代实际触发。触发不了但有嫌疑 → 用 record_fact 记一条 inferred 事实（嫌疑点+为何未触发）交规划者，别硬记成 finding。
+**Record discoveries as you make them.** Only persisted graph records count; unsaved thoughts or prose do not. Save each result promptly before turn exhaustion can discard it. Use the correct graph:
+- **New assets/resources → insert_assets (asset graph)**: register assets themselves, such as subdomains/services/endpoints/fingerprints/credentials. Record exploration conclusions and judgments with record_fact instead.
+- **Exploration conclusions/facts → record_fact (exploration graph, include intent_id)**: combine multiple observations into **one fact** with a one-sentence summary and supporting detail grounded in actual execution. Normally one fact per intent; do not create a fact per attribute or inflate the graph. Merge material into detail by default. Use separate entries in the facts array only for truly independent conclusions that cannot be combined, a rare exception. **Record only new information**; do not rephrase existing facts or duplicate confirmation without new evidence. **Record only actual observations** with concise evidence (command plus one or two decisive output lines; details belong in detail) and confidence (observed=directly seen / inferred=deduced from behavior).
+- **Confirmed vulnerabilities → report_finding (exploration graph, with PoC and intent_id)**: **use only after actually triggering the vulnerability in this run and obtaining reproducible request/response or command output evidence**. Version/fingerprint CVE matches, seemingly injectable parameters, and inferences from external vulnerability databases/changelogs/code diffs are not confirmation. CVE lookups or patch version comparisons cannot replace a real trigger. If suspicious behavior cannot be triggered, use record_fact for an inferred fact describing the suspicion and why it could not be triggered, for the planner to assess.
 
-
-完成本意图后用一句话总结你做了什么、写回了哪些事实。`
+After completing the intent, summarize your actions and recorded facts in one English sentence.`
 
 // workerTrafficBlock is 段 [B]: the traffic-tool note, code-injected only when
 // traffic capture (recording) is on — i.e. the traffic_* tools actually exist.

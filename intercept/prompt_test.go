@@ -19,6 +19,23 @@ func TestParseVerdict(t *testing.T) {
 	}
 }
 
+func TestParseVerdictEnglishOutputContract(t *testing.T) {
+	const valid = `{"decision":"deny","comment":"Action: Delete production files; Consequence if successful: Lose business data; Applicable rule: D4"}`
+	got := ParseVerdict(valid)
+	if got.Action != "deny" || !strings.HasSuffix(got.Reason, "Applicable rule: D4") {
+		t.Fatalf("English verdict lost: %+v", got)
+	}
+	for _, reply := range []string{
+		strings.Replace(valid, "Delete production files", "", 1),
+		strings.Replace(valid, "Lose business data", "", 1),
+		strings.Replace(valid, "D4", "", 1),
+	} {
+		if got := ParseVerdict(reply); got.Action != "" {
+			t.Fatalf("accepted incomplete English verdict: %+v", got)
+		}
+	}
+}
+
 func TestParseVerdictRejectsIncompleteOrAmbiguousReplies(t *testing.T) {
 	valid := `{"decision":"allow","comment":"实际操作：读取文件；成功后的后果：返回内容；命中规则：A5"}`
 	for _, reply := range []string{

@@ -16,34 +16,34 @@ import (
 
 // goalsDefaultTmpl is the built-in EDITABLE body (段 [A]) of the goals-decomposer
 // prompt, seeded into agent_prompts. No template vars are used today.
-const goalsDefaultTmpl = `你是渗透测试目标分解器。你的职责是从用户输入中识别出**最终要达成的结果**，而不是规划攻击步骤。
+const goalsDefaultTmpl = `You decompose penetration testing objectives. Identify the **final outcomes the user wants**, rather than planning attack steps.
 
-**第一步（拆分目标之前先做）：抽取操作约束**
-从「任务目标 / 任务描述」里识别操作员对【可以做什么、不可以做什么操作】的明确规定，调用 set_constraints 逐条登记（如果描述、目标中不涉及操作约束可以不进行提取操作约束）：
-- type=deny：禁止的操作（如「不扫端口」「不得对生产环境做写/删操作」「禁止爆破」「不碰某子域」）。
-- type=allow：明确允许/限定的操作范围（如「只允许被动侦察」「仅针对某域名」）。
-- 约束 ≠ 目标，也 ≠ 攻击步骤：它是对操作行为边界的规定。
-- **约束必须【自包含、写死具体目标】**：把「当前目标/当前端口/当前IP/当前域名/本站」这类**指代词**替换成任务目标/描述里的**具体值**。约束会被单独注入到执行阶段的提示里，脱离上下文后指代词无法判断指谁。
-  例：目标是 https://abc.example.net → 写「只允许测试 abc.example.net」而不是「只允许测试当前目标」；「仅测目标端口 443，不扫其他端口」而不是「只测当前端口」。若原文只说「当前目标」但目标地址已明确，就把地址填进去。
-- **只登记目标/描述里【明确写出或强调】的约束，严禁臆造**；拿不准类型时用 deny（更保守）。
-- 若目标/描述里确实没有任何操作约束，则**不要**调用 set_constraints。
-登记完约束（如有）后，再进行下面的目标拆分。
+**First, before decomposing objectives: extract operating constraints.**
+Identify explicit rules in the task objective/description about which operations are permitted or prohibited, and register them individually with set_constraints. Skip this extraction when no operating constraints are stated:
+- type=deny: prohibited operations, such as "no port scanning", "no production writes/deletes", "no brute force", or "exclude a particular subdomain".
+- type=allow: explicitly permitted or limited scope, such as "passive reconnaissance only" or "only this domain".
+- Constraints define operating boundaries; they are neither objectives nor attack steps.
+- **Make each constraint self-contained with a specific target.** Replace references such as "current target/port/IP/domain/this site" with concrete values from the task objective/description. Constraints are injected independently into execution prompts, where such references would lose their meaning.
+  Example: for https://abc.example.net, write "Test only abc.example.net", not "Test only the current target"; write "Test only target port 443; do not scan other ports", not "Test only the current port". If the text refers to the current target and the address is known, include that address.
+- **Register only explicitly stated or emphasized constraints. Never invent them.** When the type is uncertain, use deny as the conservative choice.
+- If the objective/description contains no operating constraints, **do not** call set_constraints.
+After registering any constraints, decompose the objectives below.
 
-**目标 = 最终可交付/可核验的结果**
+**An objective is a final deliverable or verifiable outcome.**
 
-**不是目标的内容（禁止列为子目标）**：
-- 信息收集、侦察、端点扫描
-- 漏洞分析与验证过程
-- 攻击步骤、利用手段
-- 结果验证步骤
+**Do not list these as subgoals:**
+- Information gathering, reconnaissance, or endpoint scanning.
+- Vulnerability analysis or verification processes.
+- Attack steps or exploitation methods.
+- Result verification steps.
 
-**拆分原则**：
-- 用户描述的最终目标只有一个 → 输出一个
-- 存在多个**相互独立**的最终交付物 → 分别列出
-- 能对应明确漏洞类的标注 vulnclass；信息收集/业务逻辑类目标留空
-- 严禁臆造用户未提及的目标
+**Decomposition principles:**
+- One final outcome described by the user → one objective.
+- Multiple **independent** final deliverables → separate objectives.
+- Set vulnclass for objectives corresponding to a specific vulnerability class; leave it empty for information gathering/business logic objectives.
+- Never invent objectives the user did not mention.
 
-调用 set_goals 提交结果。`
+Submit the result with set_goals.`
 
 // goalsScopeTail is the code-owned tail appended after the editable goals body
 // WHEN an asset store + task context are available. It teaches the decomposer to
