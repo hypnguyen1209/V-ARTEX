@@ -76,7 +76,7 @@ func (s *Server) startFindingRetest(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Notes = strings.TrimSpace(req.Notes)
 	if utf8.RuneCountInString(req.Notes) > 4000 {
-		writeErr(w, 400, "复测补充说明最多 4000 个字符")
+		writeErr(w, 400, "Retest notes must not exceed 4000 characters")
 		return
 	}
 	f, err := pg.GetFinding(id)
@@ -94,7 +94,7 @@ func (s *Server) startFindingRetest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if a == nil || !a.Enabled {
-		writeErr(w, 409, "漏洞复测 Agent 不存在或未启用，请在 Agent 管理中配置 retester")
+		writeErr(w, 409, "Finding retest agent is missing or disabled; configure retester in Agent Management")
 		return
 	}
 	for _, key := range []string{"get_finding_retest_context", "record_finding_retest_result"} {
@@ -104,7 +104,7 @@ func (s *Server) startFindingRetest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if t == nil || !t.Enabled || !slices.Contains(t.Agents, a.Key) {
-			writeErr(w, 409, "请为复测 Agent 启用并绑定工具："+key)
+			writeErr(w, 409, "Enable and bind this tool to the retest agent: "+key)
 			return
 		}
 	}
@@ -113,7 +113,7 @@ func (s *Server) startFindingRetest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.ctx.Err() != nil {
-		writeErr(w, 503, "服务正在停止")
+		writeErr(w, 503, "Service is stopping")
 		return
 	}
 	retest, conv, created, err := pg.CreateFindingRetest(r.Context(), id, req.Notes)
@@ -143,14 +143,14 @@ func (s *Server) startFindingRetest(w http.ResponseWriter, r *http.Request) {
 // arguments cannot redirect a result into a different finding or conversation.
 func (s *Server) findingRetestTools() []actool.CoreTool {
 	return []actool.CoreTool{
-		roTool("get_finding_retest_context", "读取当前复测会话关联的漏洞证据快照、复测状态、补充说明与当前任务约束。无参数，只能读取本会话。",
+		roTool("get_finding_retest_context", "Read this retest conversation's finding evidence snapshot, retest status, notes, and current task constraints. No arguments; access is limited to this conversation.",
 			objSchema(map[string]any{}), func(ctx context.Context, _ json.RawMessage) (actool.Result, error) {
 				r, err := s.m.pg.FindingRetestForConversation(ctx, intercept.ConvIDFromContext(ctx))
 				if err != nil {
 					return actool.Errorf(err.Error()), nil
 				}
 				if r == nil {
-					return actool.Errorf("当前会话未关联复测记录，请从漏洞详情发起复测"), nil
+					return actool.Errorf("This conversation has no retest record; start a retest from finding details"), nil
 				}
 				var constraints []db.Constraint
 				f, err := s.m.pg.GetFinding(r.FindingID)
@@ -167,11 +167,11 @@ func (s *Server) findingRetestTools() []actool.CoreTool {
 				}
 				return jsonResult(map[string]any{"retest": r, "current_constraints": constraints})
 			}),
-		wrTool("record_finding_retest_result", "为当前复测会话保存唯一结论；原漏洞证据与报告保持不变。会话成功结束且结论为 fixed 时，系统自动将漏洞状态改为已修复；其他结论保留原状态。必须提供本次实际检查的证据，无法确认时写明阻塞原因。",
+		wrTool("record_finding_retest_result", "Save the single conclusion for this retest conversation. Original evidence and report remain unchanged. If the conversation completes successfully with verdict fixed, the system marks the finding fixed; other verdicts preserve its status. Provide evidence actually checked in this retest, or state why confirmation is blocked.",
 			objSchema(map[string]any{
 				"verdict":  map[string]any{"type": "string", "enum": []string{"reproduced", "fixed", "inconclusive"}},
-				"summary":  strParam("本次复测结论摘要"),
-				"evidence": strParam("Markdown：本次实际步骤、观察、对照、结论依据；无法确认则列出已检查内容和阻塞原因"),
+				"summary":  strParam("Summary of this retest conclusion"),
+				"evidence": strParam("Markdown: actual steps, observations, controls, and conclusion basis; if inconclusive, list what was checked and what blocks confirmation"),
 			}, "verdict", "summary", "evidence"), func(ctx context.Context, in json.RawMessage) (actool.Result, error) {
 				var a struct {
 					Verdict  string `json:"verdict"`

@@ -9,12 +9,12 @@ import (
 	"github.com/Autumn-27/artex/db"
 )
 
-// 总览「目标管理」的人工 CRUD 接口。与 agent 侧的 set_goals 工具写同一批 goal 节点,
-// 但入口是人类在 UI 上直接增删改;新增/修改后复用「复活任务」逻辑(admitTask resume:
-// 终态→running、解除暂停、必要时排队),删除不复活(按产品决策)。每个变更 handler 都走
-// beginTaskOperation/decInflight,避免与任务删除竞态(与意图 CRUD 一致)。
+// Manual CRUD for overview goal management, writing the same nodes as set_goals.
+// UI additions/edits reuse revive logic (admitTask resume:
+// terminal->running, unpause, queue if needed); deletion does not revive tasks.
+// Each mutation uses beginTaskOperation/decInflight to avoid task deletion races like intent CRUD.
 
-// listGoals 返回本任务的全部目标(text/vulnclass/state 拆好),供目标管理卡片渲染。
+// listGoals returns parsed text/vulnclass/state for goal management cards.
 func (s *Server) listGoals(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.m.Task(r.PathValue("id"))
 	if !ok {
@@ -29,8 +29,8 @@ func (s *Server) listGoals(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"goals": goalDTOs(goals)})
 }
 
-// addGoal 人工新增一个目标:落库(挂到任务根 spawns 下)→ 记一条「新增了目标」触发唤醒
-// planner → 复活任务,让规划者据新目标重判是否达成。
+// addGoal saves under the task root's spawns edge, records an added-goal trigger,
+// wakes the planner, and revives the task to judge the new goal.
 func (s *Server) addGoal(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.m.Task(r.PathValue("id"))
 	if !ok {
@@ -38,7 +38,7 @@ func (s *Server) addGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.engine.beginTaskOperation(t.ID) {
-		writeErr(w, 409, "任务正在删除,无法新增目标")
+		writeErr(w, 409, "Task is being deleted; cannot add goals")
 		return
 	}
 	defer s.engine.decInflight(t.ID)
@@ -53,7 +53,7 @@ func (s *Server) addGoal(w http.ResponseWriter, r *http.Request) {
 	}
 	text := strings.TrimSpace(body.Text)
 	if text == "" {
-		writeErr(w, 400, "目标内容不能为空")
+		writeErr(w, 400, "Goal text must not be empty")
 		return
 	}
 	payload := map[string]any{"text": text}
@@ -68,18 +68,18 @@ func (s *Server) addGoal(w http.ResponseWriter, r *http.Request) {
 	if of, _ := t.Store.OriginFactID(); of > 0 && id > 0 {
 		_ = t.Store.Link(of, db.RelSpawns, id) // goal descends from the task root (origin fact)
 	}
-	t.NotifyGoal([]string{text}) // 记「人新增了目标:…」触发并唤醒 planner
-	s.reviveTask(t)              // 把已完成/暂停的任务拉回运行态继续跑
+	t.NotifyGoal([]string{text}) // Record manual goal addition and wake the planner.
+	s.reviveTask(t)              // Return completed/paused tasks to running.
 	node, _ := t.Store.GetNode(id)
 	if node == nil {
-		writeErr(w, 500, "目标写入后读取失败")
+		writeErr(w, 500, "Failed to read goal after creation")
 		return
 	}
 	writeJSON(w, 200, goalDTO(node))
 }
 
-// editGoal 人工修改一个目标文本(及 vulnclass):改库 → 记「用户修改了目标由 old 变为 new」
-// 触发唤醒 planner → 复活任务,让规划者据新目标调整方向。
+// editGoal updates text/vulnclass and records the old-to-new goal trigger,
+// wakes the planner, and revives the task to adjust its direction.
 func (s *Server) editGoal(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.m.Task(r.PathValue("id"))
 	if !ok {
@@ -87,7 +87,7 @@ func (s *Server) editGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.engine.beginTaskOperation(t.ID) {
-		writeErr(w, 409, "任务正在删除,无法修改目标")
+		writeErr(w, 409, "Task is being deleted; cannot edit goals")
 		return
 	}
 	defer s.engine.decInflight(t.ID)
@@ -107,7 +107,7 @@ func (s *Server) editGoal(w http.ResponseWriter, r *http.Request) {
 	}
 	text := strings.TrimSpace(body.Text)
 	if text == "" {
-		writeErr(w, 400, "目标内容不能为空")
+		writeErr(w, 400, "Goal text must not be empty")
 		return
 	}
 	node, err := t.Store.GetNode(gid)
@@ -116,7 +116,7 @@ func (s *Server) editGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if node == nil || node.Kind != db.KindGoal {
-		writeErr(w, 404, "目标不存在")
+		writeErr(w, 404, "Goal does not exist")
 		return
 	}
 	oldText := goalDTO(node).Text
@@ -124,18 +124,18 @@ func (s *Server) editGoal(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	t.NotifyGoalEdited(oldText, text) // 记「人修改了目标由 old 变为 new」触发并唤醒 planner
-	s.reviveTask(t)                   // 与新增一致:复活任务据新目标重判
+	t.NotifyGoalEdited(oldText, text) // Record manual goal edit and wake the planner.
+	s.reviveTask(t)                   // As with additions, revive to reassess the new goal.
 	updated, _ := t.Store.GetNode(gid)
 	if updated == nil {
-		writeErr(w, 500, "目标更新后读取失败")
+		writeErr(w, 500, "Failed to read goal after update")
 		return
 	}
 	writeJSON(w, 200, goalDTO(updated))
 }
 
-// deleteGoal 人工删除一个目标(硬删除,级联删边/锚点):删库 → 记「用户删除了该目标 X」
-// 触发唤醒 planner 据此重判剩余目标。按产品决策,删除【不】复活任务。
+// deleteGoal hard-deletes the goal and cascades edges/anchors, records a deletion trigger,
+// and wakes the planner to reassess remaining goals. Deletion does not revive the task.
 func (s *Server) deleteGoal(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.m.Task(r.PathValue("id"))
 	if !ok {
@@ -143,7 +143,7 @@ func (s *Server) deleteGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.engine.beginTaskOperation(t.ID) {
-		writeErr(w, 409, "任务正在删除,无法删除目标")
+		writeErr(w, 409, "Task is being deleted; cannot delete goals")
 		return
 	}
 	defer s.engine.decInflight(t.ID)
@@ -159,7 +159,7 @@ func (s *Server) deleteGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if node == nil || node.Kind != db.KindGoal {
-		writeErr(w, 404, "目标不存在")
+		writeErr(w, 404, "Goal does not exist")
 		return
 	}
 	text := goalDTO(node).Text
@@ -167,6 +167,6 @@ func (s *Server) deleteGoal(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	t.NotifyGoalDeleted(text) // 记「人删除了该目标:…」触发并唤醒 planner(不复活任务)
+	t.NotifyGoalDeleted(text) // Record manual deletion and wake the planner without reviving the task.
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }

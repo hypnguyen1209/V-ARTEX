@@ -121,7 +121,7 @@ func TestSeverityAndStatusLabels(t *testing.T) {
 	if !AtLeast("critical", "") {
 		t.Fatal("空门槛应放行")
 	}
-	if got := StatusLabel("fixed"); got != "已修复" {
+	if got := StatusLabel("fixed"); got != "Fixed" {
 		t.Fatalf("未知状态映射，得到 %q", got)
 	}
 	// 未知状态原样回显，不臆造标签。

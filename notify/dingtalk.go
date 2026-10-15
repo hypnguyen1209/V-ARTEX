@@ -41,7 +41,7 @@ func (dingTalkChannel) Validate(cfg map[string]any) error {
 		return errors.New("缺少 Webhook 地址")
 	}
 	if err := validateHTTPURL(hook); err != nil {
-		return fmt.Errorf("Webhook 地址无效: %w", err)
+		return fmt.Errorf("Invalid Webhook URL: %w", err)
 	}
 	return nil
 }
@@ -69,7 +69,7 @@ func (c dingTalkChannel) Send(ctx context.Context, cfg map[string]any, m Message
 				"title":          title,
 				"text":           text,
 				"btnOrientation": "0",
-				"singleTitle":    "查看详情",
+				"singleTitle":    "View details",
 				"singleURL":      m.Items[0].DetailURL,
 			},
 		}

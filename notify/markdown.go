@@ -130,12 +130,12 @@ func markdownBody(m Message, maxBytes int) (string, int) {
 func markdownBatchIntro(m Message, items []Item, total int) string {
 	var b strings.Builder
 	if m.WindowMinutes > 0 {
-		fmt.Fprintf(&b, "**近 %d 分钟新增 %d 个漏洞**", m.WindowMinutes, total)
+		fmt.Fprintf(&b, "**In the last %d minutes: %d findings added**", m.WindowMinutes, total)
 	} else {
-		fmt.Fprintf(&b, "**新增 %d 个漏洞**", total)
+		fmt.Fprintf(&b, "**%d new findings**", total)
 	}
 	if extra := total - len(items); extra > 0 {
-		fmt.Fprintf(&b, "（本条显示前 %d 条，其余 %d 条将在下一条消息继续）", len(items), extra)
+		fmt.Fprintf(&b, " (showing the first %d; remaining %d continue in the next message)", len(items), extra)
 	}
 	// 按级别给出分布，让读者一眼看到有没有严重项。只统计**本条实际包含**的
 	// 条目，保证「严重 3」和下面能数出来的条目一致。
@@ -183,7 +183,7 @@ func writeItem(b *strings.Builder, it Item, prefix string, single bool) {
 	}
 	b.WriteString(line + "\n")
 	if it.IsStatusChange() {
-		fmt.Fprintf(b, "**状态变更**：%s → %s\n",
+		fmt.Fprintf(b, "**Status change**: %s → %s\n",
 			markdownText(StatusLabel(it.FromStatus), 0), markdownText(StatusLabel(it.ToStatus), 0))
 	}
 	if it.VulnClass != "" && it.VulnClass != it.Title() {
@@ -194,10 +194,10 @@ func writeItem(b *strings.Builder, it Item, prefix string, single bool) {
 	}
 	if it.Summary != "" {
 		if s := markdownText(it.Summary, maxSummaryRunes); s != "" {
-			fmt.Fprintf(b, "**摘要**：%s\n", s)
+			fmt.Fprintf(b, "**Summary**: %s\n", s)
 		}
 	}
 	if it.DetailURL != "" {
-		fmt.Fprintf(b, "[查看详情](%s)\n", it.DetailURL)
+		fmt.Fprintf(b, "[View details](%s)\n", it.DetailURL)
 	}
 }

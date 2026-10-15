@@ -49,7 +49,7 @@ func SeverityLabel(severity string) string {
 	case "critical":
 		return "🔴 严重"
 	case "high":
-		return "🟠 高危"
+		return "🟠 High"
 	case "medium":
 		return "🟡 中危"
 	case "low":
@@ -71,7 +71,7 @@ func StatusLabel(status string) string {
 	case "resolved":
 		return "已处理"
 	case "fixed":
-		return "已修复"
+		return "Fixed"
 	case "false_positive":
 		return "误报"
 	case "ignored":

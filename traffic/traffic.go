@@ -131,7 +131,7 @@ const (
 // TrafficSearchDescription is persisted into the tool catalog for new and
 // upgraded installations. Keep it in the traffic package so the runtime tool
 // and the catalog migration cannot drift apart.
-const TrafficSearchDescription = "查询记录代理已抓取的目标流量（必须指定 host；支持裸主机、主机:端口或完整 URL，可再按 URL 子串或正文关键词过滤）。指定端口时只返回该服务的流量，避免同一 IP 的不同端口串包。body_contains 会在已抓取的请求/响应头与正文中做全文搜索，支持任意子串和中文（至少 3 个字符）。仅返回极轻量索引(id/method/url/status/resp_len)，不含响应内容；结果非空后必须用 traffic_get 逐条核实请求/响应，再把确实支持当前漏洞的 ID 交给 bind_finding_traffic。默认只返回 3 条、每页最多 10 条；结果多时用 page 翻页。"
+const TrafficSearchDescription = "Search target traffic already captured by the recording proxy. host is required and supports a bare host, host:port, or full URL; optionally filter by URL substring or body keyword. An explicit port restricts results to that service, preventing traffic from different ports on the same IP being mixed. body_contains searches captured request/response headers and bodies for any substring, including non-ASCII text (at least 3 characters). Returns only a lightweight index (id/method/url/status/resp_len), without response content. For nonempty results, verify each request/response with traffic_get before passing IDs that actually support the current finding to bind_finding_traffic. Defaults to 3 entries, at most 10 per page; use page to paginate."
 
 // Traffic runs the recording proxy and owns the file tree + index.
 type Traffic struct {
