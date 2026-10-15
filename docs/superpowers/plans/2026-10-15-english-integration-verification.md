@@ -30,7 +30,17 @@ Expected: no output and exit 0 after inversion.
 Run:
 
 ```bash
-if git ls-files | LC_ALL=C grep -P '[\x{3400}-\x{4DBF}\x{4E00}-\x{9FFF}\x{F900}-\x{FAFF}]'; then exit 1; fi
+python3 - <<'PY'
+import re
+import subprocess
+import sys
+
+filenames = subprocess.check_output(["git", "ls-files", "-z"]).decode("utf-8").split("\0")
+matches = [name for name in filenames if re.search(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]", name)]
+for name in matches:
+    print(name)
+sys.exit(bool(matches))
+PY
 ```
 
 Expected: no output and exit 0.
