@@ -2,9 +2,10 @@ package server
 
 import (
 	"crypto/rand"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
-	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,10 +18,12 @@ import (
 )
 
 const (
-	jwtKeyFilename = "jwt.key"
-	authPassKey    = "auth.password_hash"
-	jwtTTL         = 7 * 24 * time.Hour
-	keyChars       = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	jwtKeyFilename      = "jwt.key"
+	jwtKeyVersionPrefix = "v2:"
+	jwtKeyBackupSuffix  = ".legacy"
+	jwtKeyBytes         = 32
+	authPassKey         = "auth.password_hash"
+	jwtTTL              = 7 * 24 * time.Hour
 
 	// The minimum matches the setup page validation; frontend-only validation
 	// can be bypassed through the API. bcrypt imposes a 72-byte maximum:
@@ -45,42 +48,147 @@ func validatePassword(pw string) string {
 	return ""
 }
 
-// loadOrCreateJWTKey reads the 32-byte signing key from keyDir/jwt.key. keyDir is
-// the project base dir (next to the executable), NOT the browsable workspace root
-// (dataDir) — the signing key must never be listable/downloadable via the file
-// manager. Legacy installs kept it at dataDir/jwt.key; if present there and not yet
-// at the new location, it is migrated (key preserved, so sessions stay valid) and
-// the old file removed so it disappears from the workspace. On first run a random
-// key is generated and persisted.
+type jwtKeyFileOps struct {
+	rename func(string, string) error
+	remove func(string) error
+}
+
+// loadOrCreateJWTKey loads a versioned signing key outside the browsable workspace.
+// Legacy keys at either location are replaced once, invalidating existing sessions.
 func loadOrCreateJWTKey(keyDir, dataDir string) ([]byte, error) {
+	return loadOrCreateJWTKeyWithOps(keyDir, dataDir, jwtKeyFileOps{rename: os.Rename, remove: os.Remove})
+}
+
+func loadOrCreateJWTKeyWithOps(keyDir, dataDir string, ops jwtKeyFileOps) ([]byte, error) {
 	path := filepath.Join(keyDir, jwtKeyFilename)
-	// one-time migration out of the old in-workspace location.
-	if legacy := filepath.Join(dataDir, jwtKeyFilename); legacy != path {
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			if data, rerr := os.ReadFile(legacy); rerr == nil {
-				if werr := os.WriteFile(path, data, 0o600); werr == nil {
-					_ = os.Remove(legacy)
-					log.Printf("[auth] JWT key migrated from %s to %s (outside the browsable workspace)", legacy, path)
-				}
+	backup := path + jwtKeyBackupSuffix
+	key, currentExists, err := readJWTKey(path)
+	if err != nil {
+		return nil, err
+	}
+	backupKey, backupExists, err := readJWTKey(backup)
+	if err != nil {
+		return nil, err
+	}
+	if backupKey != nil {
+		return nil, fmt.Errorf("jwt key backup must contain an unversioned key")
+	}
+	if currentExists && key == nil && backupExists {
+		return nil, fmt.Errorf("both current and backup jwt keys are unversioned")
+	}
+
+	workspace := filepath.Join(dataDir, jwtKeyFilename)
+	workspaceExists := false
+	if workspace != path {
+		keyDirInfo, err := os.Stat(keyDir)
+		if err != nil {
+			return nil, fmt.Errorf("stat jwt key directory: %w", err)
+		}
+		dataDirInfo, err := os.Stat(dataDir)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf("stat workspace directory: %w", err)
+		}
+		if err != nil || !os.SameFile(keyDirInfo, dataDirInfo) {
+			_, workspaceExists, err = readJWTKey(workspace)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
-	if data, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(data))) >= 32 {
-		return []byte(strings.TrimSpace(string(data))), nil
-	}
-	buf := make([]byte, 32)
-	for i := range buf {
-		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(keyChars))))
+	if key == nil {
+		key, err = writeVersionedJWTKey(path, currentExists, ops)
 		if err != nil {
-			return nil, fmt.Errorf("generate jwt key: %w", err)
+			return nil, err
 		}
-		buf[i] = keyChars[n.Int64()]
 	}
-	if err := os.WriteFile(path, buf, 0600); err != nil {
+	if backupExists {
+		if err := ops.remove(backup); err != nil {
+			return nil, fmt.Errorf("remove jwt key backup: %w", err)
+		}
+	}
+	if workspaceExists {
+		if err := ops.remove(workspace); err != nil {
+			return nil, fmt.Errorf("remove stale workspace jwt key: %w", err)
+		}
+	}
+	return key, nil
+}
+
+func readJWTKey(path string) ([]byte, bool, error) {
+	_, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("stat jwt key %s: %w", path, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false, fmt.Errorf("read jwt key %s: %w", path, err)
+	}
+	key, err := decodeVersionedJWTKey(data)
+	if err != nil {
+		return nil, true, fmt.Errorf("invalid jwt key %s: %w", path, err)
+	}
+	return key, true, nil
+}
+
+// decodeVersionedJWTKey returns nil for a valid legacy key, which must be rotated.
+func decodeVersionedJWTKey(data []byte) ([]byte, error) {
+	text := string(data)
+	if !strings.HasPrefix(strings.TrimSpace(text), jwtKeyVersionPrefix) {
+		if len(strings.TrimSpace(text)) < jwtKeyBytes {
+			return nil, fmt.Errorf("legacy key must contain at least %d bytes", jwtKeyBytes)
+		}
+		return nil, nil
+	}
+	encoded := strings.TrimSuffix(strings.TrimPrefix(text, jwtKeyVersionPrefix), "\n")
+	key, err := base64.RawURLEncoding.Strict().DecodeString(encoded)
+	if err != nil || len(key) != jwtKeyBytes || jwtKeyVersionPrefix+base64.RawURLEncoding.EncodeToString(key)+"\n" != text {
+		return nil, fmt.Errorf("versioned key must encode exactly %d bytes as raw base64url followed by one newline", jwtKeyBytes)
+	}
+	return key, nil
+}
+
+func writeVersionedJWTKey(path string, rotate bool, ops jwtKeyFileOps) ([]byte, error) {
+	key := make([]byte, jwtKeyBytes)
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("generate jwt key: %w", err)
+	}
+	temp, err := os.CreateTemp(filepath.Dir(path), ".jwt.key-*")
+	if err != nil {
+		return nil, fmt.Errorf("create jwt key temp file: %w", err)
+	}
+	defer ops.remove(temp.Name())
+	_, writeErr := temp.WriteString(jwtKeyVersionPrefix + base64.RawURLEncoding.EncodeToString(key) + "\n")
+	if writeErr == nil {
+		writeErr = temp.Sync()
+	}
+	closeErr := temp.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
 		return nil, fmt.Errorf("write jwt key: %w", err)
 	}
+	backup := path + jwtKeyBackupSuffix
+	if rotate {
+		if err := ops.rename(path, backup); err != nil {
+			return nil, fmt.Errorf("back up legacy jwt key: %w", err)
+		}
+	}
+	if err := ops.rename(temp.Name(), path); err != nil {
+		if rotate {
+			if restoreErr := ops.rename(backup, path); restoreErr != nil {
+				err = errors.Join(err, fmt.Errorf("restore legacy jwt key: %w", restoreErr))
+			}
+		}
+		return nil, fmt.Errorf("install versioned jwt key: %w", err)
+	}
+	if rotate {
+		if err := ops.remove(backup); err != nil {
+			return nil, fmt.Errorf("remove jwt key backup: %w", err)
+		}
+	}
 	log.Printf("[auth] New JWT key written to %s", path)
-	return buf, nil
+	return key, nil
 }
 
 // signJWT issues a 7-day HS256 token for user ARTEX.
