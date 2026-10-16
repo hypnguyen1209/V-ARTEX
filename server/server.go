@@ -39,9 +39,12 @@ var BuildVersion = "dev"
 // Server exposes the ARTEX backend over a JSON HTTP API for the shadcn/ui
 // frontend.
 type Server struct {
-	m      *Manager
-	engine *Engine
-	ctx    context.Context
+	m         *Manager
+	engine    *Engine
+	ctx       context.Context
+	cancel    context.CancelCauseFunc
+	close     sync.Once
+	startupWG sync.WaitGroup
 
 	skillDir       string // root directory for skill subdirectories
 	jwtKey         []byte // HS256 signing key loaded from / generated into dataDir/jwt.key
@@ -153,7 +156,8 @@ func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDi
 	if err != nil {
 		log.Fatalf("[auth] JWT key: %v", err)
 	}
-	s := &Server{m: m, engine: NewEngine(m), ctx: ctx, skillDir: skillDir, jwtKey: key, chatBusy: map[string]bool{},
+	ctx, cancel := context.WithCancelCause(ctx)
+	s := &Server{m: m, engine: NewEngine(m), ctx: ctx, cancel: cancel, skillDir: skillDir, jwtKey: key, chatBusy: map[string]bool{},
 		chatCancel: map[string]context.CancelCauseFunc{}, triggerQ: map[string][]triggeredRun{},
 		triggerActive: map[string]int{}, triggerCfg: map[string]triggerBehavior{},
 		profChatAgents: map[int64]*agent.ChatAgent{},
@@ -234,15 +238,15 @@ func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDi
 		if err := s.seedFindingRetester(); err != nil {
 			log.Printf("[retester] seed: %v", err)
 		}
-		go s.evidenceStore().RunGC(s.ctx)
-		s.seedPythonInterpreter()     // Detect and persist Python interpreter at startup only when unset.
-		go newScheduler(s).Run(s.ctx) // P3 trigger scheduling (timers, findings, goals), custom agents only.
+		s.startBackground(func() { s.evidenceStore().RunGC(s.ctx) })
+		s.seedPythonInterpreter()                                // Detect and persist Python interpreter at startup only when unset.
+		s.startBackground(func() { newScheduler(s).Run(s.ctx) }) // P3 trigger scheduling (timers, findings, goals), custom agents only.
 		// Finding IM delivery engine runs independently of Scheduler: its three-second latency
 		// differs from trigger cadence, and a blocked notification must not affect agent triggers.
-		go newNotifier(s).Run(s.ctx)
+		s.startBackground(func() { newNotifier(s).Run(s.ctx) })
 		// Fill the tool cache for any enabled MCP that has none yet (notably the
 		// seeded browser MCP on first run). Async so it never blocks startup.
-		go s.discoverEmptyMCPsOnStartup()
+		s.startBackground(s.discoverEmptyMCPsOnStartup)
 		logSink.SetDB(ctx, m.pg) // restore last 100 log rows and enable async persistence
 	}
 	// precedence: persisted DB config > env.
@@ -262,10 +266,35 @@ func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDi
 		log.Printf("[engine] no LLM provider configured — engine idle until set via /api/llm or env")
 	}
 	s.restoreTaskRuntimes()
-	go s.reconcileConcurrency()
+	s.startBackground(s.reconcileConcurrency)
 	s.startTaskArchiveWorker()
 	s.wireInterceptReviewer() // Model fallback approval judges calls that matched no intercept rule.
 	return s
+}
+
+func (s *Server) startBackground(run func()) {
+	s.startupWG.Add(1)
+	go func() {
+		defer s.startupWG.Done()
+		run()
+	}()
+}
+
+// Close stops startup workers before the caller closes the Manager or removes
+// its data directory. It is safe to call more than once.
+func (s *Server) Close() {
+	if s == nil {
+		return
+	}
+	s.close.Do(func() {
+		s.cancel(agent.AbortShutdown)
+		s.engine.Close()
+		s.archiveWG.Wait()
+		if s.side != nil {
+			<-s.side.done
+		}
+		s.startupWG.Wait()
+	})
 }
 
 // Restored deadline and worker loops must inherit the same context as new tasks,

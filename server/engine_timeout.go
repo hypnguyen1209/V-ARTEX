@@ -50,7 +50,7 @@ func (e *Engine) inflightCounter(taskID string) *int64 {
 func (e *Engine) beginTaskOperation(taskID string) bool {
 	e.deleteMu.RLock()
 	defer e.deleteMu.RUnlock()
-	if e.IsDeleting(taskID) {
+	if e.closed || e.IsDeleting(taskID) {
 		return false
 	}
 	atomic.AddInt64(e.inflightCounter(taskID), 1)
@@ -133,7 +133,7 @@ func (e *Engine) startDeadlineCoordinator(ctx context.Context, t *Task) {
 		return
 	}
 	e.deleteMu.RLock()
-	if e.IsDeleting(t.ID) {
+	if e.closed || e.IsDeleting(t.ID) {
 		e.deleteMu.RUnlock()
 		return
 	}

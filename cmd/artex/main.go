@@ -123,6 +123,7 @@ func run() int {
 	}
 	log.Printf("[config] Skill directory: %s", skillDir)
 	srv := server.New(ctx, mgr, skillDir, *dataDir, jwtKeyDir(), config.BaseDir())
+	defer srv.Close()
 	srv.WarnIfExposed(*addr)
 	httpSrv := &http.Server{
 		Addr:              *addr,

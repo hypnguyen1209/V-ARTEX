@@ -25,6 +25,7 @@ func TestTaskMetadataPatchReturnsRenameAndPin(t *testing.T) {
 	taskID, _ := strconv.ParseInt(task.ID, 10, 64)
 	defer func() { _ = m.pg.DeleteTask(taskID) }()
 	s := New(context.Background(), m, t.TempDir(), t.TempDir(), t.TempDir())
+	defer s.Close()
 	token, err := signJWT(s.jwtKey)
 	if err != nil {
 		t.Fatal(err)
@@ -67,6 +68,7 @@ func TestConversationBatchDeleteReportsMissing(t *testing.T) {
 	}
 	defer m.Close()
 	s := New(context.Background(), m, t.TempDir(), t.TempDir(), t.TempDir())
+	defer s.Close()
 	first, err := m.pg.CreateConversation("mainagent", "batch-http-first", nil)
 	if err != nil {
 		t.Fatal(err)

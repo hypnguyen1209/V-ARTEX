@@ -107,6 +107,7 @@ type Engine struct {
 	// task operation. Once BeginDelete returns, every admitted writer is reflected
 	// in inflight and every later writer is rejected.
 	deleteMu sync.RWMutex
+	closed   bool
 
 	// Every long-lived task goroutine (planner, workers and deadline coordinator)
 	// runs under one task-scoped context. Successful deletion cancels that context,
@@ -186,6 +187,10 @@ func (e *Engine) Pause(taskID string, cause error) {
 // paused/queued if cleanup fails.
 func (e *Engine) BeginDelete(taskID string) bool {
 	e.deleteMu.Lock()
+	if e.closed {
+		e.deleteMu.Unlock()
+		return false
+	}
 	if _, loaded := e.deleting.LoadOrStore(taskID, true); loaded {
 		e.deleteMu.Unlock()
 		return false
@@ -288,6 +293,31 @@ func (e *Engine) StopTask(taskID string) {
 	e.deleteMu.Lock()
 	e.deleting.Delete(taskID)
 	e.deleteMu.Unlock()
+}
+
+// Close prevents new task work, cancels every task runtime, and waits until its
+// planner, workers, and deadline coordinator have stopped.
+func (e *Engine) Close() {
+	if e == nil {
+		return
+	}
+	e.deleteMu.Lock()
+	if e.closed {
+		e.deleteMu.Unlock()
+		return
+	}
+	e.closed = true
+	e.runtimeMu.Lock()
+	runtimes := make([]*taskRuntime, 0, len(e.runtimes))
+	for _, rt := range e.runtimes {
+		rt.cancel()
+		runtimes = append(runtimes, rt)
+	}
+	e.runtimeMu.Unlock()
+	e.deleteMu.Unlock()
+	for _, rt := range runtimes {
+		rt.wg.Wait()
+	}
 }
 
 // cancelExec cancels a task's current per-task exec context (any in-flight
@@ -748,7 +778,7 @@ func (e *Engine) ReadyFor(t *Task) bool {
 func (e *Engine) Run(ctx context.Context, t *Task) {
 	workers := e.m.Workers()
 	e.deleteMu.RLock()
-	if e.IsDeleting(t.ID) {
+	if e.closed || e.IsDeleting(t.ID) {
 		e.deleteMu.RUnlock()
 		return
 	}

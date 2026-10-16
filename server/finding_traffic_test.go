@@ -40,6 +40,7 @@ func trafficEvidenceServer(t *testing.T) (*Server, *db.RecordedFinding, func(str
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	s := New(ctx, m, t.TempDir(), t.TempDir(), t.TempDir())
+	t.Cleanup(s.Close)
 	s.archiveWG.Wait()
 	// The archive test below replaces the cancelled service context. Wait for
 	// the side-question snapshot writer too before reusing this fixture.

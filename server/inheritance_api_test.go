@@ -27,10 +27,10 @@ func TestInheritedActivityDetailAndRelationDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
+	defer func() {
 		_, _ = m.DeleteTask(current.ID, DeleteTaskOptions{})
 		_, _ = m.DeleteTask(source.ID, DeleteTaskOptions{})
-	})
+	}()
 
 	plannerStep, err := source.Store.AppendActivity(db.Activity{
 		Worker: "planner", Kind: "text", Summary: "private planner", Detail: "private planner detail",
@@ -53,6 +53,7 @@ func TestInheritedActivityDetailAndRelationDeletion(t *testing.T) {
 	}
 
 	s := New(context.Background(), m, t.TempDir(), t.TempDir(), t.TempDir())
+	defer s.Close()
 	token, err := signJWT(s.jwtKey)
 	if err != nil {
 		t.Fatal(err)
