@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -152,8 +153,17 @@ func run() int {
 	log.Println("shutting down...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = httpSrv.Shutdown(shutdownCtx)
+	shutdownHTTPServer(httpSrv, shutdownCtx)
 	return code
+}
+
+func shutdownHTTPServer(httpSrv *http.Server, ctx context.Context) {
+	if err := httpSrv.Shutdown(ctx); err != nil {
+		log.Printf("[shutdown] graceful HTTP shutdown failed: %v; forcing connections closed", err)
+		if closeErr := httpSrv.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
+			log.Printf("[shutdown] forced HTTP close failed: %v", closeErr)
+		}
+	}
 }
 
 // shutdownContext deliberately does not derive from signalCtx. If it did, the
