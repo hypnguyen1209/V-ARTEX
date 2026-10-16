@@ -25,6 +25,7 @@ export const auth = {
 
   replaceToken(token: string): boolean {
     try {
+      if (typeof token !== "string" || !token.trim()) throw new Error("Missing replacement token");
       this.setToken(token);
       return true;
     } catch {
@@ -38,8 +39,11 @@ export const auth = {
   },
 
   clearToken(): void {
-    localStorage.removeItem(TOKEN_KEY);
-    document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`;
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } finally {
+      document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`;
+    }
   },
 
   // Read the current user from the JWT payload's sub field for display only; no signature verification.

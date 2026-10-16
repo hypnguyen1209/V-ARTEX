@@ -3,6 +3,7 @@
 // a few fields the backend serializes differently (e.g. created_at as a unix int)
 // are passed through and formatted at the call site.
 
+import { auth } from "@/lib/auth";
 import type { ChatMention } from "@/lib/chat-mentions";
 import { MOCK } from "@/lib/mock/enabled";
 import { mockHandle } from "@/lib/mock/handler";
@@ -123,9 +124,12 @@ export async function http<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (r.status === 401) {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("artex_token");
-      document.cookie = "artex_token=; path=/; max-age=0";
+    if (typeof window !== "undefined" && getToken() === token) {
+      try {
+        auth.clearToken();
+      } catch {
+        // Cleanup failure must not prevent redirecting an expired session to sign-in.
+      }
       window.location.href = "/login";
     }
     throw new Error("Unauthorized");

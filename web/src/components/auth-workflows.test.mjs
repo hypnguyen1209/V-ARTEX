@@ -67,7 +67,7 @@ function handler(path, name, context) {
   const ast = sourceFile(path);
   const declaration = nodes(ast, (node) => ts.isFunctionDeclaration(node) && node.name?.text === name)[0];
   assert.ok(declaration, `${name} is missing`);
-  return evaluate(`${declaration.getText(ast)}\n${name};`, context);
+  return evaluate(`${declaration.getText(ast).replace(/^export\s+/, "")}\n${name};`, context);
 }
 
 function setupContext(setupToken) {
@@ -220,6 +220,144 @@ test("replacement reports failure even when clearing storage also throws", () =>
   assert.equal(typeof auth.replaceToken, "function");
   assert.equal(auth.replaceToken("fresh-jwt"), false);
   assert.equal(removals, 1);
+});
+
+test("clearing auth expires the cookie even when local storage removal throws", () => {
+  const cookies = [];
+  const auth = loadAuth(
+    {
+      removeItem: () => {
+        throw new Error("removal denied");
+      },
+    },
+    {
+      set cookie(value) {
+        cookies.push(value);
+      },
+    },
+  );
+  assert.throws(() => auth.clearToken(), /removal denied/);
+  assert.deepEqual(cookies, ["artex_token=; path=/; max-age=0"]);
+});
+
+test("partial replacement failure attempts cookie expiration even when removal throws", () => {
+  const events = [];
+  const auth = loadAuth(
+    {
+      setItem: (key, value) => events.push(["store", key, value]),
+      removeItem: (key) => {
+        events.push(["remove", key]);
+        throw new Error("removal denied");
+      },
+    },
+    {
+      set cookie(value) {
+        events.push(["cookie", value]);
+        if (value.includes("fresh-jwt")) throw new Error("replacement cookie denied");
+      },
+    },
+  );
+  assert.equal(auth.replaceToken("fresh-jwt"), false);
+  assert.deepEqual(
+    events.map((event) => event[0]),
+    ["store", "cookie", "remove", "cookie"],
+  );
+  assert.equal(events[3][1], "artex_token=; path=/; max-age=0");
+});
+
+for (const token of ["", undefined, null, "   "]) {
+  test(`invalid replacement token ${JSON.stringify(token)} is never stored and clears old auth`, () => {
+    const stored = new Map([["artex_token", "old-jwt"]]);
+    const writes = [];
+    const document = { cookie: "artex_token=old-jwt" };
+    const auth = loadAuth(
+      {
+        setItem: (key, value) => {
+          writes.push(value);
+          stored.set(key, value);
+        },
+        removeItem: (key) => stored.delete(key),
+      },
+      document,
+    );
+    assert.equal(auth.replaceToken(token), false);
+    assert.deepEqual(writes, []);
+    assert.equal(stored.has("artex_token"), false);
+    assert.equal(document.cookie, "artex_token=; path=/; max-age=0");
+  });
+}
+
+for (const [initialToken, replacement] of [
+  ["old-jwt", "fresh-jwt"],
+  [null, "fresh-jwt"],
+  ["old-jwt", null],
+  [null, null],
+]) {
+  test(`delayed ${initialToken ? "authenticated" : "unauthenticated"} 401 ${replacement ? "preserves a newer session" : "clears the current session and redirects"}`, async () => {
+    const stored = new Map(initialToken ? [["artex_token", initialToken]] : []);
+    const storage = {
+      getItem: (key) => stored.get(key) ?? null,
+      setItem: (key, value) => stored.set(key, value),
+      removeItem: (key) => stored.delete(key),
+    };
+    const document = { cookie: initialToken ? `artex_token=${initialToken}` : "" };
+    const window = { location: { href: "/function/tasks" } };
+    const auth = loadAuth(storage, document);
+    let respond;
+    let request;
+    const http = handler("../lib/api.ts", "http", {
+      MOCK: false,
+      getToken: handler("../lib/api.ts", "getToken", { localStorage: storage, window }),
+      auth,
+      localStorage: storage,
+      document,
+      window,
+      fetch: (path, init) => {
+        request = { path, init };
+        return new Promise((resolve) => {
+          respond = resolve;
+        });
+      },
+    });
+    const pending = http("/tasks");
+    assert.equal(request.path, "/api/tasks");
+    assert.equal(request.init.headers.Authorization, initialToken ? `Bearer ${initialToken}` : undefined);
+    if (replacement) assert.equal(auth.replaceToken(replacement), true);
+    respond({ status: 401, ok: false });
+    await assert.rejects(pending, /Unauthorized/);
+    assert.equal(stored.get("artex_token") ?? null, replacement);
+    assert.equal(window.location.href, replacement ? "/function/tasks" : "/login");
+    if (replacement) assert.match(document.cookie, /^artex_token=fresh-jwt;/);
+    else assert.equal(document.cookie, "artex_token=; path=/; max-age=0");
+  });
+}
+
+test("current-token 401 still expires cookies and redirects when storage removal throws", async () => {
+  const cookies = [];
+  const storage = {
+    getItem: () => "old-jwt",
+    removeItem: () => {
+      throw new Error("removal denied");
+    },
+  };
+  const document = {
+    set cookie(value) {
+      cookies.push(value);
+    },
+  };
+  const window = { location: { href: "/function/tasks" } };
+  const http = handler("../lib/api.ts", "http", {
+    MOCK: false,
+    getToken: handler("../lib/api.ts", "getToken", { localStorage: storage, window }),
+    auth: loadAuth(storage, document),
+    localStorage: storage,
+    document,
+    window,
+    fetch: async () => ({ status: 401, ok: false }),
+  });
+  await assert.rejects(http("/tasks"), /Unauthorized/);
+  assert.deepEqual(cookies, ["artex_token=; path=/; max-age=0"]);
+  assert.equal(window.location.href, "/login");
 });
 
 test("setup rejects a blank token before calling initialization", async () => {
