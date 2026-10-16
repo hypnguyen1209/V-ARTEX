@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -36,6 +38,7 @@ const (
 	authInitialCooldown = 30 * time.Second
 	authMaxCooldown     = 10 * time.Minute
 	authMaxClients      = 10000
+	maxAuthRequestBytes = 4 << 10
 
 	// The minimum matches the setup page validation; frontend-only validation
 	// can be bypassed through the API. bcrypt imposes a 72-byte maximum:
@@ -69,6 +72,14 @@ const (
 func (s *Server) recordAuthFailure(r *http.Request, operation string) {
 	s.limiter().failure(clientKey(r))
 	log.Printf("[auth] Failed %s from %s", operation, clientLogID(r))
+}
+
+func decodeAuthRequest(w http.ResponseWriter, r *http.Request, value any) error {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAuthRequestBytes))
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(body, value)
 }
 
 var passHashCacheTTL = 2 * time.Second
@@ -616,7 +627,7 @@ func (s *Server) authInit(w http.ResponseWriter, r *http.Request) {
 		Password   string `json:"password"`
 		SetupToken string `json:"setup_token"`
 	}
-	if err := decode(r, &req); err != nil {
+	if err := decodeAuthRequest(w, r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, authErrInvalidRequest)
 		return
 	}
@@ -701,8 +712,17 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusTooManyRequests, authErrTooManyAttempts)
 		return
 	}
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	decodeErr := decodeAuthRequest(w, r, &req)
 	s.initMu.Lock()
 	defer s.initMu.Unlock()
+	if allowed, _ := s.limiter().allow(key); !allowed {
+		writeErr(w, http.StatusTooManyRequests, authErrTooManyAttempts)
+		return
+	}
 	hash, err := s.reloadPassHash()
 	if err != nil {
 		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
@@ -713,11 +733,7 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, authErrUnauthorized)
 		return
 	}
-	var req struct {
-		OldPassword string `json:"old_password"`
-		NewPassword string `json:"new_password"`
-	}
-	if err := decode(r, &req); err != nil {
+	if decodeErr != nil {
 		writeErr(w, http.StatusBadRequest, authErrInvalidRequest)
 		return
 	}
@@ -774,8 +790,14 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := decode(r, &req); err != nil {
+	if err := decodeAuthRequest(w, r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, authErrInvalidRequest)
+		return
+	}
+	s.initMu.Lock()
+	defer s.initMu.Unlock()
+	if allowed, _ := s.limiter().allow(key); !allowed {
+		writeErr(w, http.StatusTooManyRequests, authErrTooManyAttempts)
 		return
 	}
 	hash, err := s.reloadPassHash()

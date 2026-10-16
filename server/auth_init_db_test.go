@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -511,4 +512,182 @@ func TestAuthLoginComparesPasswordBeforeUsername(t *testing.T) {
 		return
 	}
 	t.Fatal("authLogin was not found")
+}
+
+type authParkedBody struct {
+	io.Reader
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (b *authParkedBody) Read(p []byte) (int, error) {
+	b.once.Do(func() {
+		close(b.entered)
+		<-b.release
+	})
+	return b.Reader.Read(p)
+}
+
+func (b *authParkedBody) Close() error { return nil }
+
+func parkedAuthRequest(t *testing.T, rig *authTestRig, path, bearer, body string) (*authParkedBody, <-chan *httptest.ResponseRecorder) {
+	t.Helper()
+	reader := &authParkedBody{Reader: strings.NewReader(body), entered: make(chan struct{}), release: make(chan struct{})}
+	// Give the decoder the opening brace before parking the incomplete body.
+	req := httptest.NewRequest(http.MethodPost, path, io.MultiReader(strings.NewReader("{"), reader))
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	done := make(chan *httptest.ResponseRecorder, 1)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		rec := httptest.NewRecorder()
+		rig.h.ServeHTTP(rec, req)
+		done <- rec
+	}()
+	t.Cleanup(func() {
+		select {
+		case <-reader.release:
+		default:
+			close(reader.release)
+		}
+		select {
+		case <-finished:
+		case <-time.After(5 * time.Second):
+			t.Error("parked auth request did not finish")
+		}
+	})
+	select {
+	case <-reader.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("request did not reach its incomplete body")
+	}
+	return reader, done
+}
+
+func TestAuthParkedRequestsRecheckCooldownDB(t *testing.T) {
+	for _, path := range []string{"/api/auth/init", "/api/auth/login", "/api/auth/change-password"} {
+		t.Run(path, func(t *testing.T) {
+			rig := newAuthTestRig(t)
+			rig.s.bootstrapAuth()
+			bearer := ""
+			if path != "/api/auth/init" {
+				bearer = rig.initialize()
+			}
+			reader, done := parkedAuthRequest(t, rig, path, bearer,
+				`"username":"ARTEX","password":"wrong-password-123","setup_token":"wrong-token","old_password":"wrong-password-123","new_password":"next-password-123"}`)
+			peer := clientKey(httptest.NewRequest(http.MethodPost, path, nil))
+			for i := 0; i < 5; i++ {
+				rig.s.limiter().failure(peer)
+			}
+			close(reader.release)
+			select {
+			case rec := <-done:
+				if rec.Code != http.StatusTooManyRequests {
+					t.Fatalf("parked request bypassed cooldown: status=%d", rec.Code)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("released request did not finish")
+			}
+		})
+	}
+}
+
+func TestAuthConcurrentBadLoginsStopAtFailureThresholdDB(t *testing.T) {
+	rig := newAuthTestRig(t)
+	rig.initialize()
+	const count = 10
+	readers := make([]*authParkedBody, 0, count)
+	responses := make([]<-chan *httptest.ResponseRecorder, 0, count)
+	for i := 0; i < count; i++ {
+		reader, done := parkedAuthRequest(t, rig, "/api/auth/login", "", `"username":"ARTEX","password":"wrong-password-123"}`)
+		readers, responses = append(readers, reader), append(responses, done)
+	}
+	for _, reader := range readers {
+		close(reader.release)
+	}
+	failed, blocked := 0, 0
+	for _, done := range responses {
+		select {
+		case rec := <-done:
+			switch rec.Code {
+			case http.StatusUnauthorized:
+				failed++
+			case http.StatusTooManyRequests:
+				blocked++
+			default:
+				t.Fatalf("unexpected concurrent auth status=%d", rec.Code)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("concurrent auth request did not finish")
+		}
+	}
+	if failed != 5 || blocked != count-5 {
+		t.Fatalf("credential failures=%d blocked=%d, want 5 each", failed, blocked)
+	}
+}
+
+func TestAuthIncompletePasswordChangeDoesNotBlockRevocationDB(t *testing.T) {
+	rig := newAuthTestRig(t)
+	bearer := rig.initialize()
+	reader, firstDone := parkedAuthRequest(t, rig, "/api/auth/change-password", bearer,
+		`"old_password":"operator-password-123","new_password":"parked-password-123"}`)
+	secondDone := make(chan struct{})
+	var secondCode int
+	var secondBody map[string]any
+	go func() {
+		secondCode, secondBody = rig.do(http.MethodPost, "/api/auth/change-password", bearer,
+			map[string]any{"old_password": "operator-password-123", "new_password": "changed-password-123"})
+		close(secondDone)
+	}()
+	select {
+	case <-secondDone:
+		rig.expect(http.StatusOK, secondCode, secondBody, "")
+	case <-time.After(2 * time.Second):
+		close(reader.release)
+		<-secondDone
+		t.Fatal("incomplete auth body held the credential-processing lock and prevented revocation")
+	}
+	close(reader.release)
+	select {
+	case first := <-firstDone:
+		if first.Code != http.StatusUnauthorized {
+			t.Fatalf("parked request used a revoked token: status=%d", first.Code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("parked password change did not finish")
+	}
+	code, body := rig.do(http.MethodGet, "/api/ping", rig.responseToken(secondBody), nil)
+	rig.expect(http.StatusOK, code, body, "")
+}
+
+func TestAuthRequestBodiesAreBoundedDB(t *testing.T) {
+	rig := newAuthTestRig(t)
+	rig.s.bootstrapAuth()
+	for _, initialized := range []bool{false, true} {
+		bearer := ""
+		if initialized {
+			bearer = rig.initialize()
+		}
+		for _, path := range []string{"/api/auth/init", "/api/auth/login", "/api/auth/change-password"} {
+			if !initialized && path == "/api/auth/change-password" {
+				continue
+			}
+			for _, payload := range []string{
+				`{"password":"` + strings.Repeat("x", 32<<10) + `","setup_token":"private-test-setup-token"}`,
+				`{"password":"operator-password-123","setup_token":"private-test-setup-token","unknown":"` + strings.Repeat("x", 32<<10) + `"}`,
+				`{"password":"operator-password-123","setup_token":"private-test-setup-token"}` + strings.Repeat(" ", 32<<10),
+				`{} {}`,
+			} {
+				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(payload))
+				if bearer != "" {
+					req.Header.Set("Authorization", "Bearer "+bearer)
+				}
+				code, body := rig.request(req)
+				rig.expect(http.StatusBadRequest, code, body, "Invalid request format")
+			}
+		}
+	}
 }
