@@ -38,8 +38,9 @@ COPY dist/${TARGETARCH}/artex /app/artex
 COPY start.sh /app/start.sh
 RUN chmod +x /app/artex /app/start.sh
 COPY skills/ /app/skills/
-# Persistent data/ directory (SQLite + jwt.key)
-VOLUME ["/app/data"]
+# Keep the persistent JWT key outside the browsable data workspace.
+ENV ARTEX_JWT_KEY_DIR=/app/auth
+VOLUME ["/app/data", "/app/auth"]
 EXPOSE 8787 8788
 ENTRYPOINT ["/app/start.sh"]
 CMD ["-addr", ":8787", "-proxy", ":8788"]

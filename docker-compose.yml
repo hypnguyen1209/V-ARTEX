@@ -30,13 +30,16 @@ services:
       ARTEX_SETUP_TOKEN: ${ARTEX_SETUP_TOKEN:-}
       ARTEX_ADMIN_PASSWORD: ${ARTEX_ADMIN_PASSWORD:-}
       ARTEX_CORS_ORIGINS: ${ARTEX_CORS_ORIGINS:-}
+      ARTEX_JWT_KEY_DIR: /app/auth
     ports:
       - "${ARTEX_BIND:-127.0.0.1}:8787:8787"
       - "127.0.0.1:8788:8788"
     volumes:
-      # Bind the data directory (jwt.key, SQLite, etc.) to data/ in the project root
+      # Bind the data workspace (SQLite, etc.) to data/ in the project root
       # for direct inspection/backups on the host and persistence across container recreation.
       - ./data:/app/data
+      # Persist the JWT key separately from the browsable workspace.
+      - jwtkeys:/app/auth
       # Mount skills from the project root over the image's /app/skills.
       # The container reads the host files, so skill changes need no image rebuild.
       - ./skills:/app/skills
@@ -44,3 +47,4 @@ services:
 
 volumes:
   pgdata:
+  jwtkeys:

@@ -95,7 +95,7 @@ On first start, run `docker compose logs artex` and copy the `[auth] Setup token
 
 Docker publishes port 8787 on `127.0.0.1` by default. Set `ARTEX_BIND=0.0.0.0` only when an HTTPS reverse proxy or an equivalent trusted network boundary is ready.
 
-The image includes common tools (ripgrep/curl/vim/npm/nmap…); `./skills` and `./data` persist through bind mounts.
+The image includes common tools (ripgrep/curl/vim/npm/nmap…); `./skills` and `./data` persist through bind mounts. The JWT root key is stored in the `jwtkeys` volume, outside the browsable workspace. Deploy the updated image and Compose definition together to keep this key stable across container recreation.
 
 For remote MCP, select `http` (Streamable HTTP) or `sse` (legacy SSE) in System Settings.
 Legacy SSE services usually establish an event stream with `GET /sse`, then accept JSON-RPC requests at
@@ -146,7 +146,7 @@ ARTEX_TARGETS=linux/amd64,windows/amd64 ./build.sh --release
 
 ## Updates and Upgrades
 
-> Upgrades replace the program and retain data: the Postgres volume `pgdata`, `./data` (jwt.key / SQLite, etc.), and `./skills` remain intact. **Database migrations run automatically**: `artex` reruns `schema.sql` idempotently at each startup (including `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`), so restarting applies migrations. Back up `./data` and the database before upgrading.
+> Upgrades replace the program and retain data: the Postgres volume `pgdata`, the `jwtkeys` volume (`jwt.key`), `./data` (SQLite, etc.), and `./skills` remain intact. **Database migrations run automatically**: `artex` reruns `schema.sql` idempotently at each startup (including `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`), so restarting applies migrations. Back up `./data`, `./skills`, the database, and the `jwtkeys` volume before upgrading. For native installations, back up `jwt.key` next to the executable instead.
 
 The first upgrade to the hardened authentication format rotates `jwt.key` once and signs out every existing browser. Passwords and application data are preserved. A later binary rollback also requires a fresh login; this prevents pre-upgrade tokens from becoming valid again.
 
@@ -228,13 +228,15 @@ Optional: `ARTEX_LLM_PROVIDER` / `ARTEX_LLM_MODEL` / `ARTEX_LLM_BASE_URL` / `ART
 
 **Authentication bootstrap**: An empty installation prints a random setup token once with an `[auth]` prefix. Set `ARTEX_SETUP_TOKEN` to supply that token without logging it, or set `ARTEX_ADMIN_PASSWORD` to initialize the password headlessly. Neither variable overwrites an existing password.
 
-**Browser origins**: Same-origin UI requests require no CORS configuration. `ARTEX_CORS_ORIGINS` replaces the local development allowlist with comma-separated exact origins; `*` is rejected.
+**Browser origins**: Direct same-origin UI requests require no CORS configuration. A TLS-terminating proxy requires its exact public HTTPS origin in `ARTEX_CORS_ORIGINS` (see below). `ARTEX_CORS_ORIGINS` replaces the local development allowlist with comma-separated exact origins; `*` is rejected.
 
 **Common arguments**: `./start.sh -addr 127.0.0.1:8787 -proxy 127.0.0.1:8788` (`-addr` serves the frontend and API; `-proxy` is the traffic-recording proxy). The startup script passes arguments unchanged. Passing `-addr :8787` explicitly exposes the HTTP service on every interface.
 
 ### Reverse Proxy Deployment (HTTPS / Only Port 443 Exposed)
 
 The frontend and API/SSE share one backend port (default `127.0.0.1:8787`). The live activity feed uses a **same-origin** URL by default, so **no `NEXT_PUBLIC_SSE_BASE` configuration is needed**. Expose only 443 publicly and keep 8787 on the internal network.
+
+The backend intentionally ignores forwarded headers, so a TLS-terminating proxy must set `ARTEX_CORS_ORIGINS=https://your.domain.com` to its exact public HTTPS origin. For Docker, set this in `.env` and run `docker compose up -d artex`; for native installations, set it in the process environment before restarting.
 
 SSE keeps a connection open and pushes events continuously. The reverse proxy **must disable buffering**, or the browser will connect but receive no events (the activity feed keeps spinning). Nginx example:
 

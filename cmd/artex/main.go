@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -50,6 +51,13 @@ func printBanner(addr string) {
 // in a function that can *return* rather than os.Exit past its own defers.
 func main() {
 	os.Exit(run())
+}
+
+func jwtKeyDir() string {
+	if dir := strings.TrimSpace(os.Getenv("ARTEX_JWT_KEY_DIR")); dir != "" {
+		return dir
+	}
+	return config.BaseDir()
 }
 
 func run() int {
@@ -114,7 +122,7 @@ func run() int {
 		skillDir = abs
 	}
 	log.Printf("[config] Skill directory: %s", skillDir)
-	srv := server.New(ctx, mgr, skillDir, *dataDir, config.BaseDir())
+	srv := server.New(ctx, mgr, skillDir, *dataDir, jwtKeyDir())
 	srv.WarnIfExposed(*addr)
 	httpSrv := &http.Server{
 		Addr:              *addr,
