@@ -3888,17 +3888,80 @@ func (s *Server) gc(w http.ResponseWriter, r *http.Request) {
 
 // --- utils ---
 
-func cors(next http.Handler) http.Handler {
+const corsOriginsEnv = "ARTEX_CORS_ORIGINS"
+
+var defaultCORSOrigins = []string{
+	"http://localhost:5173",
+	"http://127.0.0.1:5173",
+}
+
+func normalizeOrigin(origin string) (string, error) {
+	origin = strings.TrimSpace(origin)
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Hostname() == "" || parsed.User != nil ||
+		parsed.Path != "" || strings.ContainsAny(origin, "*?#") {
+		return "", fmt.Errorf("CORS origin must be an explicit URL without credentials, path, query, fragment, or wildcards")
+	}
+	return strings.ToLower(parsed.Scheme) + "://" + strings.ToLower(parsed.Host), nil
+}
+
+func corsAllowedOrigins() (map[string]struct{}, error) {
+	values := defaultCORSOrigins
+	if configured := strings.TrimSpace(os.Getenv(corsOriginsEnv)); configured != "" {
+		values = strings.Split(configured, ",")
+	}
+	allowed := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		normalized, err := normalizeOrigin(value)
+		if err != nil {
+			return nil, err
+		}
+		allowed[normalized] = struct{}{}
+	}
+	return allowed, nil
+}
+
+func corsWith(allowed map[string]struct{}, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		origins := r.Header.Values("Origin")
+		if len(origins) == 0 {
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Add("Vary", "Origin")
+		origin := origins[0]
+		normalized, err := normalizeOrigin(origin)
+		_, ok := allowed[normalized]
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		sameOrigin := normalized == scheme+"://"+strings.ToLower(r.Host)
+		if len(origins) != 1 || err != nil || (!ok && !sameOrigin) {
+			writeErr(w, http.StatusForbidden, "Origin is not allowed")
+			return
+		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
-			w.WriteHeader(204)
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func cors(next http.Handler) http.Handler {
+	allowed, err := corsAllowedOrigins()
+	if err != nil {
+		log.Printf("[cors] Invalid %s; denying cross-origin requests: %v", corsOriginsEnv, err)
+	}
+	return corsWith(allowed, next)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

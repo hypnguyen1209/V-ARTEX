@@ -17,3 +17,9 @@ func TestShutdownContextPreservesNamedCause(t *testing.T) {
 		t.Fatalf("code=%q ok=%v, want shutdown", code, ok)
 	}
 }
+
+func TestDefaultHTTPAddrIsLoopbackOnly(t *testing.T) {
+	if defaultHTTPAddr != "127.0.0.1:8787" {
+		t.Fatalf("default HTTP address = %q", defaultHTTPAddr)
+	}
+}

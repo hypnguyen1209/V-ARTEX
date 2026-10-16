@@ -379,6 +379,17 @@ func isLoopbackAddr(addr string) bool {
 	return strings.EqualFold(host, "localhost") || net.ParseIP(host).IsLoopback()
 }
 
+func (s *Server) WarnIfExposed(addr string) {
+	if isLoopbackAddr(addr) {
+		return
+	}
+	hash, err := s.cachedPassHash()
+	if err != nil || hash != "" {
+		return
+	}
+	log.Printf("[auth] WARNING: the administrator password is unset while ARTEX listens on %q; finish setup before exposing this port", addr)
+}
+
 // validatePassword returns an empty string on success, otherwise a displayable reason.
 func validatePassword(pw string) string {
 	if utf8.RuneCountInString(pw) < minPasswordRunes {

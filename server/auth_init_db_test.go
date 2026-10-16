@@ -24,6 +24,56 @@ type authTestRig struct {
 	h http.Handler
 }
 
+func TestWarnIfExposedOnlyWhenUninitializedDB(t *testing.T) {
+	rig := newAuthTestRig(t)
+	logs := captureAuthLogs(t)
+	for _, addr := range []string{"127.0.0.1:8787", "127.12.34.56:8787", "[::1]:8787", "::1", "localhost:8787", "LOCALHOST:8787"} {
+		rig.s.WarnIfExposed(addr)
+		if logs.Len() != 0 {
+			t.Fatal("loopback bind emitted warning")
+		}
+	}
+	for _, addr := range []string{":8787", "0.0.0.0:8787", "[::]:8787", "192.0.2.25:8787", "example.com:8787"} {
+		logs.Reset()
+		rig.s.WarnIfExposed(addr)
+		if !strings.Contains(logs.String(), "WARNING") || !strings.Contains(logs.String(), addr) {
+			t.Fatal("public uninitialized bind emitted no exposure warning")
+		}
+	}
+	if err := rig.s.m.pg.SetSetting(authPassKey, "private-password-hash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rig.s.reloadPassHash(); err != nil {
+		t.Fatal(err)
+	}
+	logs.Reset()
+	rig.s.WarnIfExposed(":8787")
+	if logs.Len() != 0 {
+		t.Fatal("initialized bind emitted warning")
+	}
+}
+
+func TestWarnIfExposedAuthErrorsAndCachedState(t *testing.T) {
+	s := &Server{setupToken: "private-setup-token"}
+	logs := captureAuthLogs(t)
+	s.setPassHash("")
+	s.blockAuth(errors.New("private-database-details"))
+	s.WarnIfExposed(":8787")
+	if logs.Len() != 0 {
+		t.Fatal("failed auth state must not be reported as uninitialized")
+	}
+	s.setPassHash("private-password-hash")
+	s.WarnIfExposed(":8787")
+	if logs.Len() != 0 {
+		t.Fatal("cached initialized state emitted warning")
+	}
+	s.setPassHash("")
+	s.WarnIfExposed(":8787")
+	if !strings.Contains(logs.String(), "WARNING") || strings.Contains(logs.String(), "private-") {
+		t.Fatal("cached empty state must warn without disclosing secrets")
+	}
+}
+
 func newAuthTestRig(t *testing.T) *authTestRig {
 	t.Helper()
 	pg, _ := authSetupDatabase(t)
