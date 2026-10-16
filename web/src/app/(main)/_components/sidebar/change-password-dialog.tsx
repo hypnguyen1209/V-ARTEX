@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
+import { auth } from "@/lib/auth";
 
 export function ChangePasswordDialog({
   open,
@@ -51,8 +52,13 @@ export function ChangePasswordDialog({
     setSaving(true);
     api
       .changePassword(oldPassword, newPassword)
-      .then(() => {
-        toast.success("Password changed");
+      .then(({ token }) => {
+        if (!auth.replaceToken(token)) {
+          toast.error("Password changed, but the new session could not be stored. Sign in again.");
+          window.location.assign("/login");
+          return;
+        }
+        toast.success("Password changed; other sessions are signed out");
         onOpenChange(false);
       })
       .catch((err) => toast.error(`Password change failed: ${(err as Error).message}`))
@@ -66,8 +72,8 @@ export function ChangePasswordDialog({
           <DialogHeader>
             <DialogTitle>Change password</DialogTitle>
             <DialogDescription>
-              The username is fixed as <b>ARTEX</b>. Enter your current password to verify your identity. Previously
-              issued sign-in tokens remain valid until they expire after the password change.
+              The username is fixed as <b>ARTEX</b>. Enter your current password to verify your identity. Changing the
+              password signs out every other session. This browser stores a fresh sign-in token.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-4">

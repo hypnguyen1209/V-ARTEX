@@ -23,6 +23,20 @@ export const auth = {
     document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
   },
 
+  replaceToken(token: string): boolean {
+    try {
+      this.setToken(token);
+      return true;
+    } catch {
+      try {
+        this.clearToken();
+      } catch {
+        // Storage can be unavailable; the caller still redirects to login.
+      }
+      return false;
+    }
+  },
+
   clearToken(): void {
     localStorage.removeItem(TOKEN_KEY);
     document.cookie = `${TOKEN_KEY}=; path=/; max-age=0`;

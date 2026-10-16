@@ -12,6 +12,7 @@ import { auth } from "@/lib/auth";
 
 export default function SetupPage() {
   const router = useRouter();
+  const [setupToken, setSetupToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -36,6 +37,10 @@ export default function SetupPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!setupToken.trim()) {
+      setError("Enter the setup token from the server console or deployment secret");
+      return;
+    }
     if (password !== confirm) {
       setError("Passwords do not match");
       return;
@@ -47,7 +52,7 @@ export default function SetupPage() {
     setLoading(true);
     setError("");
     try {
-      const { token } = await api.initPassword(password);
+      const { token } = await api.initPassword(password, setupToken.trim());
       auth.setToken(token);
       router.replace("/function/tasks");
     } catch (err) {
@@ -95,6 +100,23 @@ export default function SetupPage() {
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="space-y-1.5">
+                <Label htmlFor="setup-token">Setup token</Label>
+                <Input
+                  id="setup-token"
+                  type="password"
+                  value={setupToken}
+                  onChange={(e) => setSetupToken(e.target.value)}
+                  placeholder="Token from the server console"
+                  required
+                  autoFocus
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Docker: run <code>docker compose logs artex</code>. Managed deployments use the configured setup token.
+                </p>
+              </div>
+              <div className="space-y-1.5">
                 <Label htmlFor="password">New password</Label>
                 <Input
                   id="password"
@@ -102,7 +124,6 @@ export default function SetupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 8 characters"
-                  autoFocus
                   autoComplete="new-password"
                 />
               </div>
@@ -118,7 +139,7 @@ export default function SetupPage() {
                 />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={loading || !password || !confirm}>
+              <Button type="submit" className="w-full" disabled={loading || !setupToken.trim() || !password || !confirm}>
                 {loading ? "Saving..." : "Set password and sign in"}
               </Button>
             </form>
