@@ -106,8 +106,9 @@ type Engine struct {
 	// deleteMu makes installing the delete barrier atomic with registering a new
 	// task operation. Once BeginDelete returns, every admitted writer is reflected
 	// in inflight and every later writer is rejected.
-	deleteMu sync.RWMutex
-	closed   bool
+	deleteMu    sync.RWMutex
+	closed      bool
+	operationWG sync.WaitGroup
 
 	// Every long-lived task goroutine (planner, workers and deadline coordinator)
 	// runs under one task-scoped context. Successful deletion cancels that context,
@@ -296,7 +297,7 @@ func (e *Engine) StopTask(taskID string) {
 }
 
 // Close prevents new task work, cancels every task runtime, and waits until its
-// planner, workers, and deadline coordinator have stopped.
+// planner, workers, deadline coordinator, and admitted task operations stop.
 func (e *Engine) Close() {
 	if e == nil {
 		return
@@ -318,6 +319,7 @@ func (e *Engine) Close() {
 	for _, rt := range runtimes {
 		rt.wg.Wait()
 	}
+	e.operationWG.Wait()
 }
 
 // cancelExec cancels a task's current per-task exec context (any in-flight

@@ -53,11 +53,15 @@ func (e *Engine) beginTaskOperation(taskID string) bool {
 	if e.closed || e.IsDeleting(taskID) {
 		return false
 	}
+	e.operationWG.Add(1)
 	atomic.AddInt64(e.inflightCounter(taskID), 1)
 	return true
 }
 
-func (e *Engine) decInflight(taskID string) { atomic.AddInt64(e.inflightCounter(taskID), -1) }
+func (e *Engine) decInflight(taskID string) {
+	atomic.AddInt64(e.inflightCounter(taskID), -1)
+	e.operationWG.Done()
+}
 func (e *Engine) inflightCount(taskID string) int64 {
 	return atomic.LoadInt64(e.inflightCounter(taskID))
 }
