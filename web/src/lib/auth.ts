@@ -1,5 +1,6 @@
 const TOKEN_KEY = "artex_token";
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds.
+const tokenRotations = new Set<Promise<void>>();
 
 export interface CurrentUser {
   id: string;
@@ -11,6 +12,22 @@ export interface CurrentUser {
 }
 
 export const auth = {
+  beginTokenRotation(): () => void {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finish = () => {
+        tokenRotations.delete(pending);
+        resolve();
+      };
+    });
+    tokenRotations.add(pending);
+    return finish;
+  },
+
+  async waitForTokenRotation(): Promise<void> {
+    while (tokenRotations.size) await Promise.all(tokenRotations);
+  },
+
   getToken(): string | null {
     if (typeof window === "undefined") return null;
     // Mock demo: return a fake token so route guards allow entry without a real login.

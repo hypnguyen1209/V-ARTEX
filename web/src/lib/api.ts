@@ -123,7 +123,9 @@ export async function http<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers as Record<string, string> | undefined),
     },
   });
-  if (r.status === 401) {
+  // A wrong current password must surface the handler error without expiring this session.
+  if (r.status === 401 && path !== "/auth/change-password") {
+    await auth.waitForTokenRotation();
     if (typeof window !== "undefined" && getToken() === token) {
       try {
         auth.clearToken();

@@ -90,6 +90,229 @@ function setupContext(setupToken) {
   };
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+// Drain promise callbacks without a clock delay, including callbacks across VM contexts.
+const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+
+function rotationWorkflow({ storageFails = false, invalidToken = false, callbackThrows = false } = {}) {
+  const events = [];
+  const stored = new Map([["artex_token", "old-jwt"]]);
+  const storage = {
+    getItem: (key) => stored.get(key) ?? null,
+    setItem: (key, value) => {
+      if (storageFails) throw new Error("storage denied");
+      stored.set(key, value);
+    },
+    removeItem: (key) => {
+      events.push(["remove", key]);
+      if (storageFails) throw new Error("removal denied");
+      stored.delete(key);
+    },
+  };
+  const document = { cookie: "artex_token=old-jwt" };
+  const window = {
+    location: {
+      href: "/function/tasks",
+      assign(path) {
+        this.href = path;
+        events.push(["redirect", path]);
+      },
+    },
+  };
+  const auth = loadAuth(storage, document);
+  const requests = [];
+  const ast = sourceFile("../lib/api.ts");
+  const declarations = ast.statements
+    .filter((node) => !ts.isImportDeclaration(node))
+    .map((node) => node.getText(ast).replace(/^export\s+/, ""));
+  const { api, http } = evaluate(`${declarations.join("\n")}\n({ api, http });`, {
+    auth,
+    MOCK: false,
+    window,
+    localStorage: storage,
+    fetch: (path, init) => {
+      const response = deferred();
+      requests.push({ path, init, ...response });
+      return response.promise;
+    },
+  });
+  const submit = handler(dialogPath, "submit", {
+    auth,
+    api,
+    window,
+    oldPassword: "old",
+    newPassword: "new-password",
+    confirmPassword: "new-password",
+    setSaving: (value) => events.push(["saving", value]),
+    toast: {
+      success: (message) => events.push(["success", message]),
+      error: (message) => events.push(["error", message]),
+    },
+    onOpenChange: (value) => {
+      if (callbackThrows) throw new Error("close failed");
+      events.push(["close", value]);
+    },
+  });
+  return {
+    auth,
+    http,
+    events,
+    stored,
+    document,
+    window,
+    requests,
+    submit: () => submit({ preventDefault: () => undefined }),
+    success: (request) =>
+      request.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ ok: true, token: invalidToken ? "" : "fresh-jwt" }),
+      }),
+  };
+}
+
+test("poll 401 received before password-change success waits for replacement before deciding logout", async () => {
+  const flow = rotationWorkflow();
+  let settled = false;
+  const poll = flow.http("/tasks").catch((error) => {
+    settled = true;
+    return error;
+  });
+  flow.submit();
+  flow.requests[0].resolve({ status: 401, ok: false });
+  await nextTurn();
+  assert.equal(flow.window.location.href, "/function/tasks", "poll must not redirect while rotation is pending");
+  assert.equal(settled, false);
+  flow.success(flow.requests[1]);
+  await nextTurn();
+  assert.equal(settled, true, "rotation completion must release the poll");
+  assert.match((await poll).message, /Unauthorized/);
+  assert.equal(flow.stored.get("artex_token"), "fresh-jwt");
+  assert.equal(flow.window.location.href, "/function/tasks");
+  assert.equal(
+    flow.events.some(([kind]) => kind === "success"),
+    true,
+  );
+});
+
+test("poll 401 waits for a failed password change then expires the still-current token", async () => {
+  const flow = rotationWorkflow();
+  let settled = false;
+  const poll = flow.http("/tasks").catch((error) => {
+    settled = true;
+    return error;
+  });
+  flow.submit();
+  flow.requests[0].resolve({ status: 401, ok: false });
+  await nextTurn();
+  assert.equal(flow.window.location.href, "/function/tasks");
+  assert.equal(settled, false);
+  flow.requests[1].reject(new Error("offline"));
+  await nextTurn();
+  assert.equal(settled, true, "failed rotation must release the poll");
+  assert.match((await poll).message, /Unauthorized/);
+  assert.equal(flow.stored.has("artex_token"), false);
+  assert.equal(flow.window.location.href, "/login");
+  assert.equal(
+    flow.events.some(([kind, message]) => kind === "error" && message.includes("offline")),
+    true,
+  );
+});
+
+test("password endpoint 401 surfaces its error without waiting on itself or logging out", async () => {
+  const flow = rotationWorkflow();
+  flow.submit();
+  flow.requests[0].resolve({ status: 401, ok: false, json: async () => ({ error: "Current password is incorrect" }) });
+  await nextTurn();
+  assert.equal(
+    flow.events.some(([kind, value]) => kind === "saving" && value === false),
+    true,
+    "password request must settle rather than wait for its own rotation",
+  );
+  assert.equal(flow.window.location.href, "/function/tasks");
+  assert.equal(flow.stored.get("artex_token"), "old-jwt");
+  assert.equal(
+    flow.events.some(([kind, message]) => kind === "error" && message.includes("Current password is incorrect")),
+    true,
+  );
+  const poll = flow.http("/tasks").catch((error) => error);
+  flow.requests[1].resolve({ status: 401, ok: false });
+  await nextTurn();
+  assert.equal(flow.window.location.href, "/login", "endpoint failure must release future poll handling");
+  assert.match((await poll).message, /Unauthorized/);
+});
+
+for (const failure of ["storage", "invalid token", "callback"]) {
+  test(`password rotation releases an earlier 401 after ${failure} failure`, async () => {
+    const flow = rotationWorkflow({
+      storageFails: failure === "storage",
+      invalidToken: failure === "invalid token",
+      callbackThrows: failure === "callback",
+    });
+    let settled = false;
+    const poll = flow.http("/tasks").catch((error) => {
+      settled = true;
+      return error;
+    });
+    flow.submit();
+    flow.requests[0].resolve({ status: 401, ok: false });
+    await nextTurn();
+    assert.equal(settled, false, "poll must wait until the password response is processed");
+    flow.success(flow.requests[1]);
+    await nextTurn();
+    assert.equal(settled, true, "all failure paths must release rotation waiters");
+    assert.match((await poll).message, /Unauthorized/);
+    assert.equal(flow.window.location.href, failure === "callback" ? "/function/tasks" : "/login");
+    assert.equal(
+      flow.events.some(([kind, value]) => kind === "saving" && value === false),
+      true,
+    );
+    if (failure !== "callback") {
+      assert.equal(
+        flow.events.some(([kind]) => kind === "success" || kind === "close"),
+        false,
+      );
+      assert.equal(
+        flow.events.some(([kind]) => kind === "remove"),
+        true,
+      );
+      assert.match(flow.document.cookie, /max-age=0/);
+    }
+  });
+}
+
+test("overlapping password rotations keep poll handling pending until both finish", async () => {
+  const flow = rotationWorkflow();
+  let settled = false;
+  const poll = flow.http("/tasks").catch((error) => {
+    settled = true;
+    return error;
+  });
+  flow.submit();
+  flow.submit();
+  assert.equal(flow.requests.length, 3);
+  flow.requests[0].resolve({ status: 401, ok: false });
+  flow.requests[1].reject(new Error("first request failed"));
+  await nextTurn();
+  assert.equal(settled, false, "one completed rotation must not release another rotation's waiters");
+  assert.equal(flow.window.location.href, "/function/tasks");
+  flow.success(flow.requests[2]);
+  await nextTurn();
+  assert.equal(settled, true);
+  assert.match((await poll).message, /Unauthorized/);
+  assert.equal(flow.stored.get("artex_token"), "fresh-jwt");
+  assert.equal(flow.window.location.href, "/function/tasks");
+});
+
 test("auth API response types include setup status and the fresh password-change token", () => {
   assert.deepEqual(responseFields("authStatus"), [
     ["initialized", "boolean"],
@@ -473,6 +696,7 @@ for (const replacementSucceeds of [true, false]) {
         },
       },
       auth: {
+        beginTokenRotation: () => () => undefined,
         replaceToken: (token) => {
           events.push(["replace", token]);
           return replacementSucceeds;

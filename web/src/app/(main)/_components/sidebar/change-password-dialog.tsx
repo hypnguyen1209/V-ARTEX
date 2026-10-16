@@ -39,7 +39,7 @@ export function ChangePasswordDialog({
     }
   }, [open]);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!oldPassword || !newPassword) {
       toast.error("Enter your current and new passwords");
@@ -49,20 +49,23 @@ export function ChangePasswordDialog({
       toast.error("New passwords do not match");
       return;
     }
-    setSaving(true);
-    api
-      .changePassword(oldPassword, newPassword)
-      .then(({ token }) => {
-        if (!auth.replaceToken(token)) {
-          toast.error("Password changed, but the new session could not be stored. Sign in again.");
-          window.location.assign("/login");
-          return;
-        }
-        toast.success("Password changed; other sessions are signed out");
-        onOpenChange(false);
-      })
-      .catch((err) => toast.error(`Password change failed: ${(err as Error).message}`))
-      .finally(() => setSaving(false));
+    const finishRotation = auth.beginTokenRotation();
+    try {
+      setSaving(true);
+      const { token } = await api.changePassword(oldPassword, newPassword);
+      if (!auth.replaceToken(token)) {
+        toast.error("Password changed, but the new session could not be stored. Sign in again.");
+        window.location.assign("/login");
+        return;
+      }
+      toast.success("Password changed; other sessions are signed out");
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(`Password change failed: ${(err as Error).message}`);
+    } finally {
+      finishRotation();
+      setSaving(false);
+    }
   }
 
   return (
