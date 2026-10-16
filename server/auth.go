@@ -1,15 +1,20 @@
 package server
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -24,6 +29,13 @@ const (
 	jwtKeyBytes         = 32
 	authPassKey         = "auth.password_hash"
 	jwtTTL              = 7 * 24 * time.Hour
+	setupTokenEnv       = "ARTEX_SETUP_TOKEN"
+	adminPasswordEnv    = "ARTEX_ADMIN_PASSWORD"
+	setupTokenBytes     = 32
+	authFailureWindow   = 10 * time.Minute
+	authInitialCooldown = 30 * time.Second
+	authMaxCooldown     = 10 * time.Minute
+	authMaxClients      = 10000
 
 	// The minimum matches the setup page validation; frontend-only validation
 	// can be bypassed through the API. bcrypt imposes a 72-byte maximum:
@@ -36,6 +48,284 @@ const (
 // Never interpret a read failure as an unset password: authInit once allowed
 // an unauthenticated request to overwrite the administrator password this way.
 const errDataSourceUnavailable = "Data source temporarily unavailable; please try again later"
+
+var passHashCacheTTL = 2 * time.Second
+
+func (s *Server) signingKey(hash string) []byte {
+	if hash == "" {
+		return append([]byte(nil), s.jwtKey...)
+	}
+	mac := hmac.New(sha256.New, s.jwtKey)
+	mac.Write([]byte(hash))
+	return mac.Sum(nil)
+}
+
+func (s *Server) readPassHash() (string, error) {
+	if s.m == nil || s.m.pg == nil {
+		s.authMu.Lock()
+		defer s.authMu.Unlock()
+		return s.passHash, nil
+	}
+	hash, _, err := s.m.pg.GetSetting(authPassKey)
+	return hash, err
+}
+
+func (s *Server) setPassHash(hash string) {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	s.passHash = hash
+	s.passHashAt = time.Now()
+	s.passHashLoaded = true
+}
+
+func (s *Server) reloadPassHash() (string, error) {
+	if s.m == nil || s.m.pg == nil {
+		return s.readPassHash()
+	}
+	// Serialize reads with password changes so an older read cannot replace a new hash.
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	hash, err := s.readPassHash()
+	if err != nil {
+		return "", err
+	}
+	s.passHash = hash
+	s.passHashAt = time.Now()
+	s.passHashLoaded = true
+	return hash, nil
+}
+
+func (s *Server) cachedPassHash() (string, error) {
+	s.authMu.Lock()
+	if s.passHashLoaded && (s.m == nil || s.m.pg == nil || time.Since(s.passHashAt) < passHashCacheTTL) {
+		hash := s.passHash
+		s.authMu.Unlock()
+		return hash, nil
+	}
+	s.authMu.Unlock()
+	return s.reloadPassHash()
+}
+
+func (s *Server) verifyToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	hash, err := s.cachedPassHash()
+	if err != nil {
+		return false
+	}
+	if verifyJWT(token, s.signingKey(hash)) {
+		return true
+	}
+	if s.m == nil || s.m.pg == nil {
+		return false
+	}
+	current, err := s.reloadPassHash()
+	return err == nil && current != hash && verifyJWT(token, s.signingKey(current))
+}
+
+func randomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func (s *Server) currentSetupToken() string {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	if s.setupToken != "" {
+		return s.setupToken
+	}
+	if token := strings.TrimSpace(os.Getenv(setupTokenEnv)); token != "" {
+		s.setupToken = token
+		log.Printf("[auth] Setup token loaded from %s", setupTokenEnv)
+		return token
+	}
+	b, err := randomBytes(setupTokenBytes)
+	if err != nil {
+		log.Printf("[auth] Generate setup token: %v", err)
+		return ""
+	}
+	s.setupToken = base64.RawURLEncoding.EncodeToString(b)
+	log.Printf("[auth] Setup token: %s", s.setupToken)
+	log.Printf("[auth] Enter this setup token on the setup page to initialize user ARTEX")
+	return s.setupToken
+}
+
+func (s *Server) checkSetupToken(token string) bool {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	return s.setupToken != "" && subtle.ConstantTimeCompare([]byte(s.setupToken), []byte(strings.TrimSpace(token))) == 1
+}
+
+func (s *Server) clearSetupToken() {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	s.setupToken = ""
+}
+
+func (s *Server) bootstrapAuth() {
+	if s.m == nil || s.m.pg == nil {
+		return
+	}
+	hash, err := s.reloadPassHash()
+	if err != nil {
+		log.Printf("[auth] Read password hash: %v", err)
+		return
+	}
+	if hash != "" {
+		return
+	}
+	if password := os.Getenv(adminPasswordEnv); password != "" {
+		if reason := validatePassword(password); reason != "" {
+			log.Printf("[auth] Invalid %s: %s", adminPasswordEnv, reason)
+		} else {
+			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+			if err != nil {
+				log.Printf("[auth] Hash password from %s: %v", adminPasswordEnv, err)
+				return
+			}
+			inserted, err := s.m.pg.InsertSettingIfAbsent(authPassKey, string(hash))
+			if err != nil {
+				log.Printf("[auth] Initialize password from %s: %v", adminPasswordEnv, err)
+				return
+			}
+			if !inserted {
+				if _, err := s.reloadPassHash(); err != nil {
+					log.Printf("[auth] Reload initialized password hash: %v", err)
+				}
+				return
+			}
+			s.setPassHash(string(hash))
+			log.Printf("[auth] Initialized user ARTEX from %s", adminPasswordEnv)
+			return
+		}
+	}
+	s.currentSetupToken()
+}
+
+type authAttempts struct {
+	failures     int
+	windowStart  time.Time
+	lastSeen     time.Time
+	blockedUntil time.Time
+	cooldown     time.Duration
+}
+
+type authLimiter struct {
+	mu      sync.Mutex
+	now     func() time.Time
+	clients map[string]*authAttempts
+}
+
+func (s *Server) limiter() *authLimiter {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	if s.loginLimiter == nil {
+		s.loginLimiter = &authLimiter{now: time.Now, clients: make(map[string]*authAttempts)}
+	}
+	return s.loginLimiter
+}
+
+// attempts is called with l.mu held.
+func (l *authLimiter) attempts(peer string, now time.Time) *authAttempts {
+	a := l.clients[peer]
+	if a != nil && now.Sub(a.lastSeen) > authFailureWindow {
+		delete(l.clients, peer)
+		return nil
+	}
+	return a
+}
+
+func (l *authLimiter) allow(peer string) (bool, time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	if a := l.attempts(peer, now); a != nil {
+		a.lastSeen = now
+		if wait := a.blockedUntil.Sub(now); wait > 0 {
+			return false, wait
+		}
+	}
+	return true, 0
+}
+
+func (l *authLimiter) failure(peer string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	a := l.attempts(peer, now)
+	if a == nil {
+		if l.clients == nil {
+			l.clients = make(map[string]*authAttempts)
+		}
+		if len(l.clients) >= authMaxClients {
+			var oldest string
+			var oldestRecord *authAttempts
+			for key, record := range l.clients {
+				if oldestRecord == nil || record.lastSeen.Before(oldestRecord.lastSeen) {
+					oldest, oldestRecord = key, record
+				}
+			}
+			delete(l.clients, oldest)
+		}
+		a = &authAttempts{windowStart: now}
+		l.clients[peer] = a
+	}
+	a.lastSeen = now
+	if now.Before(a.blockedUntil) {
+		return
+	}
+	if a.cooldown == 0 && now.Sub(a.windowStart) > authFailureWindow {
+		a.failures = 0
+		a.windowStart = now
+	}
+	if a.failures < 5 {
+		a.failures++
+	}
+	if a.failures >= 5 {
+		if a.cooldown == 0 {
+			a.cooldown = authInitialCooldown
+		} else if a.cooldown < authMaxCooldown {
+			a.cooldown *= 2
+			if a.cooldown > authMaxCooldown {
+				a.cooldown = authMaxCooldown
+			}
+		}
+		a.blockedUntil = now.Add(a.cooldown)
+	}
+}
+
+func (l *authLimiter) reset(peer string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.clients, peer)
+}
+
+func clientKey(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func clientLogID(r *http.Request) string {
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		return fmt.Sprintf("%s (untrusted X-Forwarded-For: %q)", r.RemoteAddr, forwarded)
+	}
+	return r.RemoteAddr
+}
+
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = strings.Trim(addr, "[]")
+	}
+	return strings.EqualFold(host, "localhost") || net.ParseIP(host).IsLoopback()
+}
 
 // validatePassword returns an empty string on success, otherwise a displayable reason.
 func validatePassword(pw string) string {

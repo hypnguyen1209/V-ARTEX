@@ -43,8 +43,15 @@ type Server struct {
 	engine *Engine
 	ctx    context.Context
 
-	skillDir string // root directory for skill subdirectories
-	jwtKey   []byte // HS256 signing key loaded from / generated into dataDir/jwt.key
+	skillDir       string // root directory for skill subdirectories
+	jwtKey         []byte // HS256 signing key loaded from / generated into dataDir/jwt.key
+	authMu         sync.Mutex
+	initMu         sync.Mutex
+	passHash       string
+	passHashAt     time.Time
+	passHashLoaded bool
+	setupToken     string
+	loginLimiter   *authLimiter
 
 	// concMu serializes concurrency-cap decisions (admission + reconcile) so a
 	// scheduler tick and an HTTP settings change / task creation can't both count
@@ -151,6 +158,7 @@ func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDi
 		profChatAgents: map[int64]*agent.ChatAgent{},
 		provByProfile:  map[int64]*provEntry{}, llmHealth: newLLMHealthRegistry(m.pg),
 		taskAgents: map[string]*taskAgentBundle{}, archiveWake: make(chan struct{}, 1)}
+	s.bootstrapAuth()
 	s.initSideQuestions()
 	// Circuit thresholds/cooldown are hot failure-path parameters; push global retry policy to Registry at startup,
 	// and again whenever saveLLMRetryPolicy saves it.
