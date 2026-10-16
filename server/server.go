@@ -50,6 +50,7 @@ type Server struct {
 	passHash       string
 	passHashAt     time.Time
 	passHashLoaded bool
+	passHashErr    error
 	setupToken     string
 	loginLimiter   *authLimiter
 

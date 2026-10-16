@@ -76,6 +76,14 @@ func (s *Server) setPassHash(hash string) {
 	s.passHash = hash
 	s.passHashAt = time.Now()
 	s.passHashLoaded = true
+	s.passHashErr = nil
+}
+
+func (s *Server) blockAuth(err error) {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	s.passHashLoaded = false
+	s.passHashErr = err
 }
 
 func (s *Server) reloadPassHash() (string, error) {
@@ -87,16 +95,24 @@ func (s *Server) reloadPassHash() (string, error) {
 	defer s.authMu.Unlock()
 	hash, err := s.readPassHash()
 	if err != nil {
+		s.passHashLoaded = false
+		s.passHashErr = err
 		return "", err
 	}
 	s.passHash = hash
 	s.passHashAt = time.Now()
 	s.passHashLoaded = true
+	s.passHashErr = nil
 	return hash, nil
 }
 
 func (s *Server) cachedPassHash() (string, error) {
 	s.authMu.Lock()
+	// An explicit successful reload or password update must clear an auth failure.
+	if err := s.passHashErr; err != nil {
+		s.authMu.Unlock()
+		return "", err
+	}
 	if s.passHashLoaded && (s.m == nil || s.m.pg == nil || time.Since(s.passHashAt) < passHashCacheTTL) {
 		hash := s.passHash
 		s.authMu.Unlock()
@@ -184,11 +200,13 @@ func (s *Server) bootstrapAuth() {
 		} else {
 			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 			if err != nil {
+				s.blockAuth(err)
 				log.Printf("[auth] Hash password from %s: %v", adminPasswordEnv, err)
 				return
 			}
 			inserted, err := s.m.pg.InsertSettingIfAbsent(authPassKey, string(hash))
 			if err != nil {
+				s.blockAuth(err)
 				log.Printf("[auth] Initialize password from %s: %v", adminPasswordEnv, err)
 				return
 			}
@@ -265,7 +283,8 @@ func (l *authLimiter) failure(peer string) {
 			var oldest string
 			var oldestRecord *authAttempts
 			for key, record := range l.clients {
-				if oldestRecord == nil || record.lastSeen.Before(oldestRecord.lastSeen) {
+				if oldestRecord == nil || record.lastSeen.Before(oldestRecord.lastSeen) ||
+					(record.lastSeen.Equal(oldestRecord.lastSeen) && key < oldest) {
 					oldest, oldestRecord = key, record
 				}
 			}

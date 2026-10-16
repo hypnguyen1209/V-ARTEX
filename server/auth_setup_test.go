@@ -2,18 +2,26 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/Autumn-27/artex/db"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func captureAuthLogs(t *testing.T) *bytes.Buffer {
@@ -324,5 +332,350 @@ func TestIsLoopbackAddr(t *testing.T) {
 				t.Fatalf("isLoopbackAddr(%q) = %v, want %v", tc.addr, got, tc.want)
 			}
 		})
+	}
+}
+
+// Each test owns its schema; never alter the configured database's real auth setting.
+func authSetupDatabase(t *testing.T) (*db.DB, *sql.DB) {
+	t.Helper()
+	dsn, _, err := db.DSN()
+	if err != nil {
+		t.Skipf("PostgreSQL DSN absent: %v", err)
+	}
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := stdlib.OpenDB(*cfg)
+	t.Cleanup(func() { admin.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := admin.PingContext(ctx); err != nil {
+		t.Fatalf("configured PostgreSQL must be available: %v", err)
+	}
+	random, err := randomBytes(8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := fmt.Sprintf("auth_test_%x", random)
+	if _, err := admin.ExecContext(ctx, "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := admin.Exec("DROP SCHEMA " + schema + " CASCADE"); err != nil {
+			t.Errorf("remove test schema: %v", err)
+		}
+	})
+	cfg.RuntimeParams["search_path"] = schema
+	pool, other := stdlib.OpenDB(*cfg), stdlib.OpenDB(*cfg)
+	t.Cleanup(func() { pool.Close(); other.Close() })
+	if _, err := pool.Exec(`CREATE TABLE settings (
+		key text PRIMARY KEY, value text NOT NULL, updated_at timestamptz DEFAULT now()
+	)`); err != nil {
+		t.Fatal(err)
+	}
+	return &db.DB{DB: pool}, other
+}
+
+func authTestToken(t *testing.T, s *Server, hash string) string {
+	t.Helper()
+	token, err := signJWT(s.signingKey(hash))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return token
+}
+
+func TestVerifyTokenDatabaseCacheAndExternalReset(t *testing.T) {
+	pg, other := authSetupDatabase(t)
+	if passHashCacheTTL != 2*time.Second {
+		t.Fatal("password cache TTL must default to two seconds")
+	}
+	if err := pg.SetSetting(authPassKey, "first-hash"); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{m: &Manager{pg: pg}, jwtKey: []byte("root-signing-key")}
+	first := authTestToken(t, s, "first-hash")
+	if !s.verifyToken(first) {
+		t.Fatal("database-backed current token must verify")
+	}
+	if _, err := other.Exec(`UPDATE settings SET value=$1 WHERE key=$2`, "second-hash", authPassKey); err != nil {
+		t.Fatal(err)
+	}
+	if hash, err := s.cachedPassHash(); err != nil || hash != "first-hash" || !s.verifyToken(first) {
+		t.Fatalf("cache must reuse its successful read before expiry: hash=%q err=%v", hash, err)
+	}
+	s.authMu.Lock()
+	s.passHashAt = time.Now().Add(-passHashCacheTTL)
+	s.authMu.Unlock()
+	if s.verifyToken(first) {
+		t.Fatal("external password reset must revoke old token at cache expiry")
+	}
+	if !s.verifyToken(authTestToken(t, s, "second-hash")) {
+		t.Fatal("refreshed hash must authorize its current token")
+	}
+	if _, err := other.Exec(`UPDATE settings SET value=$1 WHERE key=$2`, "third-hash", authPassKey); err != nil {
+		t.Fatal(err)
+	}
+	if !s.verifyToken(authTestToken(t, s, "third-hash")) {
+		t.Fatal("failed cached verification must reload once and retry a changed hash")
+	}
+}
+
+func TestVerifyTokenAuthoritativeEmptyAndReloadFailure(t *testing.T) {
+	pg, other := authSetupDatabase(t)
+	s := &Server{m: &Manager{pg: pg}, jwtKey: []byte("root-signing-key")}
+	raw := authTestToken(t, s, "")
+	if !s.verifyToken(raw) {
+		t.Fatal("successful authoritative empty read must preserve raw-key behavior")
+	}
+	if _, err := other.Exec(`INSERT INTO settings(key,value) VALUES ($1,$2)`, authPassKey, "externally-initialized-hash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := pg.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.reloadPassHash(); err == nil {
+		t.Fatal("closed pool must make reload fail")
+	}
+	if s.verifyToken(raw) || s.passHashLoaded {
+		t.Fatal("failed reload after another process initializes must invalidate cached empty/raw auth")
+	}
+	s.m.pg = &db.DB{DB: other}
+	if s.verifyToken(raw) {
+		t.Fatal("verification must not silently clear an authentication failure")
+	}
+	if _, err := s.reloadPassHash(); err != nil {
+		t.Fatal(err)
+	}
+	if !s.verifyToken(authTestToken(t, s, "externally-initialized-hash")) {
+		t.Fatal("explicit successful reload must restore authentication")
+	}
+}
+
+func TestSetupTokenHeadlessBootstrap(t *testing.T) {
+	pg, _ := authSetupDatabase(t)
+	logs := captureAuthLogs(t)
+	password := "headless-private-password"
+	t.Setenv(adminPasswordEnv, password)
+	t.Setenv(setupTokenEnv, "private-setup-token")
+	s := &Server{m: &Manager{pg: pg}, jwtKey: []byte("root-signing-key")}
+	s.bootstrapAuth()
+	hash, ok, err := pg.GetSetting(authPassKey)
+	if err != nil || !ok || bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
+		t.Fatalf("headless bootstrap must persist the bcrypt password: ok=%v err=%v", ok, err)
+	}
+	if s.setupToken != "" || !s.verifyToken(authTestToken(t, s, hash)) {
+		t.Fatal("headless success must cache hash and issue no setup token")
+	}
+	t.Setenv(adminPasswordEnv, "replacement-private-password")
+	s.bootstrapAuth()
+	stored, _, err := pg.GetSetting(authPassKey)
+	if err != nil || stored != hash || s.setupToken != "" {
+		t.Fatal("existing password must ignore bootstrap environment and never be overwritten")
+	}
+	if strings.Contains(logs.String(), password) || strings.Contains(logs.String(), "private-setup-token") || !strings.Contains(logs.String(), adminPasswordEnv) || !strings.Contains(logs.String(), "ARTEX") {
+		t.Fatal("headless log must identify env/user without secrets")
+	}
+}
+
+func TestSetupTokenInvalidHeadlessPasswordFallsBack(t *testing.T) {
+	pg, _ := authSetupDatabase(t)
+	logs := captureAuthLogs(t)
+	t.Setenv(adminPasswordEnv, "short")
+	t.Setenv(setupTokenEnv, "private-interactive-token")
+	s := &Server{m: &Manager{pg: pg}}
+	s.bootstrapAuth()
+	if !s.checkSetupToken("private-interactive-token") {
+		t.Fatal("invalid headless password must fall back to interactive setup")
+	}
+	if _, ok, err := pg.GetSetting(authPassKey); err != nil || ok {
+		t.Fatal("invalid password must not be persisted")
+	}
+	if !strings.Contains(logs.String(), adminPasswordEnv) || !strings.Contains(logs.String(), validatePassword("short")) || strings.Contains(logs.String(), "short") || strings.Contains(logs.String(), "private-interactive-token") {
+		t.Fatal("invalid-password log must include reason and env name without secrets")
+	}
+}
+
+func TestSetupTokenBootstrapHashFailureBlocksAuthentication(t *testing.T) {
+	pg, _ := authSetupDatabase(t)
+	logs := captureAuthLogs(t)
+	t.Setenv(adminPasswordEnv, "private-headless-password")
+	t.Setenv(setupTokenEnv, "private-interactive-token")
+	s := &Server{m: &Manager{pg: pg}, jwtKey: []byte("root-signing-key")}
+	reader := rand.Reader
+	rand.Reader = iotest.ErrReader(errors.New("forced bcrypt entropy failure"))
+	t.Cleanup(func() { rand.Reader = reader })
+	s.bootstrapAuth()
+	rand.Reader = reader
+	if s.setupToken != "" || s.passHashLoaded || s.verifyToken(authTestToken(t, s, "")) {
+		t.Fatal("bcrypt failure must invalidate/block auth and issue no setup token")
+	}
+	if !strings.Contains(logs.String(), "forced bcrypt entropy failure") || strings.Contains(logs.String(), "private-") {
+		t.Fatal("hash failure must be logged without secrets")
+	}
+}
+
+func TestSetupTokenBootstrapWriteFailureBlocksAuthentication(t *testing.T) {
+	pg, _ := authSetupDatabase(t)
+	logs := captureAuthLogs(t)
+	if _, err := pg.Exec(`CREATE FUNCTION reject_auth_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN RAISE EXCEPTION 'forced auth write failure'; END $$;
+		CREATE TRIGGER reject_auth_insert BEFORE INSERT ON settings
+		FOR EACH ROW EXECUTE FUNCTION reject_auth_insert()`); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(adminPasswordEnv, "private-headless-password")
+	t.Setenv(setupTokenEnv, "private-interactive-token")
+	s := &Server{m: &Manager{pg: pg}, jwtKey: []byte("root-signing-key")}
+	s.bootstrapAuth()
+	if s.setupToken != "" || s.passHashLoaded || s.verifyToken(authTestToken(t, s, "")) {
+		t.Fatal("write failure must invalidate/block cached empty auth and issue no setup token")
+	}
+	if !strings.Contains(logs.String(), "forced auth write failure") || strings.Contains(logs.String(), "private-") {
+		t.Fatal("write failure must be logged without secrets")
+	}
+}
+
+func TestSetupTokenBootstrapReadFailureInvalidatesEmptyCache(t *testing.T) {
+	pg, _ := authSetupDatabase(t)
+	captureAuthLogs(t)
+	s := &Server{m: &Manager{pg: pg}, jwtKey: []byte("root-signing-key")}
+	s.setPassHash("")
+	if err := pg.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s.bootstrapAuth()
+	if s.setupToken != "" || s.passHashLoaded || s.verifyToken(authTestToken(t, s, "")) {
+		t.Fatal("bootstrap read failure must invalidate pre-existing empty cache and block raw-root auth")
+	}
+}
+
+func TestSetupTokenBootstrapCompetingInsertReloadFailure(t *testing.T) {
+	pg, other := authSetupDatabase(t)
+	logs := captureAuthLogs(t)
+	t.Setenv(adminPasswordEnv, "private-headless-password")
+	t.Setenv(setupTokenEnv, "private-interactive-token")
+	if err := pg.SetSetting(authPassKey, ""); err != nil {
+		t.Fatal(err)
+	}
+	pg.SetMaxOpenConns(1)
+	var backend int
+	if err := pg.QueryRow(`SELECT pg_backend_pid()`).Scan(&backend); err != nil {
+		t.Fatal(err)
+	}
+	lockKey := time.Now().UnixNano()
+	if _, err := pg.Exec(fmt.Sprintf(`CREATE FUNCTION wait_auth_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN PERFORM pg_advisory_xact_lock(%d); RETURN NEW; END $$;
+		CREATE TRIGGER wait_auth_insert BEFORE INSERT ON settings
+		FOR EACH ROW EXECUTE FUNCTION wait_auth_insert()`, lockKey)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	blocker, err := other.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		blocker.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, lockKey)
+		blocker.Close()
+	})
+	if _, err := blocker.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, lockKey); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{m: &Manager{pg: pg}, jwtKey: []byte("root-signing-key")}
+	done := make(chan struct{})
+	go func() { s.bootstrapAuth(); close(done) }()
+	for {
+		var waiting bool
+		if err := blocker.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_locks WHERE pid=$1 AND locktype='advisory' AND NOT granted
+		)`, backend).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if _, err := blocker.ExecContext(ctx, `UPDATE settings SET value=$1 WHERE key=$2`, "competing-process-hash", authPassKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := pg.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := blocker.ExecContext(ctx, `SELECT pg_advisory_unlock($1)`, lockKey); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("bootstrap did not finish after releasing competing insert")
+	}
+	if !strings.Contains(logs.String(), "Reload initialized password hash") {
+		t.Fatalf("must exercise failed reload after losing insert: %s", logs.String())
+	}
+	if s.setupToken != "" || s.passHashLoaded || s.verifyToken(authTestToken(t, s, "")) {
+		t.Fatal("failed competing-insert reload must block cached empty/raw auth without issuing setup token")
+	}
+	s.m.pg = &db.DB{DB: other}
+	if s.verifyToken(authTestToken(t, s, "competing-process-hash")) {
+		t.Fatal("verification must not clear bootstrap failure itself")
+	}
+	if hash, err := s.reloadPassHash(); err != nil || hash != "competing-process-hash" {
+		t.Fatalf("explicit reload must recover competing hash without overwriting it: hash=%q err=%v", hash, err)
+	}
+	if !s.verifyToken(authTestToken(t, s, "competing-process-hash")) {
+		t.Fatal("successful authoritative reload must restore verification")
+	}
+}
+
+func TestAuthLimiterTiedTimestampEviction(t *testing.T) {
+	now := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+	l := &authLimiter{now: func() time.Time { return now }}
+	for i := 0; i < 10000; i++ {
+		l.failure(fmt.Sprintf("peer-%05d", i))
+	}
+	l.failure("new-peer")
+	if len(l.clients) != 10000 || l.clients["peer-00000"] != nil || l.clients["peer-00001"] == nil || l.clients["peer-09999"] == nil {
+		t.Fatal("equal timestamps must deterministically evict the lexicographically first client")
+	}
+}
+
+func TestAuthLimiterConcurrentFailuresAndProbes(t *testing.T) {
+	now := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+	s := &Server{}
+	l := s.limiter()
+	l.now = func() time.Time { return now }
+	var wg sync.WaitGroup
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if s.limiter() != l {
+				t.Error("concurrent callers must share one limiter")
+			}
+			l.failure("peer")
+		}()
+	}
+	wg.Wait()
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			l.failure("peer")
+			if ok, wait := l.allow("peer"); ok || wait != 30*time.Second {
+				t.Errorf("active concurrent cooldown must remain 30s: allowed=%v wait=%s", ok, wait)
+			}
+			key := fmt.Sprintf("independent-%d", i)
+			l.failure(key)
+			l.allow(key)
+			l.reset(key)
+		}(i)
+	}
+	wg.Wait()
+	if len(l.clients) != 1 || l.clients["peer"] == nil {
+		t.Fatal("concurrent reset must preserve unrelated peer records")
 	}
 }
