@@ -220,6 +220,160 @@ func TestLoadOrCreateJWTKeyRetiredWorkspaceOverlap(t *testing.T) {
 	}
 }
 
+func TestLoadOrCreateJWTKeyCleanupPreservesCanonicalDependencies(t *testing.T) {
+	for _, location := range []string{"retired chain", "workspace target", "workspace chain"} {
+		for _, relative := range []bool{false, true} {
+			for _, directoryAlias := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/relative=%t/directory alias=%t", location, relative, directoryAlias), func(t *testing.T) {
+					keyDir, dataDir, retiredDir, thirdDir := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
+					key := bytes.Repeat([]byte{42}, 32)
+					disk := []byte("v2:" + base64.RawURLEncoding.EncodeToString(key) + "\n")
+					canonical := filepath.Join(keyDir, jwtKeyFilename)
+					workspace := filepath.Join(dataDir, jwtKeyFilename)
+					dependencyDir := retiredDir
+					if strings.HasPrefix(location, "workspace") {
+						dependencyDir = dataDir
+					}
+					dependency := filepath.Join(dependencyDir, jwtKeyFilename)
+					target := dependency
+					if strings.HasSuffix(location, "chain") {
+						target = filepath.Join(thirdDir, "key.key")
+					}
+					original := map[string][]byte{
+						target:                         disk,
+						canonical + jwtKeyBackupSuffix: bytes.Repeat([]byte("b"), 32),
+					}
+					if dependencyDir != dataDir {
+						original[workspace] = bytes.Repeat([]byte("w"), 32)
+					}
+					// An earlier independent candidate must also survive preflight failure.
+					earlierRetiredDir := t.TempDir()
+					original[filepath.Join(earlierRetiredDir, jwtKeyFilename)] = bytes.Repeat([]byte("r"), 32)
+					for path, data := range original {
+						if err := os.WriteFile(path, data, 0o600); err != nil {
+							t.Fatal(err)
+						}
+					}
+					links := map[string]string{}
+					if target != dependency {
+						links[dependency] = target
+					}
+					via := dependency
+					if directoryAlias {
+						alias := filepath.Join(t.TempDir(), "alias")
+						links[alias] = dependencyDir
+						via = filepath.Join(alias, jwtKeyFilename)
+					}
+					links[canonical] = via
+					for path, target := range links {
+						if relative {
+							var err error
+							target, err = filepath.Rel(filepath.Dir(path), target)
+							if err != nil {
+								t.Fatal(err)
+							}
+							links[path] = target
+						}
+						if err := os.Symlink(target, path); err != nil {
+							if runtime.GOOS == "windows" {
+								t.Skipf("symlinks unavailable: %v", err)
+							}
+							t.Fatal(err)
+						}
+					}
+					var retiredDirs []string
+					if location != "workspace target" {
+						retiredDirs = append(retiredDirs, earlierRetiredDir)
+					}
+					if dependencyDir != dataDir {
+						retiredDirs = append(retiredDirs, retiredDir)
+					}
+					removeCalls := 0
+					ops := jwtKeyFileOps{rename: os.Rename, remove: func(path string) error {
+						removeCalls++
+						return os.Remove(path)
+					}}
+					for startup := 0; startup < 2; startup++ {
+						if _, err := loadOrCreateJWTKeyWithOps(keyDir, dataDir, ops, retiredDirs...); err == nil {
+							t.Error("canonical dependency must fail cleanup preflight")
+						}
+						if removeCalls != 0 {
+							t.Errorf("preflight failure must not remove any artifact, got %d removals", removeCalls)
+						}
+						for path, want := range original {
+							if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, want) {
+								t.Errorf("key artifact %s changed after preflight failure: %v", path, err)
+							}
+						}
+						for path, want := range links {
+							if got, err := os.Readlink(path); err != nil || got != want {
+								t.Errorf("symlink %s changed after preflight failure: %v", path, err)
+							}
+						}
+						assertVersionedJWTKey(t, keyDir, key)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestLoadOrCreateJWTKeyCleanupPreservesCanonicalDirectorySymlink(t *testing.T) {
+	retiredDir, thirdDir, dataDir := t.TempDir(), t.TempDir(), t.TempDir()
+	dependency := filepath.Join(retiredDir, jwtKeyFilename)
+	if err := os.Symlink(thirdDir, dependency); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	keyDir := filepath.Join(dependency, "keys")
+	if err := os.Mkdir(keyDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	key, err := loadOrCreateJWTKey(keyDir, dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadOrCreateJWTKey(keyDir, dataDir, retiredDir); err == nil {
+		t.Error("canonical directory symlink dependency must fail cleanup preflight")
+	}
+	assertVersionedJWTKey(t, keyDir, key)
+	if got, err := os.Readlink(dependency); err != nil || got != thirdDir {
+		t.Fatalf("canonical directory dependency must remain intact: %v", err)
+	}
+}
+
+func TestLoadOrCreateJWTKeyCanonicalSymlinkCycleDoesNotCleanUp(t *testing.T) {
+	keyDir, dataDir, retiredDir := t.TempDir(), t.TempDir(), t.TempDir()
+	canonical := filepath.Join(keyDir, jwtKeyFilename)
+	retired := filepath.Join(retiredDir, jwtKeyFilename)
+	for path, target := range map[string]string{canonical: retired, retired: canonical} {
+		if err := os.Symlink(target, path); err != nil {
+			if runtime.GOOS == "windows" {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			t.Fatal(err)
+		}
+	}
+	workspace := filepath.Join(dataDir, jwtKeyFilename)
+	legacy := bytes.Repeat([]byte("w"), 32)
+	if err := os.WriteFile(workspace, legacy, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	removeCalls := 0
+	ops := jwtKeyFileOps{rename: os.Rename, remove: func(path string) error {
+		removeCalls++
+		return os.Remove(path)
+	}}
+	if _, err := loadOrCreateJWTKeyWithOps(keyDir, dataDir, ops, retiredDir); err == nil || removeCalls != 0 {
+		t.Fatalf("cyclic canonical path must fail before cleanup: err=%v, removals=%d", err, removeCalls)
+	}
+	if got, err := os.ReadFile(workspace); err != nil || !bytes.Equal(got, legacy) {
+		t.Fatalf("workspace key must survive canonical symlink cycle: %v", err)
+	}
+}
+
 func TestLoadOrCreateJWTKeyRetirementFailureRetry(t *testing.T) {
 	keyDir, dataDir, baseDir := t.TempDir(), t.TempDir(), t.TempDir()
 	legacy := oldBinaryJWTKey(t, baseDir, dataDir)

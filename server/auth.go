@@ -479,20 +479,24 @@ func loadOrCreateJWTKeyWithOps(keyDir, dataDir string, ops jwtKeyFileOps, retire
 		} else if err != nil {
 			return nil, fmt.Errorf("stat retired jwt key: %w", err)
 		}
-		// Unlinking aliases is safe unless the canonical symlink needs this entry.
-		resolved, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			return nil, fmt.Errorf("resolve jwt key: %w", err)
-		}
-		resolvedDirInfo, err := os.Stat(filepath.Dir(resolved))
-		if err != nil {
-			return nil, fmt.Errorf("stat resolved jwt key directory: %w", err)
-		}
-		if filepath.Base(resolved) == jwtKeyFilename && os.SameFile(resolvedDirInfo, retiredDirInfo) {
-			return nil, fmt.Errorf("canonical jwt key resolves to retired key %s", retired)
-		}
 		if !workspaceExists || !os.SameFile(dataDirInfo, retiredDirInfo) {
 			retiredPaths = append(retiredPaths, retired)
+		}
+	}
+	cleanupPaths := retiredPaths
+	if workspaceExists {
+		cleanupPaths = append(cleanupPaths, workspace)
+	}
+	if backupExists {
+		cleanupPaths = append(cleanupPaths, backup)
+	}
+	for _, cleanup := range cleanupPaths {
+		depends, err := jwtKeyPathDependsOn(path, cleanup)
+		if err != nil {
+			return nil, fmt.Errorf("inspect jwt key cleanup dependency: %w", err)
+		}
+		if depends {
+			return nil, fmt.Errorf("canonical jwt key depends on cleanup entry %s", cleanup)
 		}
 	}
 	if backupExists {
@@ -511,6 +515,70 @@ func loadOrCreateJWTKeyWithOps(keyDir, dataDir string, ops jwtKeyFileOps, retire
 		}
 	}
 	return key, nil
+}
+
+// Compare directory entries, not target inodes: unlinking a separate hardlink or
+// a symlink pointing toward the canonical key is safe; unlinking its path is not.
+func jwtKeyPathDependsOn(path, candidate string) (bool, error) {
+	candidateDir, err := os.Stat(filepath.Dir(candidate))
+	if err != nil {
+		return false, err
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return false, err
+	}
+	volume := filepath.VolumeName(path)
+	resolved := volume + string(os.PathSeparator)
+	pending := path[len(volume):]
+	links := 0
+	for pending != "" {
+		component := pending
+		pending = ""
+		if i := strings.IndexByte(filepath.ToSlash(component), '/'); i >= 0 {
+			component, pending = component[:i], component[i+1:]
+		}
+		switch component {
+		case "", ".":
+			continue
+		case "..":
+			resolved = filepath.Dir(resolved)
+			continue
+		}
+		if component == filepath.Base(candidate) || os.PathSeparator == '\\' && strings.EqualFold(component, filepath.Base(candidate)) {
+			dir, err := os.Stat(resolved)
+			if err != nil {
+				return false, err
+			}
+			if os.SameFile(dir, candidateDir) {
+				return true, nil
+			}
+		}
+		entry := filepath.Join(resolved, component)
+		info, err := os.Lstat(entry)
+		if err != nil {
+			return false, err
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			resolved = entry
+			continue
+		}
+		links++
+		if links > 255 {
+			return false, fmt.Errorf("too many jwt key symlinks")
+		}
+		target, err := os.Readlink(entry)
+		if err != nil {
+			return false, err
+		}
+		if filepath.IsAbs(target) {
+			volume = filepath.VolumeName(target)
+			resolved = volume + string(os.PathSeparator)
+			target = target[len(volume):]
+		}
+		pending = target + string(os.PathSeparator) + pending
+	}
+	return false, nil
 }
 
 func readJWTKey(path string) ([]byte, bool, error) {
