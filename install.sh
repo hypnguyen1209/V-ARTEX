@@ -49,7 +49,8 @@ install_docker(){
   docker compose pull || true
   docker compose up -d
   ok "Started → http://localhost:8787"
-  info "View logs: docker compose logs -f artex"
+  info "First run: find the setup token with: docker compose logs artex"
+  info "Follow logs: docker compose logs -f artex"
 }
 
 # ── ② Build and run locally ──────────────────────────────

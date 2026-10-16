@@ -79,7 +79,7 @@ The script detects or installs Docker, then offers **① All Docker** or **② B
 - **① All Docker**: Enter a Postgres password (press Enter to generate one) → write `.env` automatically → `docker compose up -d`.
 - **② Local Run**: Choose a database (existing or a new Docker instance) → generate `config.json` → build a single binary with embedded UI using `go` → start.
 
-After installation, open **http://localhost:8787** (the first visit opens `/setup` to set the administrator password).
+After installation, get the one-time setup token from the server console (`docker compose logs artex` for Docker), then open **http://localhost:8787**. The first visit opens `/setup`, which requires that token before it accepts the administrator password. The HTTP service is loopback-only by default.
 
 ### Option 2: Docker Compose (Manual)
 
@@ -90,6 +90,10 @@ cp .env.example .env          # Set POSTGRES_PASSWORD and optionally ANTHROPIC_A
 docker compose up -d          # Pull the autumn27/artex image + postgres
 # → http://localhost:8787
 ```
+
+On first start, run `docker compose logs artex` and copy the `[auth] Setup token` value into `/setup`. For unattended bootstrap, set either `ARTEX_SETUP_TOKEN` or `ARTEX_ADMIN_PASSWORD` in `.env` before the first start. `ARTEX_ADMIN_PASSWORD` is ignored after initialization; remove it from plaintext configuration afterward.
+
+Docker publishes port 8787 on `127.0.0.1` by default. Set `ARTEX_BIND=0.0.0.0` only when an HTTPS reverse proxy or an equivalent trusted network boundary is ready.
 
 The image includes common tools (ripgrep/curl/vim/npm/nmap…); `./skills` and `./data` persist through bind mounts.
 
@@ -143,6 +147,8 @@ ARTEX_TARGETS=linux/amd64,windows/amd64 ./build.sh --release
 ## Updates and Upgrades
 
 > Upgrades replace the program and retain data: the Postgres volume `pgdata`, `./data` (jwt.key / SQLite, etc.), and `./skills` remain intact. **Database migrations run automatically**: `artex` reruns `schema.sql` idempotently at each startup (including `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`), so restarting applies migrations. Back up `./data` and the database before upgrading.
+
+The first upgrade to the hardened authentication format rotates `jwt.key` once and signs out every existing browser. Passwords and application data are preserved. A later binary rollback also requires a fresh login; this prevents pre-upgrade tokens from becoming valid again.
 
 ### Option 1: One-Click Update (Recommended)
 
@@ -220,13 +226,19 @@ Optional: `ARTEX_LLM_PROVIDER` / `ARTEX_LLM_MODEL` / `ARTEX_LLM_BASE_URL` / `ART
 
 **Concurrency**: Configure the number of work agents per task in System Settings (default 3).
 
-**Common arguments**: `./start.sh -addr :8787 -proxy :8788` (`-addr` for the frontend + API, `-proxy` for the traffic recording proxy). The startup script passes arguments unchanged to `artex`.
+**Authentication bootstrap**: An empty installation prints a random setup token once with an `[auth]` prefix. Set `ARTEX_SETUP_TOKEN` to supply that token without logging it, or set `ARTEX_ADMIN_PASSWORD` to initialize the password headlessly. Neither variable overwrites an existing password.
+
+**Browser origins**: Same-origin UI requests require no CORS configuration. `ARTEX_CORS_ORIGINS` replaces the local development allowlist with comma-separated exact origins; `*` is rejected.
+
+**Common arguments**: `./start.sh -addr 127.0.0.1:8787 -proxy 127.0.0.1:8788` (`-addr` serves the frontend and API; `-proxy` is the traffic-recording proxy). The startup script passes arguments unchanged. Passing `-addr :8787` explicitly exposes the HTTP service on every interface.
 
 ### Reverse Proxy Deployment (HTTPS / Only Port 443 Exposed)
 
-The frontend and API/SSE share one backend port (default `:8787`). The live activity feed uses a **same-origin** URL by default, so **no `NEXT_PUBLIC_SSE_BASE` configuration is needed**. Expose only 443 publicly and keep 8787 on the internal network.
+The frontend and API/SSE share one backend port (default `127.0.0.1:8787`). The live activity feed uses a **same-origin** URL by default, so **no `NEXT_PUBLIC_SSE_BASE` configuration is needed**. Expose only 443 publicly and keep 8787 on the internal network.
 
 SSE keeps a connection open and pushes events continuously. The reverse proxy **must disable buffering**, or the browser will connect but receive no events (the activity feed keeps spinning). Nginx example:
+
+> ARTEX does not terminate TLS. Complete administrator setup before changing the bind address, expose only the reverse proxy, and keep the application port private.
 
 ```nginx
 server {
@@ -270,11 +282,11 @@ In this version, history is available through vulnerability details and sessions
 ### Local Development and Testing
 
 ```bash
-./dev.sh    # Backend(:8787) + traffic proxy(:8788) + frontend next dev(:5173) → http://localhost:5173
+./dev.sh    # Backend(127.0.0.1:8787) + traffic proxy(127.0.0.1:8788) + frontend next dev(127.0.0.1:5173) → http://127.0.0.1:5173
 ```
 
 - Backend: `go run ./cmd/artex` (without `-tags embedui`, the frontend is not embedded)
-- Frontend: `cd web && npm run dev` (`/api` proxies to the backend, with hot reload)
+- Frontend: `cd web && npm run dev -- --port 5173 --hostname 127.0.0.1` (`/api` proxies to the backend, with hot reload)
 - Tests: `go test ./...`
 - Mock preview (no backend): `cd web && NEXT_PUBLIC_MOCK=1 npm run dev`
 
