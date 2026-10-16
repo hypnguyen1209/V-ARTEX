@@ -408,11 +408,13 @@ type jwtKeyFileOps struct {
 
 // loadOrCreateJWTKey loads a versioned signing key outside the browsable workspace.
 // Legacy keys at either location are replaced once, invalidating existing sessions.
-func loadOrCreateJWTKey(keyDir, dataDir string) ([]byte, error) {
-	return loadOrCreateJWTKeyWithOps(keyDir, dataDir, jwtKeyFileOps{rename: os.Rename, remove: os.Remove})
+// Retired executable directories are cleaned on every successful load so rollback
+// keys cannot survive an intervening hardened startup.
+func loadOrCreateJWTKey(keyDir, dataDir string, retiredKeyDirs ...string) ([]byte, error) {
+	return loadOrCreateJWTKeyWithOps(keyDir, dataDir, jwtKeyFileOps{rename: os.Rename, remove: os.Remove}, retiredKeyDirs...)
 }
 
-func loadOrCreateJWTKeyWithOps(keyDir, dataDir string, ops jwtKeyFileOps) ([]byte, error) {
+func loadOrCreateJWTKeyWithOps(keyDir, dataDir string, ops jwtKeyFileOps, retiredKeyDirs ...string) ([]byte, error) {
 	path := filepath.Join(keyDir, jwtKeyFilename)
 	backup := path + jwtKeyBackupSuffix
 	key, currentExists, err := readJWTKey(path)
@@ -432,12 +434,13 @@ func loadOrCreateJWTKeyWithOps(keyDir, dataDir string, ops jwtKeyFileOps) ([]byt
 
 	workspace := filepath.Join(dataDir, jwtKeyFilename)
 	workspaceExists := false
+	var dataDirInfo os.FileInfo
 	if workspace != path {
 		keyDirInfo, err := os.Stat(keyDir)
 		if err != nil {
 			return nil, fmt.Errorf("stat jwt key directory: %w", err)
 		}
-		dataDirInfo, err := os.Stat(dataDir)
+		dataDirInfo, err = os.Stat(dataDir)
 		if err != nil && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("stat workspace directory: %w", err)
 		}
@@ -454,6 +457,44 @@ func loadOrCreateJWTKeyWithOps(keyDir, dataDir string, ops jwtKeyFileOps) ([]byt
 			return nil, err
 		}
 	}
+	var retiredPaths []string
+	for _, retiredDir := range retiredKeyDirs {
+		keyDirInfo, err := os.Stat(keyDir)
+		if err != nil {
+			return nil, fmt.Errorf("stat jwt key directory: %w", err)
+		}
+		retiredDirInfo, err := os.Stat(retiredDir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("stat retired jwt key directory: %w", err)
+		}
+		if os.SameFile(keyDirInfo, retiredDirInfo) {
+			continue
+		}
+		retired := filepath.Join(retiredDir, jwtKeyFilename)
+		if _, err := os.Lstat(retired); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("stat retired jwt key: %w", err)
+		}
+		// Unlinking aliases is safe unless the canonical symlink needs this entry.
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return nil, fmt.Errorf("resolve jwt key: %w", err)
+		}
+		resolvedDirInfo, err := os.Stat(filepath.Dir(resolved))
+		if err != nil {
+			return nil, fmt.Errorf("stat resolved jwt key directory: %w", err)
+		}
+		if filepath.Base(resolved) == jwtKeyFilename && os.SameFile(resolvedDirInfo, retiredDirInfo) {
+			return nil, fmt.Errorf("canonical jwt key resolves to retired key %s", retired)
+		}
+		if !workspaceExists || !os.SameFile(dataDirInfo, retiredDirInfo) {
+			retiredPaths = append(retiredPaths, retired)
+		}
+	}
 	if backupExists {
 		if err := ops.remove(backup); err != nil {
 			return nil, fmt.Errorf("remove jwt key backup: %w", err)
@@ -462,6 +503,11 @@ func loadOrCreateJWTKeyWithOps(keyDir, dataDir string, ops jwtKeyFileOps) ([]byt
 	if workspaceExists {
 		if err := ops.remove(workspace); err != nil {
 			return nil, fmt.Errorf("remove stale workspace jwt key: %w", err)
+		}
+	}
+	for _, retired := range retiredPaths {
+		if err := ops.remove(retired); err != nil {
+			return nil, fmt.Errorf("remove retired jwt key: %w", err)
 		}
 	}
 	return key, nil

@@ -2,14 +2,319 @@ package server
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+// Matches b2903f0: old binaries ignore ARTEX_JWT_KEY_DIR and use the entire
+// trimmed BaseDir/jwt.key, creating it when no usable file exists.
+func oldBinaryJWTKey(t *testing.T, baseDir, dataDir string) []byte {
+	t.Helper()
+	path := filepath.Join(baseDir, jwtKeyFilename)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if data, err := os.ReadFile(filepath.Join(dataDir, jwtKeyFilename)); err == nil {
+			if err := os.WriteFile(path, data, 0o600); err == nil {
+				_ = os.Remove(filepath.Join(dataDir, jwtKeyFilename))
+			}
+		}
+	}
+	if data, err := os.ReadFile(path); err == nil && len(bytes.TrimSpace(data)) >= 32 {
+		return bytes.TrimSpace(data)
+	}
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	key := make([]byte, 32)
+	for i := range key {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		key[i] = chars[n.Int64()]
+	}
+	if err := os.WriteFile(path, key, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return key
+}
+
+func TestLoadOrCreateJWTKeyRetiresExecutableKeyAcrossRollbacks(t *testing.T) {
+	keyDir, dataDir, baseDir := t.TempDir(), t.TempDir(), t.TempDir()
+	var oldTokens []string
+	var hardenedKey []byte
+	for cycle := 0; cycle < 3; cycle++ {
+		oldKey := oldBinaryJWTKey(t, baseDir, dataDir)
+		for _, token := range oldTokens {
+			if verifyJWT(token, oldKey) {
+				t.Fatal("rollback revived a previous executable-directory token")
+			}
+		}
+		token, err := signJWT(oldKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !verifyJWT(token, oldKey) {
+			t.Fatal("old binary token must verify before upgrade")
+		}
+		oldTokens = append(oldTokens, token)
+		key, err := loadOrCreateJWTKey(keyDir, dataDir, baseDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hardenedKey != nil && !bytes.Equal(key, hardenedKey) {
+			t.Fatal("rollback cleanup must preserve the configured root key")
+		}
+		hardenedKey = key
+		assertVersionedJWTKey(t, keyDir, key)
+		for _, token := range oldTokens {
+			if verifyJWT(token, key) {
+				t.Fatal("old binary token must not verify after upgrade")
+			}
+		}
+		if _, err := os.Lstat(filepath.Join(baseDir, jwtKeyFilename)); !os.IsNotExist(err) {
+			t.Fatalf("executable-directory key must be retired on every startup, got %v", err)
+		}
+	}
+}
+
+func TestLoadOrCreateJWTKeyRetiredDirectoryAliases(t *testing.T) {
+	for _, kind := range []string{"same", "relative", "symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			keyDir, dataDir := t.TempDir(), t.TempDir()
+			key, err := loadOrCreateJWTKey(keyDir, dataDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			baseDir := keyDir
+			if kind == "relative" {
+				cwd, err := os.Getwd()
+				if err != nil {
+					t.Fatal(err)
+				}
+				baseDir, err = filepath.Rel(cwd, keyDir)
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if kind == "symlink" {
+				baseDir = filepath.Join(t.TempDir(), "executable")
+				if err := os.Symlink(keyDir, baseDir); err != nil {
+					if runtime.GOOS == "windows" {
+						t.Skipf("symlinks unavailable: %v", err)
+					}
+					t.Fatal(err)
+				}
+			}
+			got, err := loadOrCreateJWTKey(keyDir, dataDir, baseDir)
+			if err != nil || !bytes.Equal(got, key) {
+				t.Fatalf("physical directory alias must preserve canonical key: %v", err)
+			}
+			assertVersionedJWTKey(t, keyDir, key)
+		})
+	}
+}
+
+func TestLoadOrCreateJWTKeyRetiredFileAliases(t *testing.T) {
+	for _, kind := range []string{"hardlink", "legacy symlink", "canonical symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			keyDir, dataDir, baseDir := t.TempDir(), t.TempDir(), t.TempDir()
+			key, err := loadOrCreateJWTKey(keyDir, dataDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			canonical := filepath.Join(keyDir, jwtKeyFilename)
+			retired := filepath.Join(baseDir, jwtKeyFilename)
+			if kind == "canonical symlink" {
+				if err := os.Rename(canonical, retired); err != nil {
+					t.Fatal(err)
+				}
+				canonical, retired = retired, canonical
+			}
+			link := os.Symlink
+			if kind == "hardlink" {
+				link = os.Link
+			}
+			if err := link(canonical, retired); err != nil {
+				if runtime.GOOS == "windows" {
+					t.Skipf("links unavailable: %v", err)
+				}
+				t.Fatal(err)
+			}
+			got, err := loadOrCreateJWTKey(keyDir, dataDir, baseDir)
+			if kind == "canonical symlink" {
+				if err == nil {
+					t.Fatal("canonical symlink into retired entry must fail closed")
+				}
+			} else {
+				if err != nil || !bytes.Equal(got, key) {
+					t.Fatalf("unlinking retired alias must preserve canonical key: %v", err)
+				}
+				if _, err := os.Lstat(retired); !os.IsNotExist(err) {
+					t.Fatalf("retired file alias must be removed: %v", err)
+				}
+			}
+			assertVersionedJWTKey(t, keyDir, key)
+		})
+	}
+}
+
+func TestLoadOrCreateJWTKeyRetiredMissing(t *testing.T) {
+	for _, missingDir := range []bool{false, true} {
+		keyDir, dataDir, baseDir := t.TempDir(), t.TempDir(), t.TempDir()
+		if missingDir {
+			baseDir = filepath.Join(baseDir, "missing")
+		}
+		key, err := loadOrCreateJWTKey(keyDir, dataDir, baseDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertVersionedJWTKey(t, keyDir, key)
+	}
+}
+
+func TestLoadOrCreateJWTKeyRetiredWorkspaceOverlap(t *testing.T) {
+	for _, canonicalSymlink := range []bool{false, true} {
+		t.Run(fmt.Sprint("canonical symlink=", canonicalSymlink), func(t *testing.T) {
+			keyDir, baseDir := t.TempDir(), t.TempDir()
+			key, err := loadOrCreateJWTKey(keyDir, baseDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			canonical := filepath.Join(keyDir, jwtKeyFilename)
+			retired := filepath.Join(baseDir, jwtKeyFilename)
+			if canonicalSymlink {
+				if err := os.Rename(canonical, retired); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(retired, canonical); err != nil {
+					if runtime.GOOS == "windows" {
+						t.Skipf("symlinks unavailable: %v", err)
+					}
+					t.Fatal(err)
+				}
+			} else {
+				oldBinaryJWTKey(t, baseDir, t.TempDir())
+			}
+			removeCalls := 0
+			ops := jwtKeyFileOps{rename: os.Rename, remove: func(path string) error {
+				if path == retired {
+					removeCalls++
+				}
+				return os.Remove(path)
+			}}
+			got, err := loadOrCreateJWTKeyWithOps(keyDir, baseDir, ops, baseDir)
+			if canonicalSymlink {
+				if err == nil || removeCalls != 0 {
+					t.Fatalf("unsafe overlap must fail before removing canonical target: err=%v, removals=%d", err, removeCalls)
+				}
+			} else if err != nil || !bytes.Equal(got, key) || removeCalls != 1 {
+				t.Fatalf("workspace/retired overlap must be removed once: err=%v, removals=%d", err, removeCalls)
+			}
+			assertVersionedJWTKey(t, keyDir, key)
+		})
+	}
+}
+
+func TestLoadOrCreateJWTKeyRetirementFailureRetry(t *testing.T) {
+	keyDir, dataDir, baseDir := t.TempDir(), t.TempDir(), t.TempDir()
+	legacy := oldBinaryJWTKey(t, baseDir, dataDir)
+	retired := filepath.Join(baseDir, jwtKeyFilename)
+	removeErr := errors.New("executable key removal failed")
+	ops := jwtKeyFileOps{rename: os.Rename, remove: func(path string) error {
+		if path == retired {
+			return removeErr
+		}
+		return os.Remove(path)
+	}}
+	if _, err := loadOrCreateJWTKeyWithOps(keyDir, dataDir, ops, baseDir); !errors.Is(err, removeErr) {
+		t.Fatalf("retirement failure must fail startup, got %v", err)
+	}
+	disk, err := os.ReadFile(filepath.Join(keyDir, jwtKeyFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(retired); err != nil || !bytes.Equal(got, legacy) {
+		t.Fatalf("failed removal must preserve executable key: %v", err)
+	}
+	key, err := loadOrCreateJWTKey(keyDir, dataDir, baseDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(assertVersionedJWTKey(t, keyDir, key), disk) {
+		t.Fatal("retirement retry must preserve canonical key")
+	}
+	if _, err := os.Lstat(retired); !os.IsNotExist(err) {
+		t.Fatalf("retry must retire executable key: %v", err)
+	}
+}
+
+func TestLoadOrCreateJWTKeyRetiredInspectionFailure(t *testing.T) {
+	for _, fileLoop := range []bool{false, true} {
+		keyDir, dataDir := t.TempDir(), t.TempDir()
+		key, err := loadOrCreateJWTKey(keyDir, dataDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		workspace := filepath.Join(dataDir, jwtKeyFilename)
+		legacy := []byte(strings.Repeat("w", 32))
+		if err := os.WriteFile(workspace, legacy, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		baseDir := filepath.Join(t.TempDir(), "loop")
+		if fileLoop {
+			if err := os.Mkdir(baseDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			// ENOTDIR while inspecting the legacy path must fail closed.
+			baseDir = filepath.Join(baseDir, "not-directory")
+			if err := os.WriteFile(baseDir, []byte("file"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := os.Symlink(baseDir, baseDir); err != nil {
+			if runtime.GOOS == "windows" {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			t.Fatal(err)
+		}
+		if _, err := loadOrCreateJWTKey(keyDir, dataDir, baseDir); err == nil {
+			t.Fatal("retired directory inspection failure must fail startup")
+		}
+		assertVersionedJWTKey(t, keyDir, key)
+		if got, err := os.ReadFile(workspace); err != nil || !bytes.Equal(got, legacy) {
+			t.Fatalf("inspection failure must precede workspace cleanup: %v", err)
+		}
+	}
+}
+
+func TestLoadOrCreateJWTKeyFailurePreservesRetiredKey(t *testing.T) {
+	for _, failure := range []string{"malformed canonical", "missing canonical directory", "install failure"} {
+		t.Run(failure, func(t *testing.T) {
+			keyDir, dataDir, baseDir := t.TempDir(), t.TempDir(), t.TempDir()
+			legacy := oldBinaryJWTKey(t, baseDir, dataDir)
+			ops := jwtKeyFileOps{rename: os.Rename, remove: os.Remove}
+			if failure == "malformed canonical" {
+				if err := os.WriteFile(filepath.Join(keyDir, jwtKeyFilename), []byte("invalid"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			} else if failure == "missing canonical directory" {
+				keyDir = filepath.Join(keyDir, "missing")
+			} else {
+				ops.rename = func(string, string) error { return errors.New("install failed") }
+			}
+			if _, err := loadOrCreateJWTKeyWithOps(keyDir, dataDir, ops, baseDir); err == nil {
+				t.Fatal("canonical load/create must fail")
+			}
+			if got, err := os.ReadFile(filepath.Join(baseDir, jwtKeyFilename)); err != nil || !bytes.Equal(got, legacy) {
+				t.Fatalf("canonical failure must preserve recoverable executable key: %v", err)
+			}
+		})
+	}
+}
 
 func assertVersionedJWTKey(t *testing.T, keyDir string, key []byte) []byte {
 	t.Helper()

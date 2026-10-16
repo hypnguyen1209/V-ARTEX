@@ -148,8 +148,8 @@ type triggeredRun struct {
 	mergeable bool   // true for finding/goal event triggers (merge by taskID)
 }
 
-func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDir string) *Server {
-	key, err := loadOrCreateJWTKey(keyDir, dataDir)
+func New(ctx context.Context, m *Manager, skillDir string, dataDir string, keyDir string, retiredKeyDirs ...string) *Server {
+	key, err := loadOrCreateJWTKey(keyDir, dataDir, retiredKeyDirs...)
 	if err != nil {
 		log.Fatalf("[auth] JWT key: %v", err)
 	}
