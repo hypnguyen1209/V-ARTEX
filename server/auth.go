@@ -47,7 +47,29 @@ const (
 // errDataSourceUnavailable is the common response when password reads fail.
 // Never interpret a read failure as an unset password: authInit once allowed
 // an unauthenticated request to overwrite the administrator password this way.
-const errDataSourceUnavailable = "Data source temporarily unavailable; please try again later"
+const (
+	authErrUnauthorized           = "Unauthorized"
+	authErrTokenInvalid           = "Token is invalid or expired"
+	authErrPasswordAlreadySet     = "Password has already been set"
+	authErrPasswordEmpty          = "Password must not be empty"
+	authErrMissingSetupToken      = "Setup token must not be empty"
+	authErrSetupTokenInvalid      = "Setup token is incorrect"
+	authErrNewPasswordEmpty       = "New password must not be empty"
+	authErrPasswordHash           = "Failed to hash password"
+	authErrPasswordSave           = "Failed to save password"
+	authErrTokenGeneration        = "Failed to generate token"
+	authErrInvalidRequest         = "Invalid request format"
+	authErrPasswordNotInitialized = "Password is not initialized; set a password first"
+	authErrCurrentPasswordWrong   = "Current password is incorrect"
+	authErrBadCredential          = "Username or password is incorrect"
+	authErrTooManyAttempts        = "Too many failed attempts; try again later"
+	errDataSourceUnavailable      = "Data source temporarily unavailable; please try again later"
+)
+
+func (s *Server) recordAuthFailure(r *http.Request, operation string) {
+	s.limiter().failure(clientKey(r))
+	log.Printf("[auth] Failed %s from %s", operation, clientLogID(r))
+}
 
 var passHashCacheTTL = 2 * time.Second
 
@@ -543,11 +565,11 @@ func (s *Server) requireAuth(h http.Handler) http.Handler {
 		}
 		tok := extractToken(r)
 		if tok == "" {
-			writeErr(w, 401, "Unauthorized")
+			writeErr(w, http.StatusUnauthorized, authErrUnauthorized)
 			return
 		}
-		if !verifyJWT(tok, s.jwtKey) {
-			writeErr(w, 401, "Token is invalid or expired")
+		if !s.verifyToken(tok) {
+			writeErr(w, http.StatusUnauthorized, authErrTokenInvalid)
 			return
 		}
 		h.ServeHTTP(w, r)
@@ -559,79 +581,136 @@ func (s *Server) requireAuth(h http.Handler) http.Handler {
 // the frontend to /setup (login/page.tsx). Returning 200 for a database failure
 // would steer users toward overwriting an existing password.
 func (s *Server) authStatus(w http.ResponseWriter, r *http.Request) {
-	pg := s.pg(w)
-	if pg == nil {
+	if s.m == nil || s.m.pg == nil {
+		s.blockAuth(errors.New(errDataSourceUnavailable))
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
 		return
 	}
-	hash, _, err := pg.GetSetting(authPassKey)
+	hash, err := s.reloadPassHash()
 	if err != nil {
-		writeErr(w, 503, errDataSourceUnavailable)
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"initialized": hash != ""})
+	if hash == "" && s.currentSetupToken() == "" {
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"initialized": hash != "", "setup_token_required": hash == "",
+	})
 }
 
 // POST /api/auth/init — sets the password for the first time; rejected if already set.
 func (s *Server) authInit(w http.ResponseWriter, r *http.Request) {
-	pg := s.pg(w)
-	if pg == nil {
+	if s.m == nil || s.m.pg == nil {
+		s.blockAuth(errors.New(errDataSourceUnavailable))
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
 		return
 	}
-	existing, _, err := pg.GetSetting(authPassKey)
-	if err != nil {
-		writeErr(w, 503, errDataSourceUnavailable)
-		return
-	}
-	if existing != "" {
-		writeErr(w, 403, "Password has already been set")
+	key := clientKey(r)
+	if allowed, _ := s.limiter().allow(key); !allowed {
+		writeErr(w, http.StatusTooManyRequests, authErrTooManyAttempts)
 		return
 	}
 	var req struct {
-		Password string `json:"password"`
+		Password   string `json:"password"`
+		SetupToken string `json:"setup_token"`
 	}
-	if err := decode(r, &req); err != nil || req.Password == "" {
-		writeErr(w, 400, "Password must not be empty")
+	if err := decode(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, authErrInvalidRequest)
+		return
+	}
+	if req.Password == "" {
+		writeErr(w, http.StatusBadRequest, authErrPasswordEmpty)
+		return
+	}
+	if strings.TrimSpace(req.SetupToken) == "" {
+		writeErr(w, http.StatusBadRequest, authErrMissingSetupToken)
+		return
+	}
+	s.initMu.Lock()
+	defer s.initMu.Unlock()
+	if allowed, _ := s.limiter().allow(key); !allowed {
+		writeErr(w, http.StatusTooManyRequests, authErrTooManyAttempts)
+		return
+	}
+	existing, err := s.reloadPassHash()
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
+		return
+	}
+	if existing != "" {
+		writeErr(w, http.StatusForbidden, authErrPasswordAlreadySet)
+		return
+	}
+	if s.currentSetupToken() == "" {
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
+		return
+	}
+	if !s.checkSetupToken(req.SetupToken) {
+		s.recordAuthFailure(r, "password initialization")
+		writeErr(w, http.StatusForbidden, authErrSetupTokenInvalid)
 		return
 	}
 	if msg := validatePassword(req.Password); msg != "" {
-		writeErr(w, 400, msg)
+		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		writeErr(w, 500, "Failed to hash password")
+		writeErr(w, http.StatusInternalServerError, authErrPasswordHash)
 		return
 	}
-	// Use INSERT ... ON CONFLICT DO NOTHING rather than upsert. GetSetting above
-	// is only a fast rejection; the primary key enforces first initialization.
-	// bcrypt takes tens of milliseconds; concurrent requests may initialize first, and reads can fail.
-	inserted, err := pg.InsertSettingIfAbsent(authPassKey, string(hash))
+	// The primary key chooses one initialization winner across server instances.
+	inserted, err := s.m.pg.InsertSettingIfAbsent(authPassKey, string(hash))
 	if err != nil {
-		writeErr(w, 500, "Failed to save: "+err.Error())
+		s.blockAuth(err)
+		writeErr(w, http.StatusInternalServerError, authErrPasswordSave)
 		return
 	}
 	if !inserted {
-		writeErr(w, 403, "Password has already been set")
+		if _, err := s.reloadPassHash(); err != nil {
+			writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
+			return
+		}
+		writeErr(w, http.StatusForbidden, authErrPasswordAlreadySet)
 		return
 	}
-	tok, err := signJWT(s.jwtKey)
+	s.setPassHash(string(hash))
+	s.clearSetupToken()
+	s.limiter().reset(key)
+	tok, err := signJWT(s.signingKey(string(hash)))
 	if err != nil {
-		writeErr(w, 500, "Failed to generate token")
+		writeErr(w, http.StatusInternalServerError, authErrTokenGeneration)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"token": tok})
+	writeJSON(w, http.StatusOK, map[string]any{"token": tok})
 }
 
 // POST /api/auth/change-password — changes the admin password. Requires a valid
 // token (this route is under /api/auth/* which requireAuth exempts, so the token
 // is validated here) AND the current password.
 func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
-	pg := s.pg(w)
-	if pg == nil {
+	if s.m == nil || s.m.pg == nil {
+		s.blockAuth(errors.New(errDataSourceUnavailable))
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
 		return
 	}
-	if !verifyJWT(extractToken(r), s.jwtKey) {
-		writeErr(w, 401, "Unauthorized")
+	key := clientKey(r)
+	if allowed, _ := s.limiter().allow(key); !allowed {
+		writeErr(w, http.StatusTooManyRequests, authErrTooManyAttempts)
+		return
+	}
+	s.initMu.Lock()
+	defer s.initMu.Unlock()
+	hash, err := s.reloadPassHash()
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
+		return
+	}
+	if !s.verifyToken(extractToken(r)) {
+		s.recordAuthFailure(r, "password change authorization")
+		writeErr(w, http.StatusUnauthorized, authErrUnauthorized)
 		return
 	}
 	var req struct {
@@ -639,46 +718,56 @@ func (s *Server) authChangePassword(w http.ResponseWriter, r *http.Request) {
 		NewPassword string `json:"new_password"`
 	}
 	if err := decode(r, &req); err != nil {
-		writeErr(w, 400, "Invalid request format")
+		writeErr(w, http.StatusBadRequest, authErrInvalidRequest)
 		return
 	}
 	if req.NewPassword == "" {
-		writeErr(w, 400, "New password must not be empty")
+		writeErr(w, http.StatusBadRequest, authErrNewPasswordEmpty)
 		return
 	}
 	if msg := validatePassword(req.NewPassword); msg != "" {
-		writeErr(w, 400, msg)
+		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
-	hash, ok, err := pg.GetSetting(authPassKey)
-	if err != nil {
-		writeErr(w, 503, errDataSourceUnavailable)
-		return
-	}
-	if !ok || hash == "" {
-		writeErr(w, 403, "Password is not initialized; set a password first")
+	if hash == "" {
+		writeErr(w, http.StatusForbidden, authErrPasswordNotInitialized)
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.OldPassword)); err != nil {
-		writeErr(w, 401, "Current password is incorrect")
+		s.recordAuthFailure(r, "password change")
+		writeErr(w, http.StatusUnauthorized, authErrCurrentPasswordWrong)
 		return
 	}
 	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
-		writeErr(w, 500, "Failed to hash password")
+		writeErr(w, http.StatusInternalServerError, authErrPasswordHash)
 		return
 	}
-	if err := pg.SetSetting(authPassKey, string(newHash)); err != nil {
-		writeErr(w, 500, "Failed to save: "+err.Error())
+	if err := s.m.pg.SetSetting(authPassKey, string(newHash)); err != nil {
+		s.blockAuth(err)
+		writeErr(w, http.StatusInternalServerError, authErrPasswordSave)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true})
+	s.setPassHash(string(newHash))
+	s.limiter().reset(key)
+	tok, err := signJWT(s.signingKey(string(newHash)))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, authErrTokenGeneration)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": tok})
 }
 
 // POST /api/auth/login — validates username/password and returns a JWT.
 func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
-	pg := s.pg(w)
-	if pg == nil {
+	if s.m == nil || s.m.pg == nil {
+		s.blockAuth(errors.New(errDataSourceUnavailable))
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
+		return
+	}
+	key := clientKey(r)
+	if allowed, _ := s.limiter().allow(key); !allowed {
+		writeErr(w, http.StatusTooManyRequests, authErrTooManyAttempts)
 		return
 	}
 	var req struct {
@@ -686,30 +775,29 @@ func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := decode(r, &req); err != nil {
-		writeErr(w, 400, "Invalid request format")
+		writeErr(w, http.StatusBadRequest, authErrInvalidRequest)
 		return
 	}
-	if req.Username != "ARTEX" {
-		writeErr(w, 401, "Username or password is incorrect")
-		return
-	}
-	hash, ok, err := pg.GetSetting(authPassKey)
+	hash, err := s.reloadPassHash()
 	if err != nil {
-		writeErr(w, 503, errDataSourceUnavailable)
+		writeErr(w, http.StatusServiceUnavailable, errDataSourceUnavailable)
 		return
 	}
-	if !ok || hash == "" {
-		writeErr(w, 403, "Password is not initialized; set a password first")
+	if hash == "" {
+		writeErr(w, http.StatusForbidden, authErrPasswordNotInitialized)
 		return
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)); err != nil {
-		writeErr(w, 401, "Username or password is incorrect")
+	passwordOK := bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)) == nil
+	if req.Username != "ARTEX" || !passwordOK {
+		s.recordAuthFailure(r, "login")
+		writeErr(w, http.StatusUnauthorized, authErrBadCredential)
 		return
 	}
-	tok, err := signJWT(s.jwtKey)
+	s.limiter().reset(key)
+	tok, err := signJWT(s.signingKey(hash))
 	if err != nil {
-		writeErr(w, 500, "Failed to generate token")
+		writeErr(w, http.StatusInternalServerError, authErrTokenGeneration)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"token": tok})
+	writeJSON(w, http.StatusOK, map[string]any{"token": tok})
 }

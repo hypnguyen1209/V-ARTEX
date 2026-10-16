@@ -14,11 +14,8 @@ import (
 //
 // These tests close the connection pool and verify that both handlers fail closed.
 func TestAuthStatusFailsClosedWhenDataSourceUnavailable(t *testing.T) {
-	m, err := NewManager(t.TempDir(), "")
-	if err != nil {
-		t.Skipf("postgres unavailable (%v)", err)
-	}
-	defer m.Close()
+	pg, _ := authSetupDatabase(t)
+	m := &Manager{pg: pg}
 	// Close the pool so GetSetting returns an error rather than sql.ErrNoRows.
 	if err := m.pg.Close(); err != nil {
 		t.Fatal(err)
@@ -40,18 +37,15 @@ func TestAuthStatusFailsClosedWhenDataSourceUnavailable(t *testing.T) {
 }
 
 func TestAuthInitFailsClosedWhenDataSourceUnavailable(t *testing.T) {
-	m, err := NewManager(t.TempDir(), "")
-	if err != nil {
-		t.Skipf("postgres unavailable (%v)", err)
-	}
-	defer m.Close()
+	pg, _ := authSetupDatabase(t)
+	m := &Manager{pg: pg}
 	if err := m.pg.Close(); err != nil {
 		t.Fatal(err)
 	}
 
 	s := &Server{m: m}
 	w := httptest.NewRecorder()
-	body := strings.NewReader(`{"password":"correct horse battery"}`)
+	body := strings.NewReader(`{"password":"new-password","setup_token":"unavailable-db-token"}`)
 	s.authInit(w, httptest.NewRequest("POST", "/api/auth/init", body))
 
 	if w.Code != 503 {
