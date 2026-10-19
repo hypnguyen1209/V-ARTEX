@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Autumn-27/artex/agent"
-	"github.com/Autumn-27/artex/db"
-	"github.com/Autumn-27/artex/llmrec"
-	"github.com/Autumn-27/artex/sidequestion"
+	"github.com/hypnguyen1209/V-ARTEX/agent"
+	"github.com/hypnguyen1209/V-ARTEX/db"
+	"github.com/hypnguyen1209/V-ARTEX/llmrec"
+	"github.com/hypnguyen1209/V-ARTEX/sidequestion"
 	"github.com/Autumn-27/norma/llm"
 	"github.com/Autumn-27/norma/transcript"
 )

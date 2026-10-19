@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Autumn-27/artex/agent"
-	"github.com/Autumn-27/artex/config"
+	"github.com/hypnguyen1209/V-ARTEX/agent"
+	"github.com/hypnguyen1209/V-ARTEX/config"
 )
 
 func TestShutdownContextPreservesNamedCause(t *testing.T) {

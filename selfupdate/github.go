@@ -12,7 +12,7 @@ import (
 
 // Repo is the fixed release source. Making it configurable would let anyone who
 // can change configuration execute remote code on the penetration testing platform.
-const Repo = "Autumn-27/artex"
+const Repo = "hypnguyen1209/V-ARTEX"
 
 // latestURL selects GitHub's latest stable release, excluding prereleases and drafts.
 const latestURL = "https://api.github.com/repos/" + Repo + "/releases/latest"

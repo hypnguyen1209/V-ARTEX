@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Autumn-27/artex/db"
-	"github.com/Autumn-27/artex/guard"
-	"github.com/Autumn-27/artex/intercept"
+	"github.com/hypnguyen1209/V-ARTEX/db"
+	"github.com/hypnguyen1209/V-ARTEX/guard"
+	"github.com/hypnguyen1209/V-ARTEX/intercept"
 	"github.com/Autumn-27/norma/llm"
 	"github.com/Autumn-27/norma/tool"
 )

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Autumn-27/artex/selfupdate"
+	"github.com/hypnguyen1209/V-ARTEX/selfupdate"
 )
 
 // releaseCache protects GitHub's unauthenticated quota of 60 requests/hour/IP.

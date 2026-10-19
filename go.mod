@@ -1,4 +1,4 @@
-module github.com/Autumn-27/artex
+module github.com/hypnguyen1209/V-ARTEX
 
 go 1.26.3
 

@@ -18,7 +18,7 @@ import (
 	"testing/iotest"
 	"time"
 
-	"github.com/Autumn-27/artex/db"
+	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	"golang.org/x/crypto/bcrypt"

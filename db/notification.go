@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Autumn-27/artex/notify"
+	"github.com/hypnguyen1209/V-ARTEX/notify"
 )
 
 // Channel configuration and event persistence for IM notifications. For delivery claiming/state transitions see

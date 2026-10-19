@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Autumn-27/artex/db"
-	"github.com/Autumn-27/artex/notify"
+	"github.com/hypnguyen1209/V-ARTEX/db"
+	"github.com/hypnguyen1209/V-ARTEX/notify"
 )
 
 // Notification HTTP APIs. All routes are behind requireAuth (see Handler()),

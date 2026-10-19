@@ -4,8 +4,8 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/Autumn-27/artex/agent"
-	"github.com/Autumn-27/artex/intercept"
+	"github.com/hypnguyen1209/V-ARTEX/agent"
+	"github.com/hypnguyen1209/V-ARTEX/intercept"
 )
 
 func TestEnglishMigrationUsesCurrentEnglishDefaults(t *testing.T) {

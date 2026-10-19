@@ -71,6 +71,15 @@ func requireUnix(t *testing.T) {
 	}
 }
 
+func TestReleaseSourceMatchesModuleRepository(t *testing.T) {
+	if Repo != "hypnguyen1209/V-ARTEX" {
+		t.Fatalf("Repo = %q, want hypnguyen1209/V-ARTEX", Repo)
+	}
+	if latestURL != "https://api.github.com/repos/hypnguyen1209/V-ARTEX/releases/latest" {
+		t.Fatalf("latestURL = %q, want the V-ARTEX release endpoint", latestURL)
+	}
+}
+
 func TestCompareVersions(t *testing.T) {
 	cases := []struct {
 		a, b       string

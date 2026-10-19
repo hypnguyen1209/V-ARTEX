@@ -313,7 +313,7 @@ GIT_AUTHOR_NAME='hypnguyen1209' GIT_AUTHOR_EMAIL='hypnguyen1209@gmail.com' GIT_C
 
 - [ ] **Step 1: Add failing coordinator tests**
 
-Add `github.com/Autumn-27/artex/agent` to the test imports (the file already imports `time` from Task 2), then append:
+Add `github.com/hypnguyen1209/V-ARTEX/agent` to the test imports (the file already imports `time` from Task 2), then append:
 
 ```go
 func TestCompleteGoalMetWaitsForWorkerBeforeDone(t *testing.T) {

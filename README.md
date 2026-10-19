@@ -69,8 +69,8 @@ Synchronize assets directly from [ScopeSentry](https://github.com/Autumn-27/Scop
 ### Option 1: Installation Script (Recommended)
 
 ```bash
-git clone https://github.com/Autumn-27/ARTEX.git
-cd ARTEX
+git clone https://github.com/hypnguyen1209/V-ARTEX.git
+cd V-ARTEX
 ./install.sh
 ```
 
@@ -84,8 +84,8 @@ After installation, get the one-time setup token from the server console (`docke
 ### Option 2: Docker Compose (Manual)
 
 ```bash
-git clone https://github.com/Autumn-27/ARTEX.git
-cd ARTEX
+git clone https://github.com/hypnguyen1209/V-ARTEX.git
+cd V-ARTEX
 cp .env.example .env          # Set POSTGRES_PASSWORD and optionally ANTHROPIC_API_KEY
 docker compose up -d          # Pull the autumn27/artex image + postgres
 # → http://localhost:8787
@@ -104,7 +104,7 @@ the returned `/message?sessionId=...` endpoint. Set the URL to `/sse` and enter 
 
 ### Option 3: Download a Prebuilt Binary (Releases)
 
-Download the zip for your platform from [Releases](https://github.com/Autumn-27/ARTEX/releases). It contains `artex` + `start.sh` (`start.bat` on Windows) + `skills/` + `config.example.json`:
+Download the zip for your platform from [Releases](https://github.com/hypnguyen1209/V-ARTEX/releases). It contains `artex` + `start.sh` (`start.bat` on Windows) + `skills/` + `config.example.json`:
 
 ```bash
 cp config.example.json config.json   # Configure the database connection
@@ -166,7 +166,7 @@ Click Update to download the release for the current platform → verify the rel
 ### Option 2: Update Script
 
 ```bash
-cd ARTEX
+cd V-ARTEX
 ./update.sh
 ```
 
@@ -178,7 +178,7 @@ The script optionally runs `git pull` to fetch the latest code, then offers **�
 ### Option 3: Docker Compose (Manual)
 
 ```bash
-cd ARTEX
+cd V-ARTEX
 git pull                       # Update compose / scripts (optional)
 # Pin a version: set ARTEX_TAG=v0.2.0 in .env; otherwise use latest
 docker compose pull artex
@@ -188,7 +188,7 @@ docker image prune -f          # Remove old images (optional)
 
 ### Option 4: Prebuilt Binary (Releases)
 
-Download the new zip from [Releases](https://github.com/Autumn-27/ARTEX/releases), stop the old process, replace `artex` and `skills/` (keep your `config.json` and `data/`), and restart:
+Download the new zip from [Releases](https://github.com/hypnguyen1209/V-ARTEX/releases), stop the old process, replace `artex` and `skills/` (keep your `config.json` and `data/`), and restart:
 
 ```bash
 cp -r <extracted-directory>/skills ./ && cp <extracted-directory>/artex ./

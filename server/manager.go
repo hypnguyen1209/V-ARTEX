@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Autumn-27/artex/agent"
-	pgdb "github.com/Autumn-27/artex/db"
-	"github.com/Autumn-27/artex/enrich"
-	"github.com/Autumn-27/artex/guard"
-	"github.com/Autumn-27/artex/intercept"
-	"github.com/Autumn-27/artex/traffic"
+	"github.com/hypnguyen1209/V-ARTEX/agent"
+	pgdb "github.com/hypnguyen1209/V-ARTEX/db"
+	"github.com/hypnguyen1209/V-ARTEX/enrich"
+	"github.com/hypnguyen1209/V-ARTEX/guard"
+	"github.com/hypnguyen1209/V-ARTEX/intercept"
+	"github.com/hypnguyen1209/V-ARTEX/traffic"
 	actool "github.com/Autumn-27/norma/tool"
 )
 

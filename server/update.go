@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Autumn-27/artex/selfupdate"
+	"github.com/hypnguyen1209/V-ARTEX/selfupdate"
 )
 
 // HTTP surface for one-click updates. selfupdate owns downloading, verification, and binary replacement.
