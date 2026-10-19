@@ -139,7 +139,7 @@ type Engine struct {
 	plannerRound sync.Map // taskID -> int, planner round counter (for UI round separators)
 
 	// Task timeout (see docs/task-timeout-and-wrap-up-design.md).
-	settling     sync.Map // taskID -> bool; settling has begun, so stop dispatching/claiming new intents.
+	settling     sync.Map // taskID -> settlementKind; settling has begun, so stop dispatching/claiming new intents.
 	deadline     sync.Map // taskID -> int64 unix; absolute deadline stamped on first run; zero/missing means unlimited.
 	stamped      sync.Map // taskID -> bool; first_run_at stamped once per process.
 	inflight     sync.Map // taskID -> *int64; running planner.Plan + worker.Execute count, for draining.
@@ -351,8 +351,8 @@ func (e *Engine) Resume(t *Task) {
 	t.Notify()
 }
 
-// execContextFor returns a live per-task context derived from parent, recreating
-// it if a prior pause cancelled it.
+// execContextFor retains cancellation during settlement; otherwise a prior pause
+// can be replaced with a live per-task context after resume.
 func (e *Engine) execContextFor(parent context.Context, taskID string) context.Context {
 	e.execMu.Lock()
 	defer e.execMu.Unlock()
@@ -362,7 +362,7 @@ func (e *Engine) execContextFor(parent context.Context, taskID string) context.C
 		cancel(agent.AbortPausedRaceGuard)
 		return c
 	}
-	if c := e.execCtx[taskID]; c != nil && c.Err() == nil {
+	if c := e.execCtx[taskID]; c != nil && (c.Err() == nil || e.isSettling(taskID)) {
 		return c
 	}
 	c, cancel := context.WithCancelCause(parent)
@@ -916,7 +916,7 @@ func (e *Engine) plannerLoop(ctx context.Context, t *Task) {
 			}
 			return // The goalless branch never enters planner.Plan.
 		}
-		if !e.beginTaskOperation(t.ID) {
+		if !e.beginTaskExecution(t.ID) {
 			return
 		}
 		defer e.decInflight(t.ID)
@@ -944,14 +944,7 @@ func (e *Engine) plannerLoop(ctx context.Context, t *Task) {
 			log.Printf("[planner] task %s planning failed: %v", t.ID, err)
 		case met:
 			log.Printf("[planner] task %s goals judged met: %s", t.ID, reason)
-			// All goals met: persist done, which the frontend DTO prioritizes.
-			if err := e.m.SetTaskStatus(t.ID, "done"); err != nil {
-				log.Printf("[planner] task %s failed to persist completion: %v", t.ID, err)
-			}
-			// Task completed: immediately cancel running workers, whose remaining results are no longer needed.
-			// Their next loop will stop claiming intents at the terminal-state gate; the cancelled runs
-			// use the completed-task branch below and become stopped rather than blocked.
-			e.cancelExec(t.ID, agent.AbortGoalMet)
+			e.completeGoalMet(ectx, t, reason)
 		default:
 			log.Printf("[planner] task %s planning complete", t.ID)
 		}
@@ -1008,8 +1001,15 @@ func (e *Engine) workerLoop(ctx context.Context, t *Task, name string) {
 			}
 			continue // Terminal task (done/failed/timeout): stop claiming leftover intents after completion.
 		}
-		if !e.beginTaskOperation(t.ID) {
-			return
+		if !e.beginTaskExecution(t.ID) {
+			e.deleteMu.RLock()
+			stopping := e.closed || e.IsDeleting(t.ID)
+			e.deleteMu.RUnlock()
+			// Failed completion or timeout revival can reopen execution.
+			if stopping || sleepCtx(ctx, time.Second) {
+				return
+			}
+			continue
 		}
 		claimed := e.runWorkerStep(ctx, t, name, worker)
 		e.decInflight(t.ID)
@@ -1045,9 +1045,18 @@ func (e *Engine) runIntent(ctx context.Context, t *Task, name string, worker *ag
 	e.touch(t.ID)
 	emit := func(r db.Activity) { e.emitActivity(t, r) }
 	ectx := e.clockCtx(e.execContextFor(ctx, t.ID), t, false) // Cancellable by Pause; includes the task deadline.
-	if ectx.Err() != nil || e.IsDeleting(t.ID) {
-		if err := transitionIntentState(t.Store, intent.ID, "running", "open"); err != nil {
-			log.Printf("[worker %s] task %s intent #%d rollback after claim failed: %v", name, t.ID, intent.ID, err)
+	if deleting := e.IsDeleting(t.ID); ectx.Err() != nil || deleting {
+		state := "open"
+		if !deleting && !taskExecutionPaused(context.Cause(ectx)) {
+			switch {
+			case e.isTaskTimeoutSettling(t.ID):
+				state = "exhausted"
+			case e.isGoalSettling(t.ID) && isTerminalStatus(e.m.TaskStatus(t.ID)):
+				state = "stopped"
+			}
+		}
+		if err := transitionIntentState(t.Store, intent.ID, "running", state); err != nil {
+			log.Printf("[worker %s] task %s intent #%d failed to settle after claim as %s: %v", name, t.ID, intent.ID, state, err)
 		}
 		return true
 	}
@@ -1173,7 +1182,7 @@ func (e *Engine) runIntent(ctx context.Context, t *Task, name string, worker *ag
 	}
 	// Hard timeout-settlement cancellation (neither pause nor kill) makes this run exhausted,
 	// not blocked. The worker usually already wrote its result during settlement.
-	if ectx.Err() != nil && e.isSettling(t.ID) {
+	if ectx.Err() != nil && e.isTaskTimeoutSettling(t.ID) {
 		if err := transitionIntentState(t.Store, intent.ID, "running", "exhausted"); err != nil {
 			log.Printf("[worker %s] task %s intent #%d failed to persist timeout settlement: %v", name, t.ID, intent.ID, err)
 		}
@@ -1243,8 +1252,8 @@ func (e *Engine) runIntent(ctx context.Context, t *Task, name string, worker *ag
 // task pause/delete/shutdown still stops it). Returns an error if the run could not
 // be started; the intent is left untouched in that case.
 func (e *Engine) runDetachedIntent(ctx context.Context, t *Task, intentID int64, requestID, message, agentMessage string) error {
-	if !e.beginTaskOperation(t.ID) {
-		return fmt.Errorf("task is being deleted")
+	if !e.beginTaskExecution(t.ID) {
+		return fmt.Errorf("task is not accepting execution")
 	}
 	release := true
 	defer func() {

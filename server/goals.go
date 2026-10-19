@@ -196,6 +196,8 @@ func (s *Server) admitTaskWhen(t *Task, mode string, requirePaused bool) (queued
 		// matching Engine gates before either parking it in FIFO or starting work;
 		// otherwise the old settling flag would make every worker skip forever.
 		s.engine.resetTimeoutRevival(t.ID)
+	} else if lifecycle.Status == "done" && status == "running" {
+		s.engine.resetGoalRevival(t.ID)
 	}
 	if shouldQueue {
 		if !wasQueued {

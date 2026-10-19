@@ -44,6 +44,8 @@ func (e *Engine) settlementKind(taskID string) settlementKind {
 }
 
 func (e *Engine) markSettlement(taskID string, kind settlementKind) bool {
+	e.deleteMu.Lock()
+	defer e.deleteMu.Unlock()
 	_, loaded := e.settling.LoadOrStore(taskID, kind)
 	return !loaded
 }
@@ -78,6 +80,18 @@ func (e *Engine) beginTaskOperation(taskID string) bool {
 	e.deleteMu.RLock()
 	defer e.deleteMu.RUnlock()
 	if e.closed || e.IsDeleting(taskID) {
+		return false
+	}
+	e.operationWG.Add(1)
+	atomic.AddInt64(e.inflightCounter(taskID), 1)
+	return true
+}
+
+// beginTaskExecution registers normal execution before settlement can begin.
+func (e *Engine) beginTaskExecution(taskID string) bool {
+	e.deleteMu.RLock()
+	defer e.deleteMu.RUnlock()
+	if e.closed || e.IsDeleting(taskID) || e.isSettling(taskID) {
 		return false
 	}
 	e.operationWG.Add(1)
@@ -144,6 +158,10 @@ func (e *Engine) resetTimeoutRevival(taskID string) {
 	e.coordStarted.Delete(taskID)
 }
 
+func (e *Engine) resetGoalRevival(taskID string) {
+	e.settling.CompareAndDelete(taskID, settlementGoalMet)
+}
+
 // stampFirstRun records first_run_at + deadline_at on the FIRST real run (LLM ready)
 // of a timeout task, once per process. No-op when the task has no timeout.
 func (e *Engine) stampFirstRun(t *Task) {
@@ -177,6 +195,40 @@ func (e *Engine) clockCtx(base context.Context, t *Task, final bool) context.Con
 }
 
 // ---------- Coordinator ----------
+
+func (e *Engine) completeGoalMet(ctx context.Context, t *Task, reason string) {
+	e.completeGoalMetWithin(ctx, t, reason, settleDrainGrace)
+}
+
+func (e *Engine) completeGoalMetWithin(ctx context.Context, t *Task, reason string, grace time.Duration) {
+	drained := true
+	owned := e.markGoalSettling(t.ID)
+	if owned {
+		log.Printf("[planner] task %s goals met; draining active workers for up to %s", t.ID, grace)
+		drained = e.waitForInflightAtMost(ctx, t.ID, 1, grace)
+	}
+	if ctx.Err() != nil || e.IsDeleting(t.ID) {
+		if owned {
+			e.settling.CompareAndDelete(t.ID, settlementGoalMet)
+		}
+		return
+	}
+	if err := e.m.SetTaskStatus(t.ID, "done"); err != nil {
+		log.Printf("[planner] task %s failed to persist completion: %v", t.ID, err)
+		if owned {
+			e.settling.CompareAndDelete(t.ID, settlementGoalMet)
+		}
+		t.Notify()
+		return
+	}
+	if drained {
+		log.Printf("[planner] task %s completion settlement drained all active workers: %s", t.ID, reason)
+		return
+	}
+	log.Printf("[planner] task %s completion drain timed out; cancelling remaining workers", t.ID)
+	e.cancelExec(t.ID, agent.AbortGoalMet)
+	e.waitForInflightAtMost(context.WithoutCancel(ctx), t.ID, 1, 3*time.Second)
+}
 
 // startDeadlineCoordinator launches the per-task deadline timer once (idempotent).
 // Called from Run() and from the restart reload path, so non-active timeout tasks
@@ -228,15 +280,21 @@ func (e *Engine) deadlineCoordinator(ctx context.Context, t *Task) {
 			}
 			continue
 		}
-		e.settleTask(ctx, t)
-		return
+		if e.settleTask(ctx, t) || e.isTaskTimeoutSettling(t.ID) {
+			return
+		}
+		// Goal completion can still fail to persist; keep its deadline available for recovery.
+		if sleepCtx(ctx, deadlinePollInterval) {
+			return
+		}
 	}
 }
 
-// settleTask runs the ordered settle sequence once (§4 steps ①–⑥).
-func (e *Engine) settleTask(ctx context.Context, t *Task) {
+// settleTask runs the ordered settle sequence once (§4 steps ①–⑥), returning
+// whether it acquired timeout settlement.
+func (e *Engine) settleTask(ctx context.Context, t *Task) bool {
 	if !e.markSettling(t.ID) {
-		return
+		return false
 	}
 	log.Printf("[deadline] task %s Reached timeout; beginning settlement", t.ID)
 
@@ -251,14 +309,14 @@ func (e *Engine) settleTask(ctx context.Context, t *Task) {
 			break
 		}
 		if sleepCtx(ctx, 500*time.Millisecond) {
-			return // Entire engine is shutting down.
+			return true // Entire engine is shutting down.
 		}
 	}
 
 	// Final planner round: timeout instructions and last goal judgment, without new intents.
 	met := e.runFinalPlannerRound(ctx, t)
 	if !e.beginTaskOperation(t.ID) {
-		return
+		return true
 	}
 	defer e.decInflight(t.ID)
 
@@ -277,6 +335,7 @@ func (e *Engine) settleTask(ctx context.Context, t *Task) {
 	default:
 		log.Printf("[deadline] task %s Already terminal during settlement; preserving state", t.ID)
 	}
+	return true
 }
 
 // runFinalPlannerRound drives exactly ONE terminal planner round with the
