@@ -561,8 +561,10 @@ func (e *Engine) drainSteer(intentID int64) (string, bool) {
 // of running the tool. No queued message → the guard behaves exactly as before.
 // It also resumes empty turns; see Stop.
 type steerHooks struct {
-	inner harness.HookRunner
-	drain func() (string, bool)
+	inner              harness.HookRunner
+	drain              func() (string, bool)
+	goalSettling       func() bool
+	goalSettlePrompted *atomic.Bool
 	// nudges counts continuations injected for this intent, up to limit. A pointer is required
 	// because the harness copies steerHooks by value and must share the counter.
 	nudges *atomic.Int64
@@ -582,6 +584,17 @@ type steerHooks struct {
 // another empty turn ends the run without calling Stop. Only a real tool turn
 // resets that guard (norma/harness/query.go:534). This cap stops repeated tool/empty/nudge cycles exhausting the intent budget.
 const defaultEmptyTurnNudges = 2
+
+const goalMetWorkerWrapUpPrompt = "[Goal completion wrap-up] The task goal has been proven and the task is finalizing. Start no new commands or probes. Persist every identified but unsaved result now with insert_assets, record_fact, and report_finding. Then finish with one plain-text sentence summarizing the key conclusions for this intent."
+
+func goalMetWritebackTool(name string) bool {
+	return name == "insert_assets" || name == "record_fact" || name == "report_finding"
+}
+
+// shortcut: settlement reasons are not distinguished yet, replace with the goal-specific gate when typed settlement lands.
+func (e *Engine) isGoalSettling(taskID string) bool {
+	return e.isSettling(taskID)
+}
 
 // emptyTurnNudge is the continuation instruction injected after an empty turn.
 //
@@ -608,9 +621,23 @@ func isThinkingOnlyTurn(messages []llm.Message) bool {
 }
 
 func (h steerHooks) PreToolUse(ctx context.Context, name string, input []byte) (bool, string, []byte) {
-	if msg, ok := h.drain(); ok {
-		return true, "[Live planner steering]" + msg +
-			"\n(This is an immediate planner instruction for this intent. The current tool call was not executed; adjust your next step accordingly. This instruction takes precedence over any conflicting current plan.)", nil
+	if h.goalSettling != nil && h.goalSettling() {
+		if !goalMetWritebackTool(name) {
+			if h.goalSettlePrompted != nil {
+				h.goalSettlePrompted.Store(true)
+			}
+			return true, goalMetWorkerWrapUpPrompt, nil
+		}
+		if h.inner != nil {
+			return h.inner.PreToolUse(ctx, name, input)
+		}
+		return false, "", nil
+	}
+	if h.drain != nil {
+		if msg, ok := h.drain(); ok {
+			return true, "[Live planner steering]" + msg +
+				"\n(This is an immediate planner instruction for this intent. The current tool call was not executed; adjust your next step accordingly. This instruction takes precedence over any conflicting current plan.)", nil
+		}
 	}
 	if h.inner != nil {
 		return h.inner.PreToolUse(ctx, name, input)
@@ -638,8 +665,14 @@ func (h steerHooks) Stop(ctx context.Context, messages []llm.Message) (bool, []s
 		prevent, blocking, msg = h.inner.Stop(ctx, messages)
 	}
 	// Respect an inner hard stop or continuation; never stack another instruction.
+	if prevent || len(blocking) > 0 {
+		return prevent, blocking, msg
+	}
+	if h.goalSettling != nil && h.goalSettling() && h.goalSettlePrompted != nil && h.goalSettlePrompted.CompareAndSwap(false, true) {
+		return false, []string{goalMetWorkerWrapUpPrompt}, ""
+	}
 	// limit<=0 means the user explicitly disabled empty-response retries with -1.
-	if prevent || len(blocking) > 0 || h.nudges == nil || h.limit <= 0 || !isThinkingOnlyTurn(messages) {
+	if h.nudges == nil || h.limit <= 0 || !isThinkingOnlyTurn(messages) {
 		return prevent, blocking, msg
 	}
 	n := h.nudges.Add(1)
@@ -1038,12 +1071,15 @@ func (e *Engine) runIntent(ctx context.Context, t *Task, name string, worker *ag
 	workCtx = intercept.WithTaskContext(workCtx, t.ID, label, taskEmit)
 	// Keep nudges outside the model_error rerun loop: its cap belongs to the entire intent,
 	// so rerunning must not reset the budget.
+	goalSettlePrompted := &atomic.Bool{}
 	hooks := steerHooks{
-		inner:  t.Guard.Hooks(),
-		drain:  func() (string, bool) { return e.drainSteer(iid) },
-		nudges: &atomic.Int64{},
-		limit:  e.emptyTurnNudgeLimit(),
-		label:  label,
+		inner:              t.Guard.Hooks(),
+		drain:              func() (string, bool) { return e.drainSteer(iid) },
+		goalSettling:       func() bool { return e.isGoalSettling(t.ID) },
+		goalSettlePrompted: goalSettlePrompted,
+		nudges:             &atomic.Int64{},
+		limit:              e.emptyTurnNudgeLimit(),
+		label:              label,
 	}
 	wTaskID, _ := strconv.ParseInt(t.ID, 10, 64)
 	e.BeginLLMCall(t.ID)
@@ -1075,6 +1111,17 @@ func (e *Engine) runIntent(ctx context.Context, t *Task, name string, worker *ag
 			reason, wrote, err = worker.Execute(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding)
 		}
 		e.EndLLMCall(t.ID)
+	}
+	// Norma skips Stop after a consecutive no-tool continuation, so catch a missed goal wrap-up here.
+	if err == nil && reason == harness.ReasonCompleted && workCtx.Err() == nil && ectx.Err() == nil &&
+		e.isGoalSettling(t.ID) && goalSettlePrompted.CompareAndSwap(false, true) {
+		e.BeginLLMCall(t.ID)
+		var wrapWrote agent.WriteCounts
+		reason, wrapWrote, err = worker.ExecuteWithMessage(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding, "", goalMetWorkerWrapUpPrompt)
+		e.EndLLMCall(t.ID)
+		wrote.Facts += wrapWrote.Facts
+		wrote.Assets += wrapWrote.Assets
+		wrote.Findings += wrapWrote.Findings
 	}
 	// Capture kill state before detachWork cancels workCtx. kill = this work's
 	// ctx was cancelled (planner kill_work) while the TASK ctx kept running; a
