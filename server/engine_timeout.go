@@ -25,16 +25,43 @@ const (
 
 // ---------- Settlement state ----------
 
+type settlementKind string
+
+const (
+	settlementTaskTimeout settlementKind = "task_timeout"
+	settlementGoalMet     settlementKind = "goal_met"
+)
+
 func (e *Engine) isSettling(taskID string) bool {
-	v, _ := e.settling.Load(taskID)
-	b, _ := v.(bool)
-	return b
+	_, ok := e.settling.Load(taskID)
+	return ok
 }
 
-// markSettling flips settling on; returns true only for the first caller.
-func (e *Engine) markSettling(taskID string) bool {
-	_, loaded := e.settling.LoadOrStore(taskID, true)
+func (e *Engine) settlementKind(taskID string) settlementKind {
+	v, _ := e.settling.Load(taskID)
+	kind, _ := v.(settlementKind)
+	return kind
+}
+
+func (e *Engine) markSettlement(taskID string, kind settlementKind) bool {
+	_, loaded := e.settling.LoadOrStore(taskID, kind)
 	return !loaded
+}
+
+func (e *Engine) markSettling(taskID string) bool {
+	return e.markSettlement(taskID, settlementTaskTimeout)
+}
+
+func (e *Engine) markGoalSettling(taskID string) bool {
+	return e.markSettlement(taskID, settlementGoalMet)
+}
+
+func (e *Engine) isGoalSettling(taskID string) bool {
+	return e.settlementKind(taskID) == settlementGoalMet
+}
+
+func (e *Engine) isTaskTimeoutSettling(taskID string) bool {
+	return e.settlementKind(taskID) == settlementTaskTimeout
 }
 
 // ---------- Running worker.Execute + planner.Plan count for draining ----------
@@ -64,6 +91,28 @@ func (e *Engine) decInflight(taskID string) {
 }
 func (e *Engine) inflightCount(taskID string) int64 {
 	return atomic.LoadInt64(e.inflightCounter(taskID))
+}
+
+func (e *Engine) waitForInflightAtMost(ctx context.Context, taskID string, maximum int64, grace time.Duration) bool {
+	if e.inflightCount(taskID) <= maximum {
+		return true
+	}
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-timer.C:
+			return e.inflightCount(taskID) <= maximum
+		case <-ticker.C:
+			if e.inflightCount(taskID) <= maximum {
+				return true
+			}
+		}
+	}
 }
 
 // ---------- deadline ----------

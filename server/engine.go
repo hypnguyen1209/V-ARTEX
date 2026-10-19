@@ -591,11 +591,6 @@ func goalMetWritebackTool(name string) bool {
 	return name == "insert_assets" || name == "record_fact" || name == "report_finding"
 }
 
-// shortcut: settlement reasons are not distinguished yet, replace with the goal-specific gate when typed settlement lands.
-func (e *Engine) isGoalSettling(taskID string) bool {
-	return e.isSettling(taskID)
-}
-
 // emptyTurnNudge is the continuation instruction injected after an empty turn.
 //
 // The harness treats end_turn without tool_use as a natural finish, so none of the

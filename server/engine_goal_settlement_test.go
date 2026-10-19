@@ -8,12 +8,74 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Autumn-27/artex/agent"
 	"github.com/Autumn-27/artex/db"
 	"github.com/Autumn-27/norma/llm"
 	"github.com/Autumn-27/norma/transcript"
 )
+
+func TestSettlementKindsRemainDistinct(t *testing.T) {
+	goal := NewEngine(nil)
+	if !goal.markGoalSettling("goal") || !goal.isSettling("goal") || !goal.isGoalSettling("goal") || goal.isTaskTimeoutSettling("goal") {
+		t.Fatal("goal settlement kind was not retained")
+	}
+	timed := NewEngine(nil)
+	if !timed.markSettling("timeout") || !timed.isSettling("timeout") || timed.isGoalSettling("timeout") || !timed.isTaskTimeoutSettling("timeout") {
+		t.Fatal("task-timeout settlement kind was not retained")
+	}
+	if goal.markSettling("goal") || !goal.isGoalSettling("goal") || timed.markGoalSettling("timeout") || !timed.isTaskTimeoutSettling("timeout") {
+		t.Fatal("later settlement overwrote the first owner")
+	}
+	legacy := NewEngine(nil)
+	legacy.settling.Store("legacy", true)
+	if !legacy.isSettling("legacy") || legacy.markGoalSettling("legacy") {
+		t.Fatal("legacy settlement lost its ownership")
+	}
+}
+
+func TestGoalSettlementWaitsForAdmittedWorker(t *testing.T) {
+	e := NewEngine(nil)
+	counter := e.inflightCounter("task")
+	atomic.StoreInt64(counter, 2)
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		atomic.StoreInt64(counter, 1)
+	}()
+	if !e.waitForInflightAtMost(context.Background(), "task", 1, time.Second) {
+		t.Fatal("worker drain timed out")
+	}
+}
+
+func TestGoalSettlementDrainIsBounded(t *testing.T) {
+	e := NewEngine(nil)
+	atomic.StoreInt64(e.inflightCounter("task"), 2)
+	if e.waitForInflightAtMost(context.Background(), "task", 1, 20*time.Millisecond) {
+		t.Fatal("stuck worker incorrectly reported as drained")
+	}
+}
+
+func TestGoalSettlementDrainRespectsCancellation(t *testing.T) {
+	e := NewEngine(nil)
+	atomic.StoreInt64(e.inflightCounter("task"), 2)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	start := time.Now()
+	if e.waitForInflightAtMost(ctx, "task", 1, time.Second) {
+		t.Fatal("cancelled worker drain reported success")
+	}
+	if time.Since(start) >= 500*time.Millisecond {
+		t.Fatal("cancelled worker drain waited for the grace period")
+	}
+}
+
+func TestGoalSettlementDrainAlreadyComplete(t *testing.T) {
+	e := NewEngine(nil)
+	if !e.waitForInflightAtMost(context.Background(), "task", 1, 0) {
+		t.Fatal("already drained task reported a timeout")
+	}
+}
 
 func TestGoalSettlementHookBlocksProbesAndAllowsWriteback(t *testing.T) {
 	for _, tool := range []string{"insert_assets", "record_fact", "report_finding"} {
@@ -125,7 +187,7 @@ func TestGoalSettlementAfterEmptyTurnContinuation(t *testing.T) {
 						t.Fatal("thinking-only turn did not receive the empty-turn nudge")
 					}
 					if name != "not settling" {
-						e.markSettling(task.ID)
+						e.markGoalSettling(task.ID)
 					}
 					if name == "task cancelled" {
 						cancel()
