@@ -709,6 +709,8 @@ type doctorDatabaseSnapshot struct {
 	Constraints    []json.RawMessage     `json:"constraints"`
 	Sequences      []json.RawMessage     `json:"sequences"`
 	SequenceValues []json.RawMessage     `json:"sequence_values"`
+	Functions      []json.RawMessage     `json:"functions"`
+	Triggers       []json.RawMessage     `json:"triggers"`
 	Contents       []doctorTableContents `json:"contents"`
 }
 
@@ -859,6 +861,48 @@ ORDER BY c.relname`, schema)
 	if err != nil {
 		return nil, fmt.Errorf("snapshot sequences: %w", err)
 	}
+	snapshot.Functions, err = queryDoctorSnapshotJSON(ctx, database, `
+SELECT jsonb_build_object(
+    'name', function_row.proname,
+    'kind', function_row.prokind::text,
+    'identity_arguments', pg_catalog.pg_get_function_identity_arguments(function_row.oid),
+    'arguments', pg_catalog.pg_get_function_arguments(function_row.oid),
+    'result', pg_catalog.pg_get_function_result(function_row.oid),
+    'language', language_row.lanname,
+    'volatility', function_row.provolatile::text,
+    'parallel', function_row.proparallel::text,
+    'security_definer', function_row.prosecdef,
+    'strict', function_row.proisstrict,
+    'leakproof', function_row.proleakproof,
+    'returns_set', function_row.proretset,
+    'definition', pg_catalog.pg_get_functiondef(function_row.oid)
+)::text
+FROM pg_catalog.pg_proc function_row
+JOIN pg_catalog.pg_namespace n ON n.oid = function_row.pronamespace
+JOIN pg_catalog.pg_language language_row ON language_row.oid = function_row.prolang
+WHERE n.nspname = $1 AND function_row.prokind IN ('f', 'p')
+ORDER BY function_row.proname,
+         pg_catalog.pg_get_function_identity_arguments(function_row.oid),
+         function_row.prokind`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot functions: %w", err)
+	}
+	snapshot.Triggers, err = queryDoctorSnapshotJSON(ctx, database, `
+SELECT jsonb_build_object(
+    'relation', relation_row.relname,
+    'relation_kind', relation_row.relkind::text,
+    'name', trigger_row.tgname,
+    'enabled', trigger_row.tgenabled::text,
+    'definition', pg_catalog.pg_get_triggerdef(trigger_row.oid, true)
+)::text
+FROM pg_catalog.pg_trigger trigger_row
+JOIN pg_catalog.pg_class relation_row ON relation_row.oid = trigger_row.tgrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = relation_row.relnamespace
+WHERE n.nspname = $1 AND NOT trigger_row.tgisinternal
+ORDER BY relation_row.relname, trigger_row.tgname`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot triggers: %w", err)
+	}
 
 	snapshot.Contents = make([]doctorTableContents, 0, len(tableNames))
 	for _, table := range tableNames {
@@ -976,4 +1020,38 @@ func TestDoctorDoesNotPersistDatabaseOrFilesystemState(t *testing.T) {
 	if bytes.Equal(sequenceChanged, rowChanged) {
 		t.Fatal("database snapshot missed changed table contents")
 	}
+
+	t.Run("snapshot detects executable schema changes", func(t *testing.T) {
+		functionName := pgx.Identifier{schema, "doctor_snapshot_trigger"}.Sanitize()
+		triggerName := pgx.Identifier{"doctor_snapshot_trigger"}.Sanitize()
+		if _, err := sqlDB.ExecContext(t.Context(), `CREATE FUNCTION `+functionName+`() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.ExecContext(t.Context(), `CREATE TRIGGER `+triggerName+` BEFORE INSERT ON `+probeTable+` FOR EACH ROW EXECUTE FUNCTION `+functionName+`() `); err != nil {
+			t.Fatal(err)
+		}
+		beforeExecutableChange, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.ExecContext(t.Context(), `CREATE OR REPLACE FUNCTION `+functionName+`() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.value := upper(NEW.value); RETURN NEW; END $$`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.ExecContext(t.Context(), `DROP TRIGGER `+triggerName+` ON `+probeTable); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.ExecContext(t.Context(), `CREATE TRIGGER `+triggerName+` BEFORE INSERT OR UPDATE ON `+probeTable+` FOR EACH ROW EXECUTE FUNCTION `+functionName+`() `); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.ExecContext(t.Context(), `ALTER TABLE `+probeTable+` ENABLE REPLICA TRIGGER `+triggerName); err != nil {
+			t.Fatal(err)
+		}
+		afterExecutableChange, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Equal(beforeExecutableChange, afterExecutableChange) {
+			t.Fatal("database snapshot missed changed function or trigger definitions/status")
+		}
+	})
 }
