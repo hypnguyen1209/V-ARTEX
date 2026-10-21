@@ -2,9 +2,64 @@ package server
 
 import (
 	"fmt"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 )
+
+func enrichWorkerCount() int {
+	stack := make([]byte, 1<<20)
+	n := runtime.Stack(stack, true)
+	return strings.Count(string(stack[:n]), "github.com/hypnguyen1209/V-ARTEX/enrich.(*Engine).worker")
+}
+
+func waitForEnrichWorkerCount(match func(int) bool) (int, bool) {
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		got := enrichWorkerCount()
+		if match(got) {
+			return got, true
+		}
+		select {
+		case <-deadline.C:
+			return got, false
+		case <-ticker.C:
+		}
+	}
+}
+
+func TestManagerCloseStopsEnrichmentWorkers(t *testing.T) {
+	before := enrichWorkerCount()
+	manager, err := NewManager(t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = manager.Close()
+		}
+	}()
+
+	if got, ok := waitForEnrichWorkerCount(func(got int) bool { return got >= before+4 }); !ok {
+		t.Fatalf("enrichment workers after manager creation=%d, want at least %d", got, before+4)
+	}
+	if err := manager.Close(); err != nil {
+		t.Fatal(err)
+	}
+	closed = true
+	if got, ok := waitForEnrichWorkerCount(func(got int) bool { return got <= before }); !ok {
+		t.Fatalf("enrichment workers after manager close=%d, want at most %d", got, before)
+	}
+	if err := manager.Close(); err != nil {
+		t.Fatalf("second manager close: %v", err)
+	}
+}
 
 func TestTaskLifecycleSnapshotCopiesContextSlices(t *testing.T) {
 	task := &Task{

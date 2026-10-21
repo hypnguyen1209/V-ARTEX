@@ -867,6 +867,9 @@ func (m *Manager) Close() error {
 	if m.traffic != nil {
 		m.traffic.Close()
 	}
+	if m.enrich != nil {
+		m.enrich.Close()
+	}
 	return m.pg.Close()
 }
 
