@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-21
 
-**Status:** Awaiting specification review
+**Status:** Approved for implementation planning
 
 ## Context
 
@@ -103,7 +103,7 @@ artex doctor [server path/address flags] [--json] [--live-llm]
 
 Relevant data, address, and proxy flag defaults match normal server startup. The command never starts the HTTP server, launches engines, runs database migrations, creates a JWT key, rewrites configuration, or persists settings.
 
-Without `--live-llm`, it makes no model-provider request and therefore cannot create billable LLM usage. `--live-llm` is an explicit opt-in that performs the smallest supported request against each enabled configured provider profile and labels those checks as networked and potentially billable.
+Without `--live-llm`, it makes no model-provider request and therefore cannot create billable LLM usage. `--live-llm` is an explicit opt-in that performs the smallest supported request against each configured provider profile with a stored API key and labels those checks as networked and potentially billable.
 
 ### Checks
 
