@@ -38,7 +38,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: go test -p 1 ./...
+      - run: go test -count=1 -p 1 ./...
 
   race:
     runs-on: ubuntu-latest
@@ -64,7 +64,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: go test -race -p 1 ./...
+      - run: go test -race -count=1 -p 1 ./...
 
   frontend:
     runs-on: ubuntu-latest
