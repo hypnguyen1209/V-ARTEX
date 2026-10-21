@@ -7,13 +7,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hypnguyen1209/V-ARTEX/db"
-	"github.com/hypnguyen1209/V-ARTEX/intercept"
 	"github.com/Autumn-27/norma/agentcore"
 	"github.com/Autumn-27/norma/llm"
 	"github.com/Autumn-27/norma/permission"
 	actool "github.com/Autumn-27/norma/tool"
 	"github.com/Autumn-27/norma/transcript"
+	"github.com/hypnguyen1209/V-ARTEX/db"
+	"github.com/hypnguyen1209/V-ARTEX/intercept"
 )
 
 // Planner is the event-driven LLM planner (docs §4.3): each time the asset or
@@ -359,6 +359,7 @@ func (p *Planner) Plan(ctx context.Context, taskID int64, as *db.AssetStore, ts 
 	// runs in a detached goroutine so it never adds latency to this round.
 	p.compactor.OnPlannerRound(ctx, ts)
 	tsx := NewToolSet(ts, "planner")
+	tsx.SetIntentBudget(plannerIntentLimit)
 	tsx.SetFindingRecorder(p.findingRecorder)
 	if as != nil {
 		tsx.SetAssetStore(as, as.Companies())

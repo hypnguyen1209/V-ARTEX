@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -250,5 +251,18 @@ func TestAddIntentSchemaAdvertisesFourItemMaximum(t *testing.T) {
 	intents := properties["intents"].(map[string]any)
 	if got := intents["maxItems"]; got != plannerIntentLimit {
 		t.Fatalf("maxItems=%v, want %d", got, plannerIntentLimit)
+	}
+}
+
+func TestPlannerInstallsFreshIntentBudget(t *testing.T) {
+	source, err := os.ReadFile("planner.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(source)
+	newToolSet := strings.Index(body, `tsx := NewToolSet(ts, "planner")`)
+	budget := strings.Index(body, `tsx.SetIntentBudget(plannerIntentLimit)`)
+	if newToolSet < 0 || budget < newToolSet {
+		t.Fatal("Planner.Plan must install a fresh budget after creating its per-round ToolSet")
 	}
 }
