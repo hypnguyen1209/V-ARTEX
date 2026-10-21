@@ -96,8 +96,7 @@ func (g *agentRunGate) acquire(ctx context.Context, taskID string, kind agentRun
 			g.mu.Unlock()
 			g.release(waiter)
 		} else {
-			waiter.canceled = true
-			g.waiting--
+			g.cancelLocked(waiter)
 			g.scheduleLocked()
 			g.mu.Unlock()
 		}
@@ -117,9 +116,46 @@ func (g *agentRunGate) enqueueLocked(waiter *agentRunWaiter) {
 	g.workerQ[waiter.taskID] = append(g.workerQ[waiter.taskID], waiter)
 }
 
+func (g *agentRunGate) cancelLocked(waiter *agentRunWaiter) {
+	if waiter.canceled {
+		return
+	}
+	queue := g.controlQ
+	if waiter.kind == agentRunWorker {
+		queue = g.workerQ[waiter.taskID]
+	}
+	for i, queued := range queue {
+		if queued != waiter {
+			continue
+		}
+		copy(queue[i:], queue[i+1:])
+		queue[len(queue)-1] = nil
+		queue = queue[:len(queue)-1]
+		if waiter.kind == agentRunControl {
+			g.controlQ = queue
+		} else if len(queue) > 0 {
+			g.workerQ[waiter.taskID] = queue
+		} else {
+			delete(g.workerQ, waiter.taskID)
+			for j, taskID := range g.workerOrder {
+				if taskID == waiter.taskID {
+					copy(g.workerOrder[j:], g.workerOrder[j+1:])
+					g.workerOrder[len(g.workerOrder)-1] = ""
+					g.workerOrder = g.workerOrder[:len(g.workerOrder)-1]
+					break
+				}
+			}
+		}
+		waiter.canceled = true
+		g.waiting--
+		return
+	}
+}
+
 func (g *agentRunGate) popControlLocked() *agentRunWaiter {
 	for len(g.controlQ) > 0 {
 		waiter := g.controlQ[0]
+		g.controlQ[0] = nil
 		g.controlQ = g.controlQ[1:]
 		if !waiter.canceled {
 			return waiter
@@ -131,9 +167,11 @@ func (g *agentRunGate) popControlLocked() *agentRunWaiter {
 func (g *agentRunGate) popWorkerLocked() *agentRunWaiter {
 	for len(g.workerOrder) > 0 {
 		taskID := g.workerOrder[0]
+		g.workerOrder[0] = ""
 		g.workerOrder = g.workerOrder[1:]
 		queue := g.workerQ[taskID]
 		for len(queue) > 0 && queue[0].canceled {
+			queue[0] = nil
 			queue = queue[1:]
 		}
 		if len(queue) == 0 {
@@ -141,6 +179,7 @@ func (g *agentRunGate) popWorkerLocked() *agentRunWaiter {
 			continue
 		}
 		waiter := queue[0]
+		queue[0] = nil
 		queue = queue[1:]
 		if len(queue) == 0 {
 			delete(g.workerQ, taskID)

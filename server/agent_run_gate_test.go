@@ -190,6 +190,52 @@ func TestAgentRunGateCancellationRemovesWaiter(t *testing.T) {
 	waitGate(t, gate, 0, 0)
 }
 
+func TestAgentRunGateCancellationUnlinksWaitersWhileSaturated(t *testing.T) {
+	gate := newAgentRunGate(true, 1)
+	held, err := gate.acquire(context.Background(), "held", agentRunControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held()
+	for _, kind := range []agentRunKind{agentRunControl, agentRunWorker} {
+		for range 2 {
+			for _, taskID := range []string{"a", "b", "c", "d"} {
+				ctx, cancel := context.WithCancel(context.Background())
+				result := make(chan error, 1)
+				go func() {
+					release, err := gate.acquire(ctx, taskID, kind)
+					if err == nil {
+						release()
+					}
+					result <- err
+				}()
+				waitGate(t, gate, 1, 1)
+				cancel()
+				select {
+				case err := <-result:
+					if !errors.Is(err, context.Canceled) {
+						t.Fatalf("acquire error = %v, want context.Canceled", err)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("canceled acquire did not return")
+				}
+			}
+		}
+	}
+	waitGate(t, gate, 1, 0)
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if len(gate.controlQ) != 0 {
+		t.Errorf("controlQ retains %d canceled waiters", len(gate.controlQ))
+	}
+	if len(gate.workerQ) != 0 {
+		t.Errorf("workerQ retains %d canceled task queues", len(gate.workerQ))
+	}
+	if len(gate.workerOrder) != 0 {
+		t.Errorf("workerOrder retains %d canceled task entries", len(gate.workerOrder))
+	}
+}
+
 func TestAgentRunGateLiveReconfigurationDoesNotCancelActive(t *testing.T) {
 	gate := newAgentRunGate(false, 8)
 	releases := make([]func(), 3)
