@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"testing"
 )
@@ -22,6 +23,21 @@ func TestRunDoctorJSONHasStableShapeAndNoANSI(t *testing.T) {
 	}
 	if report.Version != version || report.Status != doctorOK || report.LiveLLM || len(report.Checks) != 1 {
 		t.Fatalf("unexpected report: %+v", report)
+	}
+	var public map[string]any
+	if err := json.Unmarshal(out.Bytes(), &public); err != nil {
+		t.Fatal(err)
+	}
+	if len(public) != 4 || public["version"] != version || public["status"] != "ok" || public["live_llm"] != false {
+		t.Fatalf("unexpected public report fields: %#v", public)
+	}
+	checks, ok := public["checks"].([]any)
+	if !ok || len(checks) != 1 {
+		t.Fatalf("unexpected public checks: %#v", public["checks"])
+	}
+	check, ok := checks[0].(map[string]any)
+	if !ok || len(check) != 5 || check["name"] != "fixture" || check["status"] != "ok" || check["detail"] != "ready" || check["remediation"] != "" || check["duration_ms"] != float64(3) {
+		t.Fatalf("unexpected public check fields: %#v", checks[0])
 	}
 	if bytes.Contains(out.Bytes(), []byte("\x1b[")) {
 		t.Fatalf("JSON output contains ANSI escapes: %q", out.String())
@@ -84,5 +100,36 @@ func TestRunDoctorHumanStatusColumnsAreAligned(t *testing.T) {
 		if !bytes.HasPrefix(lines[i+1], []byte(prefix)) {
 			t.Errorf("line = %q, want prefix %q", lines[i+1], prefix)
 		}
+	}
+}
+
+var errDoctorWrite = errors.New("fixture write failure")
+
+type failingDoctorWriter struct{}
+
+func (failingDoctorWriter) Write([]byte) (int, error) {
+	return 0, errDoctorWrite
+}
+
+func TestRunDoctorOutputFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "human"},
+		{name: "json", args: []string{"--json"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := doctorDeps{runChecks: func(context.Context, doctorOptions) []doctorResult {
+				return []doctorResult{{Name: "fixture", Status: doctorOK}}
+			}}
+			var errOut bytes.Buffer
+			if code := runDoctor(tc.args, failingDoctorWriter{}, &errOut, deps); code != 1 {
+				t.Errorf("exit code = %d, want 1", code)
+			}
+			if want := "write doctor report: " + errDoctorWrite.Error() + "\n"; errOut.String() != want {
+				t.Errorf("stderr = %q, want %q", errOut.String(), want)
+			}
+		})
 	}
 }

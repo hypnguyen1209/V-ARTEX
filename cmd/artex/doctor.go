@@ -88,13 +88,18 @@ func runDoctor(args []string, stdout, stderr io.Writer, deps doctorDeps) int {
 			return 1
 		}
 	} else {
-		fmt.Fprintf(stdout, "V-ARTEX %s doctor (%s)\n", report.Version, report.Status)
+		var output strings.Builder
+		fmt.Fprintf(&output, "V-ARTEX %s doctor (%s)\n", report.Version, report.Status)
 		for _, check := range report.Checks {
-			fmt.Fprintf(stdout, "%-5s %-28s %s", strings.ToUpper(string(check.Status)), check.Name, check.Detail)
+			fmt.Fprintf(&output, "%-5s %-28s %s", strings.ToUpper(string(check.Status)), check.Name, check.Detail)
 			if check.Remediation != "" {
-				fmt.Fprintf(stdout, " — %s", check.Remediation)
+				fmt.Fprintf(&output, " — %s", check.Remediation)
 			}
-			fmt.Fprintln(stdout)
+			fmt.Fprintln(&output)
+		}
+		if _, err := io.WriteString(stdout, output.String()); err != nil {
+			fmt.Fprintf(stderr, "write doctor report: %v\n", err)
+			return 1
 		}
 	}
 	if report.Status == doctorFail {
