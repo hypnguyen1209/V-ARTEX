@@ -86,7 +86,7 @@ func TestInheritedActivityDetailAndRelationDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	currentAfter, ok := m.Task(current.ID)
-	if !ok || len(currentAfter.SourceTaskIDs) != 0 {
+	if !ok || len(currentAfter.lifecycleSnapshot().SourceTaskIDs) != 0 {
 		t.Fatalf("deleted source remained in live task DTO state: %+v", currentAfter)
 	}
 }
