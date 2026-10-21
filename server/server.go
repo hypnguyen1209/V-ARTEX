@@ -3520,14 +3520,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		go s.reconcileConcurrency()
 	}
 	if req.AgentConcurrencyEnabled != nil || req.AgentConcurrencyLimit != nil {
-		on, limit := s.m.AgentConcurrency()
-		if req.AgentConcurrencyEnabled != nil {
-			on = *req.AgentConcurrencyEnabled
-		}
-		if req.AgentConcurrencyLimit != nil {
-			limit = *req.AgentConcurrencyLimit
-		}
-		if err := s.m.SetAgentConcurrency(on, limit); err != nil {
+		if err := s.m.UpdateAgentConcurrency(req.AgentConcurrencyEnabled, req.AgentConcurrencyLimit); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}

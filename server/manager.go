@@ -225,7 +225,8 @@ type Manager struct {
 	enrich      *enrich.Engine         // engine-side asset auto-completion (DNS/HTTP)
 	interceptor *intercept.Interceptor // user-configured tool-call interception rules
 
-	companyMu sync.Mutex // serializes task/company-scope commits with live handle registration
+	agentRunSettingsMu sync.Mutex // serializes settings merges, persistence, and live gate configuration
+	companyMu          sync.Mutex // serializes task/company-scope commits with live handle registration
 	// taskStateMu preserves commit order between PostgreSQL lifecycle writes and
 	// their in-memory mirrors. lifecycleMu makes snapshots race-free, but without
 	// this outer write lock an older request could commit first and publish last.
@@ -338,13 +339,31 @@ func (m *Manager) AgentConcurrency() (bool, int) {
 }
 
 func (m *Manager) SetAgentConcurrency(enabled bool, limit int) error {
+	m.agentRunSettingsMu.Lock()
+	defer m.agentRunSettingsMu.Unlock()
+	return m.setAgentConcurrencyLocked(enabled, limit)
+}
+
+func (m *Manager) UpdateAgentConcurrency(enabled *bool, limit *int) error {
+	m.agentRunSettingsMu.Lock()
+	defer m.agentRunSettingsMu.Unlock()
+	on, currentLimit := m.AgentConcurrency()
+	if enabled != nil {
+		on = *enabled
+	}
+	if limit != nil {
+		currentLimit = *limit
+	}
+	return m.setAgentConcurrencyLocked(on, currentLimit)
+}
+
+func (m *Manager) setAgentConcurrencyLocked(enabled bool, limit int) error {
 	if limit < 1 {
 		return fmt.Errorf("agent concurrency limit must be >0")
 	}
-	if err := m.pg.SetSetting(settingAgentConcurrencyLimit, strconv.Itoa(limit)); err != nil {
-		return err
-	}
-	if err := m.pg.SetSetting(settingAgentConcurrencyOn, strconv.FormatBool(enabled)); err != nil {
+	if _, err := m.pg.Exec(`INSERT INTO settings(key, value) VALUES ($1, $2), ($3, $4)
+		ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value`,
+		settingAgentConcurrencyLimit, strconv.Itoa(limit), settingAgentConcurrencyOn, strconv.FormatBool(enabled)); err != nil {
 		return err
 	}
 	m.agentRuns.configure(enabled, limit)
