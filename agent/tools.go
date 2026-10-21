@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hypnguyen1209/V-ARTEX/db"
 	acperm "github.com/Autumn-27/norma/permission"
 	actool "github.com/Autumn-27/norma/tool"
+	"github.com/hypnguyen1209/V-ARTEX/db"
 )
 
 // compactIntents distills intents to {id, summary, state, asset_ids, parents,
@@ -66,10 +66,11 @@ type ToolSet struct {
 	// ownerNode is the exploration node that writes attach to: assets this run
 	// touches get anchored to it as lineage/provenance (NOT visibility — the asset
 	// graph is global and shared). Worker = its claimed intent; planner = begin root.
-	ownerNode int64
-	GoalMet   bool
-	Reason    string
-	writes    WriteCounts
+	ownerNode    int64
+	GoalMet      bool
+	Reason       string
+	writes       WriteCounts
+	intentBudget *intentBudget
 	// killWork, if set, terminates a running work by intent id (engine callback,
 	// wired by the planner). nil = the kill_work tool reports unavailable.
 	killWork func(intentID int64) error
@@ -167,6 +168,10 @@ func NewToolSet(ts *db.ExplorationStore, worker string) *ToolSet {
 // SetTaskID sets the PG task id on this ToolSet so that report_finding can
 // dual-write to the standalone findings table (which survives task deletion).
 func (t *ToolSet) SetTaskID(id int64) { t.taskID = id }
+
+func (t *ToolSet) SetIntentBudget(limit int) {
+	t.intentBudget = newIntentBudget(limit)
+}
 
 // SetCoverageEnabled records whether this task has the asset-coverage feature on
 // (default enabled). Passing false makes graphOverviewData omit the coverage block
@@ -1033,6 +1038,9 @@ func (t *ToolSet) addOneIntent(it intentItem) (int64, error) {
 	if strings.TrimSpace(it.Summary) == "" {
 		return 0, fmt.Errorf("summary must not be empty")
 	}
+	if it.Priority < 0 || it.Priority > 10 {
+		return 0, fmt.Errorf("priority must be between 0 and 10")
+	}
 	// Validate anchors before creating a node, avoiding orphan intents from invalid anchors.
 	parents := pidList(it.ParentIDs)
 	for _, pidv := range parents {
@@ -1092,7 +1100,11 @@ func (t *ToolSet) addIntent() actool.CoreTool {
 	return t.writeExpTool("add_intent", "Create exploration directions in frontier and link them into exploration lineage. An intent is an open exploration direction, not a fixed type; freely describe what to investigate/verify/exploit in a one-sentence summary.\n"+
 		"Prefer batches: submit multiple new directions in intents at once to reduce round trips. The returned ids array has the same length and order (failed entries have id=0; see errors). For a single entry, omit intents and use top-level summary.",
 		obj(map[string]any{
-			"intents":    map[string]any{"type": "array", "description": "Preferred: new exploration directions processed in order. Each element uses the top-level fields below (summary/asset_ids/parent_ids/priority). The returned ids array has the same length and order.", "items": map[string]any{"type": "object"}},
+			"intents": map[string]any{
+				"type": "array", "maxItems": plannerIntentLimit,
+				"description": "Preferred: new exploration directions processed in order. Each element uses summary/asset_ids/parent_ids/priority.",
+				"items":       map[string]any{"type": "object"},
+			},
 			"summary":    str("[Single entry] Describe what to explore and why in one sentence. A clear direction does not depend on an asset id."),
 			"asset_ids":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Target asset IDs to test/attack (provide whenever possible; zero, one, or many IDs from list_assets, not exploration-node IDs). Identify the sites/endpoints/parameters/hosts targeted by this direction. Always provide them when concrete assets are involved: these structured targets support coverage deduplication and asset-lineage links. Leave empty only for purely global reconnaissance without a specific target asset."},
 			"parent_ids": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Optional upstream anchor IDs (zero, one, or many): confirmed facts/findings jointly motivating this direction. Only existing fact/finding node IDs are allowed, never intent/goal/hint IDs. Intents must be based on confirmed knowledge and discoveries, not invented plans. Supply multiple facts if they jointly produce an intent; leave empty for a new top-level reconnaissance direction (automatically linked to the origin fact)."},
@@ -1103,12 +1115,20 @@ func (t *ToolSet) addIntent() actool.CoreTool {
 				Intents    []intentItem `json:"intents"`
 				intentItem              // Single-entry mode: top-level summary/asset_ids/parent_ids/priority.
 			}
-			_ = json.Unmarshal(in, &a)
+			if err := json.Unmarshal(in, &a); err != nil {
+				return actool.Errorf("invalid add_intent JSON: " + err.Error()), nil
+			}
 			batch := len(a.Intents) > 0
 			items := a.Intents
 			if !batch {
 				items = []intentItem{a.intentItem}
 			}
+			finishBudget, err := t.intentBudget.reserve(len(items))
+			if err != nil {
+				return actool.Errorf(err.Error()), nil
+			}
+			successful := 0
+			defer func() { finishBudget(successful) }()
 
 			ids := make([]int64, len(items))
 			errs := map[string]string{}
@@ -1120,6 +1140,7 @@ func (t *ToolSet) addIntent() actool.CoreTool {
 					continue
 				}
 				ids[i] = id
+				successful++
 				createdAny = true
 			}
 
