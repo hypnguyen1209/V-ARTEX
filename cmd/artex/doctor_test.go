@@ -3,11 +3,65 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestDoctorSkipsDependentDatabaseChecksAndRedactsDSN(t *testing.T) {
+	t.Setenv("ARTEX_PG_DSN", "postgres://user:secret-pass@127.0.0.1:1/artex?sslmode=disable")
+	results := runDefaultDoctorChecks(context.Background(), doctorOptions{
+		Addr: "127.0.0.1:0", DataDir: t.TempDir(),
+	}, doctorRuntime{
+		openSQL:  func(string, string) (*sql.DB, error) { return nil, errors.New("dial failed") },
+		lookPath: exec.LookPath, listen: net.Listen, stat: os.Stat, readFile: os.ReadFile,
+		runCommand: func(context.Context, string, ...string) ([]byte, error) {
+			return []byte("fixture version"), nil
+		},
+	})
+	checks := make(map[string]doctorResult)
+	for _, result := range results {
+		if strings.Contains(result.Detail+result.Remediation, "secret-pass") {
+			t.Fatalf("secret leaked in %s", result.Name)
+		}
+		checks[result.Name] = result
+	}
+	if result := checks["postgres.connectivity"]; result.Status != doctorFail {
+		t.Errorf("connectivity = %+v, want failure", result)
+	}
+	if result := checks["postgres.schema"]; result.Status != doctorWarn || !strings.Contains(strings.ToLower(result.Detail), "skipped") {
+		t.Errorf("schema = %+v, want skipped warning", result)
+	}
+}
+
+func TestDoctorOccupiedPortIsWarning(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	if result := checkAddress("network.http", listener.Addr().String(), net.Listen); result.Status != doctorWarn {
+		t.Fatalf("occupied address = %+v, want warning", result)
+	}
+}
+
+func TestDoctorConfigParseFailureIsFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ARTEX_CONFIG", path)
+	if result := checkConfigFile(os.ReadFile); result.Status != doctorFail {
+		t.Fatalf("invalid config = %+v, want failure", result)
+	}
+}
 
 func TestRunDoctorJSONHasStableShapeAndNoANSI(t *testing.T) {
 	deps := doctorDeps{runChecks: func(context.Context, doctorOptions) []doctorResult {
