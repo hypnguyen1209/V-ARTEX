@@ -44,13 +44,15 @@ type Engine struct {
 	resolv *dnsx.DNSX
 	client *http.Client
 
-	jobs     chan job
-	cool     sync.Map // dedup/cooldown: "kind:id" -> time.Time (last run)
-	stopOnce sync.Once
-	joinOnce sync.Once
-	workers  sync.WaitGroup
-	closed   chan struct{}
-	done     chan struct{}
+	jobs      chan job
+	cool      sync.Map // dedup/cooldown: "kind:id" -> time.Time (last run)
+	stopOnce  sync.Once
+	joinOnce  sync.Once
+	workers   sync.WaitGroup
+	lifecycle sync.RWMutex
+	stopped   bool
+	closed    chan struct{}
+	done      chan struct{}
 }
 
 const (
@@ -130,6 +132,11 @@ func (e *Engine) enqueue(j job) {
 	if e == nil || id0(j.id) || j.arg == "" {
 		return
 	}
+	e.lifecycle.RLock()
+	defer e.lifecycle.RUnlock()
+	if e.stopped {
+		return
+	}
 	select {
 	case e.jobs <- j:
 	default: // queue full → drop (best-effort enrichment)
@@ -144,7 +151,12 @@ func (e *Engine) Close() {
 	if e == nil {
 		return
 	}
-	e.stopOnce.Do(func() { close(e.closed) })
+	e.stopOnce.Do(func() {
+		e.lifecycle.Lock()
+		e.stopped = true
+		close(e.closed)
+		e.lifecycle.Unlock()
+	})
 	e.joinOnce.Do(func() {
 		e.workers.Wait()
 		close(e.done)
@@ -161,17 +173,29 @@ func (e *Engine) worker() {
 		case <-e.closed:
 			return
 		case j := <-e.jobs:
-			if e.onCooldown(j) {
-				continue
-			}
-			switch j.kind {
-			case jobDNS:
-				e.doDNS(j.id, j.arg)
-			case jobHTTP:
-				e.doHTTP(j.id, j.arg)
+			if !e.run(j) {
+				return
 			}
 		}
 	}
+}
+
+func (e *Engine) run(j job) bool {
+	e.lifecycle.RLock()
+	defer e.lifecycle.RUnlock()
+	if e.stopped {
+		return false
+	}
+	if e.onCooldown(j) {
+		return true
+	}
+	switch j.kind {
+	case jobDNS:
+		e.doDNS(j.id, j.arg)
+	case jobHTTP:
+		e.doHTTP(j.id, j.arg)
+	}
+	return true
 }
 
 // onCooldown returns true (skip) if this (kind,id) ran within the cooldown window.

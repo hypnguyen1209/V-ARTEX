@@ -5,16 +5,21 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestManagerCloseStopsEnrichmentWorkers(t *testing.T) {
-	requestStarted := make(chan struct{})
+	const activeWorkers = 4
+	const totalRequests = 32
+	requestStarted := make(chan struct{}, totalRequests)
 	releaseRequest := make(chan struct{})
-	var requestOnce, releaseOnce sync.Once
+	var releaseOnce sync.Once
+	var startedRequests atomic.Int32
 	httpServer := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		requestOnce.Do(func() { close(requestStarted) })
+		startedRequests.Add(1)
+		requestStarted <- struct{}{}
 		<-releaseRequest
 		panic(http.ErrAbortHandler)
 	}))
@@ -33,11 +38,15 @@ func TestManagerCloseStopsEnrichmentWorkers(t *testing.T) {
 		t.Fatal(err)
 	}
 	enrichment := manager.enrich
-	manager.enrich.ProbeSite(1, httpServer.URL)
-	select {
-	case <-requestStarted:
-	case <-time.After(2 * time.Second):
-		t.Fatal("enrichment worker did not start HTTP request")
+	for i := 0; i < totalRequests; i++ {
+		manager.enrich.ProbeSite(int64(i+1), fmt.Sprintf("%s/%d", httpServer.URL, i))
+	}
+	for i := 0; i < activeWorkers; i++ {
+		select {
+		case <-requestStarted:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("enrichment workers started %d requests, want %d", i, activeWorkers)
+		}
 	}
 
 	closeResult := make(chan error, 1)
@@ -64,6 +73,9 @@ func TestManagerCloseStopsEnrichmentWorkers(t *testing.T) {
 	case <-enrichment.Done():
 	default:
 		t.Fatal("manager close returned before enrichment engine reported stopped")
+	}
+	if got := startedRequests.Load(); got != activeWorkers {
+		t.Fatalf("requests started during shutdown=%d, want only %d already active requests", got, activeWorkers)
 	}
 	if err := manager.Close(); err != nil {
 		t.Fatalf("second manager close: %v", err)
