@@ -23,17 +23,24 @@ func textReply(text string) (llm.Message, string, llm.Usage, error) {
 	return llm.Message{Role: llm.RoleAssistant, Content: []llm.ContentBlock{llm.TextBlock(text)}}, "end_turn", llm.Usage{}, nil
 }
 
-func waitForTaskStatus(t *testing.T, manager *Manager, taskID, want string) {
+func waitForTaskStatus(t *testing.T, manager *Manager, taskID, want string, providerErrors <-chan error) {
 	t.Helper()
 	deadline := time.NewTimer(10 * time.Second)
 	defer deadline.Stop()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		select {
+		case err := <-providerErrors:
+			t.Fatalf("scripted provider: %v", err)
+		default:
+		}
 		if got := manager.TaskStatus(taskID); got == want {
 			return
 		}
 		select {
+		case err := <-providerErrors:
+			t.Fatalf("scripted provider: %v", err)
 		case <-deadline.C:
 			t.Fatalf("task %s status=%q, want %q", taskID, manager.TaskStatus(taskID), want)
 		case <-ticker.C:
@@ -41,11 +48,10 @@ func waitForTaskStatus(t *testing.T, manager *Manager, taskID, want string) {
 	}
 }
 
-func onlyNodeID(t *testing.T, store *db.ExplorationStore, kind string) int64 {
-	t.Helper()
+func onlyNodeID(store *db.ExplorationStore, kind string) (int64, error) {
 	nodes, err := store.ListByKind(kind, 100)
 	if err != nil {
-		t.Fatalf("list kind %s: %v", kind, err)
+		return 0, fmt.Errorf("list kind %s: %w", kind, err)
 	}
 	var matching []*db.Node
 	for _, node := range nodes {
@@ -55,9 +61,9 @@ func onlyNodeID(t *testing.T, store *db.ExplorationStore, kind string) int64 {
 		}
 	}
 	if len(matching) != 1 {
-		t.Fatalf("kind %s non-origin nodes=%d", kind, len(matching))
+		return 0, fmt.Errorf("kind %s non-origin nodes=%d", kind, len(matching))
 	}
-	return matching[0].ID
+	return matching[0].ID, nil
 }
 
 func TestEngineLifecycleWithScriptedProviders(t *testing.T) {
@@ -69,12 +75,16 @@ func TestEngineLifecycleWithScriptedProviders(t *testing.T) {
 	engine := NewEngine(manager)
 	ctx, cancel := context.WithCancel(t.Context())
 	var task *Task
+	var lifecycleVerified bool
 	t.Cleanup(func() {
 		cancel()
 		engine.Close()
 		if task != nil {
-			if _, err := manager.DeleteTask(task.ID, DeleteTaskOptions{}); err != nil {
+			result, err := manager.DeleteTask(task.ID, DeleteTaskOptions{DeleteFindings: true})
+			if err != nil {
 				t.Errorf("delete task: %v", err)
+			} else if lifecycleVerified && result.FindingsDeleted != 1 {
+				t.Errorf("deleted findings=%d, want 1", result.FindingsDeleted)
 			}
 		}
 		if err := manager.Close(); err != nil {
@@ -94,8 +104,17 @@ func TestEngineLifecycleWithScriptedProviders(t *testing.T) {
 
 	var plannerCalls, workerCalls atomic.Int32
 	plannerSawFinding := make(chan struct{})
+	providerErrors := make(chan error, 1)
+	providerFailure := func(err error) (llm.Message, string, llm.Usage, error) {
+		select {
+		case providerErrors <- err:
+		default:
+		}
+		return llm.Message{}, "", llm.Usage{}, err
+	}
 	plannerProvider := retestProvider{complete: func(_ context.Context, _ llm.CompletionRequest) (llm.Message, string, llm.Usage, error) {
-		switch plannerCalls.Add(1) {
+		call := plannerCalls.Add(1)
+		switch call {
 		case 1:
 			return toolReply("plan-intent", "add_intent", []byte(`{"intents":[{"summary":"Exercise the deterministic worker lifecycle","priority":1}]}`))
 		case 2:
@@ -104,46 +123,62 @@ func TestEngineLifecycleWithScriptedProviders(t *testing.T) {
 			close(plannerSawFinding)
 			return textReply("The finding arrived while its worker was still running; wait for the completion trigger.")
 		case 4:
-			goalID := onlyNodeID(t, task.Store, db.KindGoal)
-			factID := onlyNodeID(t, task.Store, db.KindFact)
+			goalID, err := onlyNodeID(task.Store, db.KindGoal)
+			if err != nil {
+				return providerFailure(fmt.Errorf("planner call %d: %w", call, err))
+			}
+			factID, err := onlyNodeID(task.Store, db.KindFact)
+			if err != nil {
+				return providerFailure(fmt.Errorf("planner call %d: %w", call, err))
+			}
 			input, err := json.Marshal(map[string]any{
 				"goal_id": goalID, "evidence_id": factID, "reason": "The scripted evidence proves the fixture goal.",
 			})
 			if err != nil {
-				t.Fatal(err)
+				return providerFailure(fmt.Errorf("planner call %d: marshal proof: %w", call, err))
 			}
 			return toolReply("prove-goal", "prove_goal", input)
 		case 5:
 			return textReply("The deterministic goal is proven.")
 		default:
-			return llm.Message{}, "", llm.Usage{}, fmt.Errorf("unexpected planner call")
+			return providerFailure(fmt.Errorf("unexpected planner call %d", call))
 		}
 	}}
 
 	workerProvider := retestProvider{complete: func(ctx context.Context, _ llm.CompletionRequest) (llm.Message, string, llm.Usage, error) {
-		intentID := onlyNodeID(t, task.Store, db.KindIntent)
-		switch workerCalls.Add(1) {
+		call := workerCalls.Add(1)
+		intentID, err := onlyNodeID(task.Store, db.KindIntent)
+		if err != nil {
+			return providerFailure(fmt.Errorf("worker call %d: %w", call, err))
+		}
+		switch call {
 		case 1:
-			input, _ := json.Marshal(map[string]any{
+			input, err := json.Marshal(map[string]any{
 				"summary": "Observed deterministic fixture behavior", "detail": "The scripted worker executed the assigned intent.",
 				"evidence": "fixture command: deterministic success", "confidence": "observed", "intent_id": intentID,
 			})
+			if err != nil {
+				return providerFailure(fmt.Errorf("worker call %d: marshal fact: %w", call, err))
+			}
 			return toolReply("record-fact", "record_fact", input)
 		case 2:
-			input, _ := json.Marshal(map[string]any{
+			input, err := json.Marshal(map[string]any{
 				"vulnclass": "TEST", "severity": "low", "summary": "Deterministic lifecycle finding",
 				"evidence": "Scripted proof generated without network access.", "intent_id": intentID,
 			})
+			if err != nil {
+				return providerFailure(fmt.Errorf("worker call %d: marshal finding: %w", call, err))
+			}
 			return toolReply("report-finding", "report_finding", input)
 		case 3:
 			select {
 			case <-plannerSawFinding:
 			case <-ctx.Done():
-				return llm.Message{}, "", llm.Usage{}, ctx.Err()
+				return providerFailure(fmt.Errorf("worker call %d: %w", call, ctx.Err()))
 			}
 			return textReply("The fixture fact and finding were persisted.")
 		default:
-			return llm.Message{}, "", llm.Usage{}, fmt.Errorf("unexpected worker call")
+			return providerFailure(fmt.Errorf("unexpected worker call %d", call))
 		}
 	}}
 
@@ -157,7 +192,7 @@ func TestEngineLifecycleWithScriptedProviders(t *testing.T) {
 	engine.debounce = 0
 	engine.Run(ctx, task)
 
-	waitForTaskStatus(t, manager, task.ID, "done")
+	waitForTaskStatus(t, manager, task.ID, "done", providerErrors)
 	intents, err := task.Store.ListByKind(db.KindIntent, 100)
 	if err != nil {
 		t.Fatal(err)
@@ -165,7 +200,9 @@ func TestEngineLifecycleWithScriptedProviders(t *testing.T) {
 	if len(intents) != 1 || intents[0].State != "done" {
 		t.Fatalf("intents=%v, want one done intent", intents)
 	}
-	_ = onlyNodeID(t, task.Store, db.KindFact)
+	if _, err := onlyNodeID(task.Store, db.KindFact); err != nil {
+		t.Fatal(err)
+	}
 	findings, err := task.Store.ListByKind(db.KindFinding, 100)
 	if err != nil {
 		t.Fatal(err)
@@ -196,4 +233,5 @@ func TestEngineLifecycleWithScriptedProviders(t *testing.T) {
 			t.Fatalf("missing successful %s tool result in activity: %s", tool, raw)
 		}
 	}
+	lifecycleVerified = true
 }
