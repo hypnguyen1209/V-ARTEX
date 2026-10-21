@@ -41,11 +41,9 @@ func trafficEvidenceServer(t *testing.T) (*Server, *db.RecordedFinding, func(str
 	cancel()
 	s := New(ctx, m, t.TempDir(), t.TempDir(), t.TempDir())
 	t.Cleanup(s.Close)
-	s.archiveWG.Wait()
-	// The archive test below replaces the cancelled service context. Wait for
-	// every background reader before reusing this fixture.
-	<-s.side.done
-	s.startupWG.Wait()
+	if err := waitTrafficEvidenceServerStartup(s); err != nil {
+		t.Fatal(err)
+	}
 	token, err := signJWT(s.jwtKey)
 	if err != nil {
 		t.Fatal(err)
@@ -65,6 +63,81 @@ func trafficEvidenceServer(t *testing.T) (*Server, *db.RecordedFinding, func(str
 		t.Fatal(err)
 	}
 	return s, f, request
+}
+
+func waitTrafficEvidenceServerStartup(s *Server) error {
+	s.archiveWG.Wait()
+	// The archive test below replaces the cancelled service context. Wait for
+	// every background reader before reusing this fixture.
+	<-s.side.done
+	s.startupWG.Wait()
+	drainCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	// Reconciliation can promote a queued bootstrap into a child operation that
+	// outlives its startupWG parent; task inflight admission tracks that child.
+	for _, task := range s.m.List() {
+		if err := s.waitTaskQuiescent(drainCtx, task.ID); err != nil {
+			return fmt.Errorf("wait for startup task %s: %w", task.ID, err)
+		}
+	}
+	return nil
+}
+
+func TestTrafficEvidenceServerStartupWaitsForPromotedBootstrap(t *testing.T) {
+	m, err := NewManager(t.TempDir(), "")
+	if err != nil {
+		t.Skipf("postgres unavailable (%v) - skipping", err)
+	}
+	defer m.Close()
+	defer restoreConcurrencySetting(t, m)()
+	if err := m.SetConcurrency(false, defaultConcurrencyLimit); err != nil {
+		t.Fatal(err)
+	}
+	task, err := m.CreateTask("queued fixture bootstrap", "wait for bootstrap", nil, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _, _ = m.DeleteTask(task.ID, DeleteTaskOptions{}) }()
+	if err := m.EnqueueTask(task.ID, "bootstrap"); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newAdmissionTestServer(m, nil)
+	defer s.engine.Close()
+	s.side = &sideQuestionState{done: make(chan struct{})}
+	close(s.side.done)
+
+	// Hold the promoted child after it has been admitted but before it can finish.
+	s.engine.execMu.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			s.engine.execMu.Unlock()
+		}
+	}()
+	s.startBackground(s.reconcileConcurrency)
+	s.startupWG.Wait()
+	if got := s.engine.inflightCount(task.ID); got != 1 {
+		t.Fatalf("promoted bootstrap inflight=%d, want 1", got)
+	}
+
+	waited := make(chan error, 1)
+	go func() { waited <- waitTrafficEvidenceServerStartup(s) }()
+	select {
+	case err := <-waited:
+		t.Fatalf("fixture wait returned before promoted bootstrap stopped: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	s.engine.execMu.Unlock()
+	locked = false
+	select {
+	case err := <-waited:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("fixture wait did not return after promoted bootstrap stopped")
+	}
 }
 
 func seedServerEvidenceFlow(t *testing.T, s *Server, id string, body []byte) {
