@@ -341,13 +341,13 @@ export default function TrafficPage() {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Traffic</h1>
+          <h1 className="font-semibold text-xl tracking-tight">Traffic</h1>
           <p className="text-muted-foreground text-sm">Global recording proxy · All HTTP exchanges</p>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium",
+              "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-medium text-xs",
               traffic?.enabled
                 ? "border-emerald-500/20 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                 : "border-transparent bg-muted text-muted-foreground",
@@ -356,8 +356,8 @@ export default function TrafficPage() {
             <RadioTowerIcon className="size-3.5" />
             {traffic?.enabled ? "Recording" : "Disabled"}
           </span>
-          {traffic?.proxy && <span className="font-mono text-xs text-muted-foreground">{traffic.proxy}</span>}
-          <span className="text-xs text-muted-foreground">
+          {traffic?.proxy && <span className="font-mono text-muted-foreground text-xs">{traffic.proxy}</span>}
+          <span className="text-muted-foreground text-xs">
             <span className="tabular-nums">{traffic?.count ?? 0}</span> records in total
           </span>
         </div>
@@ -373,12 +373,12 @@ export default function TrafficPage() {
             </Button>
           </PopoverTrigger>
           <PopoverContent
-            className="w-[calc(100vw-2rem)] p-0 data-open:animate-none data-closed:animate-none sm:w-80"
+            className="w-[calc(100vw-2rem)] p-0 data-closed:animate-none data-open:animate-none sm:w-80"
             align="start"
             collisionPadding={16}
           >
             <div className="flex items-center justify-between border-b px-3 py-2">
-              <span className="text-xs font-medium text-muted-foreground">Bulk delete by target</span>
+              <span className="font-medium text-muted-foreground text-xs">Bulk delete by target</span>
               <div className="flex items-center gap-1">
                 {hosts.length > 0 && (
                   <Tooltip>
@@ -415,7 +415,7 @@ export default function TrafficPage() {
             </div>
             <div className="max-h-64 overflow-y-auto">
               {hosts.length === 0 ? (
-                <div className="px-3 py-6 text-center text-xs text-muted-foreground">No traffic records yet</div>
+                <div className="px-3 py-6 text-center text-muted-foreground text-xs">No traffic records yet</div>
               ) : (
                 sortedHosts.map((h, index) => (
                   <label
@@ -433,7 +433,7 @@ export default function TrafficPage() {
                       }
                     />
                     <span className="truncate font-mono">{h.host}</span>
-                    <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">{h.count}</span>
+                    <span className="ml-auto shrink-0 text-muted-foreground tabular-nums">{h.count}</span>
                   </label>
                 ))
               )}
@@ -516,7 +516,7 @@ export default function TrafficPage() {
           </SelectContent>
         </Select>
 
-        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="ml-auto flex items-center gap-2 text-muted-foreground text-xs">
           <span className="tabular-nums">
             {rangeStart}–{rangeEnd} / {total}
           </span>
@@ -546,7 +546,7 @@ export default function TrafficPage() {
 
       {/* Advanced filters (issue #177): narrow 660k+ exchanges down to the one packet. */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
-        <span className="pl-1 text-xs font-medium text-muted-foreground">Advanced Filters</span>
+        <span className="pl-1 font-medium text-muted-foreground text-xs">Advanced Filters</span>
         <div className="relative w-56">
           <Input
             placeholder="Body keyword (min. 3 chars)"
@@ -576,7 +576,7 @@ export default function TrafficPage() {
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1 text-muted-foreground text-xs">
           <span>Response Size</span>
           <Input
             type="number"
@@ -605,7 +605,7 @@ export default function TrafficPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-muted-foreground">{selectedFlows.size} traffic records selected</span>
+        <span className="text-muted-foreground text-sm">{selectedFlows.size} traffic records selected</span>
         <Button variant="outline" size="sm" disabled={selectedFlows.size === 0} onClick={() => setLinking(true)}>
           Link to Finding
         </Button>
@@ -691,7 +691,7 @@ export default function TrafficPage() {
                         }
                       />
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">{fmtTime(e.ts)}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs tabular-nums">{fmtTime(e.ts)}</TableCell>
                     <TableCell className="font-mono text-xs">{e.host}</TableCell>
                     <TableCell>
                       <MethodBadge method={e.method} />
@@ -700,17 +700,17 @@ export default function TrafficPage() {
                       <span className="block truncate font-mono text-xs">{e.url}</span>
                     </TableCell>
                     <TableCell>
-                      <span className={cn("font-mono text-xs font-semibold tabular-nums", statusTone(e.status))}>
+                      <span className={cn("font-mono font-semibold text-xs tabular-nums", statusTone(e.status))}>
                         {e.status}
                       </span>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{e.content_type}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{e.content_type}</TableCell>
                     <TableCell className="text-right text-xs tabular-nums">{fmtBytes(e.resp_len)}</TableCell>
                   </TableRow>
                 ))}
                 {exchanges.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={8} className="py-12 text-center text-muted-foreground text-sm">
                       {traffic === null ? "Loading…" : "No matching traffic."}
                     </TableCell>
                   </TableRow>
@@ -738,7 +738,7 @@ export default function TrafficPage() {
                   <Badge variant="secondary" className={cn("font-mono tabular-nums", statusTone(selected.status))}>
                     {selected.status}
                   </Badge>
-                  <span className="ml-auto text-xs text-muted-foreground tabular-nums">{fmtTime(selected.ts)}</span>
+                  <span className="ml-auto text-muted-foreground text-xs tabular-nums">{fmtTime(selected.ts)}</span>
                 </div>
                 <SheetTitle className="break-all font-mono">{selected.host}</SheetTitle>
                 <SheetDescription className="break-all font-mono">{selected.url}</SheetDescription>
@@ -750,7 +750,7 @@ export default function TrafficPage() {
                 </TabsList>
                 <TabsContent value="request" className="min-h-0 overflow-auto">
                   {detailLoading ? (
-                    <div className="flex items-center gap-2 p-5 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 p-5 text-muted-foreground text-xs">
                       <Loader2Icon className="size-3.5 animate-spin" />
                       Loading HTTP message…
                     </div>
@@ -760,7 +760,7 @@ export default function TrafficPage() {
                 </TabsContent>
                 <TabsContent value="response" className="min-h-0 overflow-auto">
                   {detailLoading ? (
-                    <div className="flex items-center gap-2 p-5 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 p-5 text-muted-foreground text-xs">
                       <Loader2Icon className="size-3.5 animate-spin" />
                       Loading HTTP message…
                     </div>

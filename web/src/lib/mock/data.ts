@@ -2880,7 +2880,6 @@ export const tokenSessions: SessionTokenUsage[] = (() => {
     if (item.worker === "mainagent") session = "main";
     else if (item.worker === "planner") session = "plan";
     else if (item.intent_id) session = `intent:${item.intent_id}`;
-    if (!session) continue;
     const current = totals.get(session) ?? {
       session,
       input_tokens: 0,

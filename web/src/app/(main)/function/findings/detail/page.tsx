@@ -48,7 +48,7 @@ function fmtTime(ts: string) {
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2.5">
-      <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">{label}</span>
+      <span className="shrink-0 pt-0.5 text-muted-foreground text-xs">{label}</span>
       <div className="flex min-w-0 flex-col items-end gap-1 text-right text-sm">{children}</div>
     </div>
   );
@@ -88,7 +88,7 @@ function FindingDetailInner() {
         toast.success(`Severity changed to ${statusMeta("severity", next).label}`);
       } catch (e) {
         setFinding((cur) => (cur ? { ...cur, severity: prev } : cur));
-        toast.error("Update failed: " + (e as Error).message);
+        toast.error(`Update failed: ${(e as Error).message}`);
       }
     },
     [finding, id],
@@ -105,7 +105,7 @@ function FindingDetailInner() {
         toast.success(`Status changed to ${statusMeta("finding", next).label}`);
       } catch (e) {
         setFinding((cur) => (cur ? { ...cur, status: prev } : cur));
-        toast.error("Update failed: " + (e as Error).message);
+        toast.error(`Update failed: ${(e as Error).message}`);
       }
     },
     [finding, id],
@@ -140,10 +140,10 @@ function FindingDetailInner() {
             </Link>
           </Button>
           <ShieldAlertIcon className="size-4 text-muted-foreground" />
-          <h1 className="max-w-md truncate text-sm font-semibold" title={title}>
+          <h1 className="max-w-md truncate font-semibold text-sm" title={title}>
             {title}
           </h1>
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">#{finding.id}</code>
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground text-xs">#{finding.id}</code>
           <Separator orientation="vertical" className="mx-1 h-4" />
           <StatusBadge domain="severity" value={finding.severity} dot />
           <StatusBadge domain="finding" value={finding.status} dot />
@@ -169,7 +169,7 @@ function FindingDetailInner() {
                   <CardTitle className="text-sm">Summary</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{finding.summary || "(no summary)"}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">{finding.summary || "(no summary)"}</p>
                 </CardContent>
               </Card>
               <FindingRetestPanel key={id} findingId={id} readOnly={finding.inherited} onCompleted={load} />
@@ -179,11 +179,11 @@ function FindingDetailInner() {
                 </CardHeader>
                 <CardContent>
                   {finding.evidence ? (
-                    <pre className="max-h-[46vh] overflow-auto rounded-md bg-muted px-3 py-2 font-mono text-xs whitespace-pre-wrap">
+                    <pre className="max-h-[46vh] overflow-auto whitespace-pre-wrap rounded-md bg-muted px-3 py-2 font-mono text-xs">
                       {finding.evidence}
                     </pre>
                   ) : (
-                    <p className="text-sm text-muted-foreground">(no evidence)</p>
+                    <p className="text-muted-foreground text-sm">(no evidence)</p>
                   )}
                 </CardContent>
               </Card>
@@ -211,7 +211,7 @@ function FindingDetailInner() {
                   {finding.report ? (
                     <Markdown text={finding.report} />
                   ) : (
-                    <p className="text-sm text-muted-foreground">No detailed report yet.</p>
+                    <p className="text-muted-foreground text-sm">No detailed report yet.</p>
                   )}
                 </CardContent>
               </Card>
@@ -225,7 +225,7 @@ function FindingDetailInner() {
               <CardContent className="divide-y">
                 {/* Finding ID */}
                 <FieldRow label="Finding ID">
-                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground text-xs">
                     #{finding.id}
                   </code>
                 </FieldRow>

@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import type { Agent, Tool } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 // Traffic tools are host tools gated by the global Traffic capture switch: bindable, but
 // only usable when capture is on. Keep in sync with traffic.SeedToolMetas.
@@ -38,10 +39,19 @@ type ParamRow = {
   parentKey?: string; // set when this is a sub-field of an array param's items
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toRows(schema: Record<string, any>): ParamRow[] {
-  const props = (schema?.properties ?? {}) as Record<string, Record<string, unknown>>;
-  const required = new Set<string>((schema?.required as string[]) ?? []);
+type JsonSchema = Record<string, unknown> & {
+  type?: unknown;
+  description?: unknown;
+  default?: unknown;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  items?: JsonSchema;
+};
+
+function toRows(schema: Record<string, unknown>): ParamRow[] {
+  const root = schema as JsonSchema;
+  const props = root.properties ?? {};
+  const required = new Set(root.required ?? []);
   const rows: ParamRow[] = [];
   for (const [name, p] of Object.entries(props)) {
     const type = String(p?.type ?? "");
@@ -56,10 +66,8 @@ function toRows(schema: Record<string, any>): ParamRow[] {
     });
     // Expand items.properties for array params so sub-fields are editable.
     if (type === "array") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const itemProps = (p as any)?.items?.properties as Record<string, Record<string, unknown>> | undefined;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const itemRequired = new Set<string>(((p as any)?.items?.required as string[]) ?? []);
+      const itemProps = p.items?.properties;
+      const itemRequired = new Set(p.items?.required ?? []);
       if (itemProps) {
         for (const [subName, subP] of Object.entries(itemProps)) {
           const subType = String((subP as Record<string, unknown>)?.type ?? "");
@@ -94,16 +102,14 @@ function coerceDefault(type: string, raw: string): unknown {
 }
 
 // applyRows writes edited rows back into a deep-copied schema (structure untouched).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applyRows(schema: Record<string, any>, rows: ParamRow[]): Record<string, any> {
-  const next = structuredClone(schema ?? {});
-  const props = (next.properties ?? {}) as Record<string, Record<string, unknown>>;
+function applyRows(schema: Record<string, unknown>, rows: ParamRow[]): Record<string, unknown> {
+  const next = structuredClone(schema) as JsonSchema;
+  const props = next.properties ?? {};
   for (const r of rows) {
     if (r.parentKey) {
       // Sub-field of an array param's items.properties
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const parent = props[r.parentKey] as any;
-      const subP = parent?.items?.properties?.[r.name] as Record<string, unknown> | undefined;
+      const parent = props[r.parentKey];
+      const subP = parent?.items?.properties?.[r.name];
       if (!subP) continue;
       subP.description = r.description;
       if (r.scalar) {
@@ -164,7 +170,7 @@ function ToolEditor({
       onSaved();
       onClose();
     } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
+      toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -176,7 +182,7 @@ function ToolEditor({
       onSaved();
       onClose();
     } catch (e) {
-      toast.error("Restore failed: " + (e as Error).message);
+      toast.error(`Restore failed: ${(e as Error).message}`);
     }
   }
 
@@ -184,7 +190,7 @@ function ToolEditor({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4">
         {trafficGated && (
-          <div className="border-amber-500/40 bg-amber-500/10 text-muted-foreground rounded-md border px-3 py-2 text-xs">
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-muted-foreground text-xs">
             This tool requires <b>Traffic capture</b>. Enable traffic capture in System Settings before binding it to
             agents and enabling it.
           </div>
@@ -194,17 +200,21 @@ function ToolEditor({
           <div className="grid gap-1.5">
             <Label className="text-muted-foreground text-xs">Bound agents (which agents receive this tool)</Label>
             <div className="flex flex-wrap gap-3">
-              {agents.map((ag) => (
-                <label key={ag.key} className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={bound.includes(ag.key)}
-                    disabled={trafficGated}
-                    onCheckedChange={() => toggleAgent(ag.key)}
-                  />
-                  {ag.name}
-                  <span className="text-muted-foreground font-mono text-xs">{ag.key}</span>
-                </label>
-              ))}
+              {agents.map((ag) => {
+                const checkboxId = `tool-${encodeURIComponent(tool.key)}-agent-${encodeURIComponent(ag.key)}`;
+                return (
+                  <label key={ag.key} htmlFor={checkboxId} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      id={checkboxId}
+                      checked={bound.includes(ag.key)}
+                      disabled={trafficGated}
+                      onCheckedChange={() => toggleAgent(ag.key)}
+                    />
+                    {ag.name}
+                    <span className="font-mono text-muted-foreground text-xs">{ag.key}</span>
+                  </label>
+                );
+              })}
               {agents.length === 0 && <span className="text-muted-foreground text-xs">(No agents)</span>}
             </div>
           </div>
@@ -235,13 +245,13 @@ function ToolEditor({
           {rows.length === 0 && <span className="text-muted-foreground text-xs">(No parameters)</span>}
           {rows.map((r, i) => (
             <div
-              key={(r.parentKey ?? "") + "." + r.name}
+              key={`${r.parentKey ?? ""}.${r.name}`}
               className={
-                r.parentKey ? "border-l-2 border-muted ml-3 pl-3 grid gap-2 py-2" : "grid gap-2 rounded-md border p-3"
+                r.parentKey ? "ml-3 grid gap-2 border-muted border-l-2 py-2 pl-3" : "grid gap-2 rounded-md border p-3"
               }
             >
               <div className="flex flex-wrap items-center gap-2">
-                {r.parentKey && <span className="text-muted-foreground font-mono text-[10px]">↳</span>}
+                {r.parentKey && <span className="font-mono text-[10px] text-muted-foreground">↳</span>}
                 <span className="font-mono text-sm">{r.name}</span>
                 <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
                   {r.type || "?"}
@@ -251,11 +261,11 @@ function ToolEditor({
                     Required
                   </Badge>
                 )}
-                {r.parentKey && <span className="text-muted-foreground text-[10px]">items subfields</span>}
+                {r.parentKey && <span className="text-[10px] text-muted-foreground">items subfields</span>}
               </div>
               <div className="grid gap-2">
                 <div className="grid gap-1">
-                  <Label className="text-muted-foreground text-[11px]">Description</Label>
+                  <Label className="text-[11px] text-muted-foreground">Description</Label>
                   <Input
                     className="text-xs"
                     value={r.description}
@@ -263,7 +273,7 @@ function ToolEditor({
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label className="text-muted-foreground text-[11px]">Default value</Label>
+                  <Label className="text-[11px] text-muted-foreground">Default value</Label>
                   <Input
                     className="text-xs"
                     placeholder={r.scalar ? "(blank = no default)" : "Scalars only"}
@@ -297,10 +307,10 @@ function ToolGridCard({ tool, onClick }: { tool: Tool; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="hover:border-primary/50 hover:bg-muted/40 focus-visible:ring-ring flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+      className="flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-sm font-medium">{tool.key}</span>
+        <span className="font-medium font-mono text-sm">{tool.key}</span>
         {tool.system ? (
           <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
             System
@@ -316,7 +326,7 @@ function ToolGridCard({ tool, onClick }: { tool: Tool; onClick: () => void }) {
           </Badge>
         )}
         {!tool.enabled && (
-          <Badge variant="outline" className="text-destructive px-1.5 py-0 text-[10px]">
+          <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-destructive">
             Disabled
           </Badge>
         )}
@@ -328,9 +338,9 @@ function ToolGridCard({ tool, onClick }: { tool: Tool; onClick: () => void }) {
           Calls {tool.calls ?? 0}
         </Badge>
       </div>
-      <p className="text-muted-foreground line-clamp-1 h-4 text-xs">{tool.description || "(No description)"}</p>
+      <p className="line-clamp-1 h-4 text-muted-foreground text-xs">{tool.description || "(No description)"}</p>
       <div className="mt-auto flex flex-wrap gap-1 pt-1">
-        {tool.agents.length === 0 && <span className="text-muted-foreground text-[10px]">(No agents bound)</span>}
+        {tool.agents.length === 0 && <span className="text-[10px] text-muted-foreground">(No agents bound)</span>}
         {tool.agents.map((a) => (
           <Badge key={a} variant="outline" className="px-1.5 py-0 text-[10px]">
             {a}
@@ -359,11 +369,15 @@ export default function ToolsPage() {
     api
       .agents()
       .then(setAgents)
-      .catch(() => {});
+      .catch(() => {
+        // The tool catalog remains readable when agent metadata is unavailable.
+      });
     api
       .settings()
       .then((s) => setCaptureOn(!!s.traffic_capture))
-      .catch(() => {});
+      .catch(() => {
+        // Default to the safe disabled gate when settings cannot be loaded.
+      });
   }, [reload]);
 
   const [query, setQuery] = React.useState("");
@@ -392,13 +406,13 @@ export default function ToolsPage() {
     <div className="flex flex-1 flex-col gap-4 md:gap-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Tools</h1>
+          <h1 className="font-semibold text-xl tracking-tight">Tools</h1>
           <p className="text-muted-foreground text-sm">
             System tool descriptions and bindings, plus custom tools (command/script/http)
           </p>
         </div>
         <div className="relative w-64">
-          <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2" />
+          <SearchIcon className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="h-8 pl-8 text-sm"
             placeholder="Search tool name, description, agent…"
@@ -426,7 +440,7 @@ export default function ToolsPage() {
             </CardHeader>
             <CardContent>
               {systemTools.length === 0 ? (
-                <p className="text-muted-foreground py-6 text-center text-sm">
+                <p className="py-6 text-center text-muted-foreground text-sm">
                   {query.trim() ? "No matching system tools" : "(No system tools yet; waiting for backend seed)"}
                 </p>
               ) : (
@@ -459,7 +473,7 @@ export default function ToolsPage() {
             </CardHeader>
             <CardContent>
               {customTools.length === 0 ? (
-                <p className="text-muted-foreground py-6 text-center text-sm">
+                <p className="py-6 text-center text-muted-foreground text-sm">
                   {query.trim()
                     ? "No matching custom tools"
                     : "(No custom tools yet. Click New custom tool at the top right.)"}
@@ -677,11 +691,11 @@ function CustomToolDialog({
     };
     try {
       if (isNew) await api.createCustomTool({ key: key.trim(), ...payload });
-      else await api.updateCustomTool(tool!.key, payload);
+      else if (tool) await api.updateCustomTool(tool.key, payload);
       toast.success(isNew ? "Custom tool created" : "Saved");
       onSaved();
     } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
+      toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -693,7 +707,7 @@ function CustomToolDialog({
       toast.success("Deleted");
       onSaved();
     } catch (e) {
-      toast.error("Delete failed: " + (e as Error).message);
+      toast.error(`Delete failed: ${(e as Error).message}`);
     }
   }
   // runTest dry-runs the CURRENT form (unsaved) with the sample params, so a
@@ -732,7 +746,7 @@ function CustomToolDialog({
     <Sheet open={!!edit} onOpenChange={(o) => !o && onClose()}>
       <SheetContent
         side="right"
-        className="flex flex-col gap-0 p-0 data-[side=right]:w-[45vw] data-[side=right]:sm:max-w-[45vw] data-[side=right]:min-w-[480px]"
+        className="flex flex-col gap-0 p-0 data-[side=right]:w-[45vw] data-[side=right]:min-w-[480px] data-[side=right]:sm:max-w-[45vw]"
       >
         <SheetHeader className="px-4">
           <SheetTitle>{isNew ? "New custom tool" : `Edit ${tool?.key}`}</SheetTitle>
@@ -848,13 +862,14 @@ function CustomToolDialog({
                 <div className="grid gap-1.5">
                   <Label className="text-xs">Proxy URL (blank = direct)</Label>
                   <Input
-                    className="font-mono text-xs w-56"
+                    className="w-56 font-mono text-xs"
                     value={ex.proxy}
                     onChange={(e) => setEx({ ...ex, proxy: e.target.value })}
                   />
                 </div>
-                <label className="mt-4 flex items-center gap-2 text-sm">
+                <label htmlFor="custom-tool-recording-proxy" className="mt-4 flex items-center gap-2 text-sm">
                   <Checkbox
+                    id="custom-tool-recording-proxy"
                     checked={ex.use_recording_proxy}
                     onCheckedChange={(v) => setEx({ ...ex, use_recording_proxy: !!v })}
                   />
@@ -899,31 +914,38 @@ function CustomToolDialog({
           <div className="grid gap-1.5">
             <Label className="text-muted-foreground text-xs">Bind agents</Label>
             <div className="flex flex-wrap gap-3">
-              {agents.map((a) => (
-                <label key={a.key} className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={bound.includes(a.key)} onCheckedChange={() => toggleAgent(a.key)} />
-                  {a.name}
-                  <span className="text-muted-foreground font-mono text-xs">{a.key}</span>
-                </label>
-              ))}
+              {agents.map((a) => {
+                const checkboxId = `custom-tool-agent-${encodeURIComponent(a.key)}`;
+                return (
+                  <label key={a.key} htmlFor={checkboxId} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      id={checkboxId}
+                      checked={bound.includes(a.key)}
+                      onCheckedChange={() => toggleAgent(a.key)}
+                    />
+                    {a.name}
+                    <span className="font-mono text-muted-foreground text-xs">{a.key}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
 
           <div className="flex items-center gap-6">
-            <label className="flex items-center gap-2 text-sm">
-              <Switch checked={enabled} onCheckedChange={setEnabled} /> Enable
+            <label htmlFor="custom-tool-enabled" className="flex items-center gap-2 text-sm">
+              <Switch id="custom-tool-enabled" checked={enabled} onCheckedChange={setEnabled} /> Enable
             </label>
             {kind !== "shell" && (
-              <label className="flex items-center gap-2 text-sm">
-                <Switch checked={deferred} onCheckedChange={setDeferred} /> deferred (enable only for many infrequently
-                used tools)
+              <label htmlFor="custom-tool-deferred" className="flex items-center gap-2 text-sm">
+                <Switch id="custom-tool-deferred" checked={deferred} onCheckedChange={setDeferred} /> deferred (enable
+                only for many infrequently used tools)
               </label>
             )}
           </div>
 
           {kind !== "shell" && (
             <div className="grid gap-1.5 rounded-md border p-3">
-              <Label className="text-xs font-medium">Test run (uses the current form without saving)</Label>
+              <Label className="font-medium text-xs">Test run (uses the current form without saving)</Label>
               <Textarea
                 className="font-mono text-xs"
                 rows={2}
@@ -938,10 +960,10 @@ function CustomToolDialog({
               </div>
               {testResult && (
                 <pre
-                  className={
-                    "max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-2 font-mono text-xs " +
-                    (testResult.is_error ? "text-destructive" : "")
-                  }
+                  className={cn(
+                    "max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-2 font-mono text-xs",
+                    testResult.is_error && "text-destructive",
+                  )}
                 >
                   {testResult.output || "(No output)"}
                 </pre>

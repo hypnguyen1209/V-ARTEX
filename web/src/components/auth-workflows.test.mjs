@@ -585,13 +585,29 @@ test("current-token 401 still expires cookies and redirects when storage removal
 
 test("setup rejects a blank token before calling initialization", async () => {
   const context = setupContext("   ");
-  await handler(setupPath, "handleSubmit", context)({ preventDefault() {} });
+  await handler(
+    setupPath,
+    "handleSubmit",
+    context,
+  )({
+    preventDefault() {
+      // The extracted handler only requires the event contract.
+    },
+  });
   assert.deepEqual(context.events, [["error", "Enter the setup token from the server console or deployment secret"]]);
 });
 
 test("setup trims the token and preserves sign-in routing", async () => {
   const context = setupContext("  console-token  ");
-  await handler(setupPath, "handleSubmit", context)({ preventDefault() {} });
+  await handler(
+    setupPath,
+    "handleSubmit",
+    context,
+  )({
+    preventDefault() {
+      // The extracted handler only requires the event contract.
+    },
+  });
   assert.deepEqual(context.events, [
     ["loading", true],
     ["error", ""],
@@ -623,7 +639,9 @@ test("setup stays fail-closed while checking status and when status is unavailab
       },
     },
     router: { replace: (path) => routes.push(path) },
-    setError() {},
+    setError() {
+      // This test asserts the successful redirect path, not error rendering.
+    },
     setUnavailable: (value) => {
       unavailableState = value;
     },
@@ -676,7 +694,7 @@ test("setup token field is accessible, required, private, first, and gates submi
     assert.equal(evaluate(disabled, { loading: false, setupToken, password, confirm }), expected);
   }
   assert.match(ast.text, /docker compose logs artex/);
-  assert.match(ast.text, /configured setup token/);
+  assert.match(ast.text, /configured setup\s+token/);
 });
 
 for (const replacementSucceeds of [true, false]) {
@@ -709,7 +727,15 @@ for (const replacementSucceeds of [true, false]) {
       onOpenChange: (open) => events.push(["close", open]),
       window: { location: { assign: (path) => events.push(["redirect", path]) } },
     };
-    handler(dialogPath, "submit", context)({ preventDefault() {} });
+    handler(
+      dialogPath,
+      "submit",
+      context,
+    )({
+      preventDefault() {
+        // The extracted handler only requires the event contract.
+      },
+    });
     await pending;
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(events.slice(0, 3), [

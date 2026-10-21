@@ -119,7 +119,6 @@ export function HttpCodeBlock({ raw }: { raw: string }) {
   const separator = lines.indexOf("");
   const body = separator >= 0 ? lines.slice(separator + 1).join("\n") : "";
   const bodyFormat = detectBodyFormat(body);
-
   React.useEffect(() => {
     if (!copied) return;
     const timer = window.setTimeout(() => setCopied(false), 1500);
@@ -182,7 +181,7 @@ export function HttpCodeBlock({ raw }: { raw: string }) {
         aria-multiline="true"
         aria-readonly="true"
         tabIndex={0}
-        className="max-h-[calc(100vh-15rem)] min-w-0 overflow-auto bg-background py-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="max-h-[calc(100vh-15rem)] min-w-0 overflow-auto bg-background py-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         onKeyDown={(event) => {
           if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "a") return;
           event.preventDefault();
@@ -203,7 +202,7 @@ export function HttpCodeBlock({ raw }: { raw: string }) {
             <code
               className={cn(
                 "min-h-[1lh] min-w-0 pr-16 pl-1.5 [tab-size:4]",
-                wrapLines ? "break-words whitespace-pre-wrap" : "whitespace-pre",
+                wrapLines ? "whitespace-pre-wrap break-words" : "whitespace-pre",
               )}
             >
               {renderLine(line, index)}

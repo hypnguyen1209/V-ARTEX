@@ -53,7 +53,13 @@ export function useApprovalFocus({ taskId, conversationId }: { taskId?: string; 
     window.history.replaceState(null, "", url);
     setState(null);
   }, []);
-  return { state, close, retry: () => setRevision((v) => v + 1) };
+  return {
+    state,
+    source: state === null ? undefined : state.source,
+    active: state !== null,
+    close,
+    retry: () => setRevision((v) => v + 1),
+  };
 }
 
 type HistoryPage = { items: Activity[]; hasMore: boolean };

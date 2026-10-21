@@ -385,7 +385,7 @@ function SessionItem({
       >
         {icon ?? <span className="size-3.5 shrink-0" />}
         {s.intent_id && (
-          <span className="shrink-0 rounded bg-muted px-1 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
+          <span className="shrink-0 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground tabular-nums">
             #{s.intent_id}
           </span>
         )}
@@ -395,7 +395,7 @@ function SessionItem({
           </Badge>
         )}
         <span
-          className={cn("min-w-0 flex-1 truncate text-sm font-medium", deleted && "text-muted-foreground line-through")}
+          className={cn("min-w-0 flex-1 truncate font-medium text-sm", deleted && "text-muted-foreground line-through")}
         >
           {displayTitle}
         </span>
@@ -406,12 +406,12 @@ function SessionItem({
         )}
         {hasPending && <ShieldAlertIcon className="size-3.5 shrink-0 text-amber-500" />}
         {!active && unread ? (
-          <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-blue-500/15 px-1 text-[10px] font-medium tabular-nums text-blue-600 dark:text-blue-400">
+          <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-blue-500/15 px-1 font-medium text-[10px] text-blue-600 tabular-nums dark:text-blue-400">
             {unread > 99 ? "99+" : unread}
           </span>
         ) : null}
         {s.live && (
-          <span className="inline-flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+          <span className="inline-flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 font-medium text-[10px] text-blue-600 dark:text-blue-400">
             <span className="size-1 animate-pulse rounded-full bg-blue-500" />
             Live
           </span>
@@ -465,11 +465,11 @@ function WorkerAssetBadge({ assets }: { assets: IntentAsset[] }) {
           {displayAssets.map((asset) => (
             <div key={`${asset.intent_id}-${asset.asset_id}`} className="min-w-0">
               <div className="break-all font-mono text-xs">{asset.label.trim() || `#${asset.asset_id}`}</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">
+              <div className="mt-0.5 text-muted-foreground text-xs">
                 {taskAssetTypeLabel(asset.type)} · {taskAssetSourceLabel(asset.source)}
                 {asset.inherited ? ` · Source task #${asset.source_task_id}` : ""}
               </div>
-              <div className="mt-0.5 [overflow-wrap:anywhere] text-xs">{asset.source_summary}</div>
+              <div className="mt-0.5 text-xs [overflow-wrap:anywhere]">{asset.source_summary}</div>
             </div>
           ))}
         </div>
@@ -482,7 +482,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   const approvalFocus = useApprovalFocus({ taskId });
   const [selectedSessionId, setActiveId] = React.useState(MAIN_ID);
   const focusSession = React.useMemo<Session | undefined>(() => {
-    const source = approvalFocus.state?.source;
+    const source = approvalFocus.source;
     if (!source) return undefined;
     if (source.session.startsWith("main:")) {
       const seg = Number(source.session.slice(5));
@@ -502,7 +502,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
       };
     }
     return undefined;
-  }, [approvalFocus.state?.source]);
+  }, [approvalFocus.source]);
   // Keep a located archived/older session selectable after leaving focus mode.
   const [locatedSession, setLocatedSession] = React.useState<{ taskId: string; session: Session }>();
   React.useEffect(() => {
@@ -1303,7 +1303,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
     }
   }, [activeKey]);
 
-  const focusKey = approvalFocus.state?.source?.session;
+  const focusKey = approvalFocus.source?.session;
   const loadFocusPage = React.useCallback(
     (before: number) => api.activityHistory(taskId, focusKey ?? "main", before, PAGE),
     [taskId, focusKey],
@@ -1319,15 +1319,15 @@ export function SessionsTab({ taskId }: { taskId: string }) {
     [focusKey, patchStore],
   );
   const focusHistory = useApprovalHistory(
-    approvalFocus.state?.source,
+    approvalFocus.source,
     !!focusKey && !!store[focusKey]?.loaded,
     focusKey ? (store[focusKey]?.items ?? []) : [],
     loadFocusPage,
     mergeFocusPage,
   );
   React.useEffect(() => {
-    if (approvalFocus.state) atBottomRef.current = false;
-  }, [approvalFocus.state]);
+    if (approvalFocus.active) atBottomRef.current = false;
+  }, [approvalFocus.active]);
 
   // Main agent is the human↔orchestrator CONSOLE: only the conversation (user msgs +
   // the main agent's own replies/steps). Planner session shows planner steps; a
@@ -1443,29 +1443,29 @@ export function SessionsTab({ taskId }: { taskId: string }) {
     const vp = viewport();
     if (!vp) return;
     const onScroll = () => {
-      if (approvalFocus.state && !focusHistory.ready) return;
+      if (approvalFocus.active && !focusHistory.ready) return;
       atBottomRef.current = vp.scrollTop + vp.clientHeight >= vp.scrollHeight - 60;
       if (vp.scrollTop <= 80) loadEarlier(activeKeyRef.current, viewport); // near top → older page
     };
     vp.addEventListener("scroll", onScroll, { passive: true });
     return () => vp.removeEventListener("scroll", onScroll);
-  }, [viewport, activeId, loadEarlier, approvalFocus.state, focusHistory.ready]);
+  }, [viewport, activeId, loadEarlier, approvalFocus.active, focusHistory.ready]);
   // open/switch a session → jump to the latest (bottom)
   // biome-ignore lint/correctness/useExhaustiveDependencies: activeId intentionally scrolls a newly selected session.
   React.useLayoutEffect(() => {
     const vp = viewport();
-    if (vp && !approvalFocus.state) {
+    if (vp && !approvalFocus.active) {
       vp.scrollTop = vp.scrollHeight;
       atBottomRef.current = true;
     }
-  }, [activeId, viewport, approvalFocus.state]);
+  }, [activeId, viewport, approvalFocus.active]);
   // new activity → stick to bottom only if the user is already pinned there
   // biome-ignore lint/correctness/useExhaustiveDependencies: activity growth intentionally drives live-edge scrolling.
   React.useLayoutEffect(() => {
-    if (approvalFocus.state || !atBottomRef.current) return;
+    if (approvalFocus.active || !atBottomRef.current) return;
     const vp = viewport();
     if (vp) vp.scrollTop = vp.scrollHeight;
-  }, [activity, viewport, approvalFocus.state]);
+  }, [activity, viewport, approvalFocus.active]);
   // Lazy detail loads (AnswerBlock / ToolBlock / Markdown) grow the content AFTER the
   // activity array settles, WITHOUT changing its reference — so the layout effects
   // above never re-fire and a freshly opened session would leave its last message
@@ -1479,13 +1479,13 @@ export function SessionsTab({ taskId }: { taskId: string }) {
     const el = contentRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(() => {
-      if (approvalFocus.state || !atBottomRef.current) return;
+      if (approvalFocus.active || !atBottomRef.current) return;
       const vp = viewport();
       if (vp) vp.scrollTop = vp.scrollHeight;
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [activeId, viewport, approvalFocus.state]);
+  }, [activeId, viewport, approvalFocus.active]);
 
   function stop() {
     if (stopping) return;
@@ -1584,7 +1584,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                 onClick={() => setListOpen((open) => !open)}
                 aria-expanded={listOpen}
                 aria-controls="session-list-panel"
-                className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-medium text-muted-foreground lg:pointer-events-none"
+                className="flex min-w-0 flex-1 items-center gap-1 text-left font-medium text-muted-foreground text-xs lg:pointer-events-none"
               >
                 <ChevronDownIcon
                   className={cn("size-3.5 shrink-0 transition-transform lg:hidden", !listOpen && "-rotate-90")}
@@ -1596,7 +1596,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                       · {activeDisplayTitle}
                     </span>
                     {hiddenUnread > 0 && (
-                      <span className="inline-flex min-w-4 shrink-0 items-center justify-center rounded-full bg-blue-500/15 px-1 text-[10px] font-medium tabular-nums text-blue-600 lg:hidden dark:text-blue-400">
+                      <span className="inline-flex min-w-4 shrink-0 items-center justify-center rounded-full bg-blue-500/15 px-1 font-medium text-[10px] text-blue-600 tabular-nums lg:hidden dark:text-blue-400">
                         {hiddenUnread > 99 ? "99+" : hiddenUnread}
                       </span>
                     )}
@@ -1632,7 +1632,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
             {taskTokens && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                  <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1 text-muted-foreground text-xs">
                     <span>Task total</span>
                     <span>·</span>
                     <TokenMetrics
@@ -1654,7 +1654,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
             id="session-list-panel"
             type="auto"
             className={cn(
-              "min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:block!",
+              "[&_[data-slot=scroll-area-viewport]>div]:block! min-h-0 flex-1",
               !listOpen && "max-lg:hidden",
             )}
           >
@@ -1665,7 +1665,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                 const Meta = roleMeta[role];
                 return (
                   <div key={role} className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-muted-foreground">
+                    <div className="flex items-center gap-1.5 px-2 py-1 font-medium text-muted-foreground text-xs">
                       <Meta.icon className="size-3.5" />
                       {Meta.label}
                       {role === "mainagent" && (
@@ -1716,7 +1716,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                         type="button"
                         onClick={loadOlderIntents}
                         disabled={loadingOlderIntents}
-                        className="mt-0.5 flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent/50"
+                        className="mt-0.5 flex items-center justify-center gap-1 rounded-md px-2 py-1 text-muted-foreground text-xs hover:bg-accent/50"
                       >
                         {loadingOlderIntents ? (
                           <Loader2Icon className="size-3.5 animate-spin" />
@@ -1730,7 +1730,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                 );
               })}
               {mainLoaded && !workerSessions.length && (
-                <div className="px-2 py-1 text-xs text-muted-foreground">No running worker sessions.</div>
+                <div className="px-2 py-1 text-muted-foreground text-xs">No running worker sessions.</div>
               )}
             </div>
           </ScrollArea>
@@ -1741,7 +1741,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
           side={side}
           label={active.role === "worker" ? `Worker #${active.intent_id} · ${activeDisplayTitle}` : activeDisplayTitle}
         >
-          <div className="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden rounded-lg border bg-card">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-2 sm:px-4 sm:py-2.5">
               {(() => {
                 const isWorker = active.role === "worker";
@@ -1749,7 +1749,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                 // Worker: the intent moved into the transcript as a message, so the
                 // header shows a stable generic label (intent JSON stays on hover).
                 const title = isWorker ? "Worker Execution Session" : active.title;
-                const titleEl = <span className="min-w-0 truncate text-sm font-medium">{title}</span>;
+                const titleEl = <span className="min-w-0 truncate font-medium text-sm">{title}</span>;
                 return meta?.json ? (
                   <Tooltip>
                     <TooltipTrigger asChild>{titleEl}</TooltipTrigger>
@@ -1791,7 +1791,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                 <Badge variant="outline">Source task #{active.source_task_id} · Read-only history</Badge>
               )}
               {active.live && (
-                <span className="inline-flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                <span className="inline-flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 font-medium text-[10px] text-blue-600 dark:text-blue-400">
                   <span className="size-1 animate-pulse rounded-full bg-blue-500" />
                   Live
                 </span>
@@ -1801,7 +1801,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                   ↑ Earlier history
                 </span>
               )}
-              <div className="ml-auto flex min-w-0 max-w-full items-center justify-end gap-x-3 gap-y-1 text-xs text-muted-foreground max-sm:w-full max-sm:flex-wrap">
+              <div className="ml-auto flex min-w-0 max-w-full items-center justify-end gap-x-3 gap-y-1 text-muted-foreground text-xs max-sm:w-full max-sm:flex-wrap">
                 {tokenTotal.any && (
                   <Tooltip>
                     {/* Use short labels (in/cache/out) on mobile to avoid wrapping and reducing transcript height. */}
@@ -1844,7 +1844,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
               const dm = active.role === "worker" ? sessionMeta.get(active.id) : undefined;
               if (!dm?.deleted) return null;
               return (
-                <div className="flex items-start gap-2 border-b border-destructive/30 bg-destructive/5 px-4 py-2.5 text-xs">
+                <div className="flex items-start gap-2 border-destructive/30 border-b bg-destructive/5 px-4 py-2.5 text-xs">
                   <Trash2Icon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
                   <div className="min-w-0">
                     <span className="font-medium text-destructive">This intent was deleted by the user</span>
@@ -1876,21 +1876,21 @@ export function SessionsTab({ taskId }: { taskId: string }) {
             to block so wide/unbreakable steps (long commands, code, URLs) can't blow
             out the width and defeat the truncation below — the transcript wraps to
             the panel instead of overflowing horizontally. */}
-            <ScrollArea type="auto" className="min-h-0 min-w-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:block!">
+            <ScrollArea type="auto" className="[&_[data-slot=scroll-area-viewport]>div]:block! min-h-0 min-w-0 flex-1">
               <div className="min-w-0 max-w-full p-4" ref={contentRef}>
                 {activeState?.loadingMore && (
-                  <div className="flex items-center justify-center gap-2 pb-2 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2 pb-2 text-muted-foreground text-xs">
                     <Loader2Icon className="size-3.5 animate-spin" />
                     Loading earlier history…
                   </div>
                 )}
                 {showLoader ? (
-                  <div className="flex items-center gap-2 pl-9 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 pl-9 text-muted-foreground text-xs">
                     <Loader2Icon className="size-3.5 animate-spin" />
                     Loading activity stream…
                   </div>
                 ) : activeState?.error ? (
-                  <div className="flex items-center gap-2 pl-9 text-xs text-red-500">
+                  <div className="flex items-center gap-2 pl-9 text-red-500 text-xs">
                     <CircleXIcon className="size-3.5" />
                     Load failed: {activeState.error}
                     <Button
@@ -1908,10 +1908,10 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                     live={active.live}
                     taskId={taskId}
                     chat={isMain}
-                    focusedSeq={focusHistory.ready ? approvalFocus.state?.source?.seq : undefined}
+                    focusedSeq={focusHistory.ready ? approvalFocus.source?.seq : undefined}
                   />
                 ) : (
-                  <div className="pl-9 text-xs text-muted-foreground">
+                  <div className="pl-9 text-muted-foreground text-xs">
                     {isMain
                       ? "No conversation yet. Message the main agent below to guide exploration or intervene."
                       : "No activity yet."}
@@ -2042,7 +2042,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                   <InputGroupAddon align="block-end">
                     <span
                       className={cn(
-                        "px-1 text-[10px] tabular-nums text-muted-foreground",
+                        "px-1 text-[10px] text-muted-foreground tabular-nums",
                         workerMessageCharCount(workerMessage) > MAX_WORKER_MESSAGE_CHARS && "text-destructive",
                       )}
                     >
@@ -2124,7 +2124,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
           <AlertDialogContent className="max-w-[min(32rem,calc(100vw-2rem))]">
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Worker #{cancelIntent?.intent_id}?</AlertDialogTitle>
-              <AlertDialogDescription className="break-words whitespace-normal">
+              <AlertDialogDescription className="whitespace-normal break-words">
                 {deleteMode === "hard" ? (
                   <>
                     <strong>Permanent deletion</strong> physically removes this intent and downstream nodes
@@ -2152,7 +2152,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                   )}
                 >
                   <div className="font-medium">Soft deletion</div>
-                  <div className="text-xs text-muted-foreground">Retain data and audit history</div>
+                  <div className="text-muted-foreground text-xs">Retain data and audit history</div>
                 </button>
                 <button
                   type="button"
@@ -2163,11 +2163,11 @@ export function SessionsTab({ taskId }: { taskId: string }) {
                   )}
                 >
                   <div className="font-medium">Permanent deletion</div>
-                  <div className="text-xs text-muted-foreground">Cascade removal; cannot undo</div>
+                  <div className="text-muted-foreground text-xs">Cascade removal; cannot undo</div>
                 </button>
               </div>
               <div className="grid gap-2">
-                <label htmlFor="cancel-reason" className="text-sm font-medium">
+                <label htmlFor="cancel-reason" className="font-medium text-sm">
                   Deletion reason (required)
                 </label>
                 <Textarea
@@ -2198,7 +2198,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
           <AlertDialogContent className="max-w-[min(32rem,calc(100vw-2rem))]">
             <AlertDialogHeader>
               <AlertDialogTitle>Start a new session?</AlertDialogTitle>
-              <AlertDialogDescription className="break-words whitespace-normal">
+              <AlertDialogDescription className="whitespace-normal break-words">
                 The current session is archived and can be reopened at any time. The main agent continues with fresh
                 context. The task graph, assets, and goals are unaffected.
               </AlertDialogDescription>

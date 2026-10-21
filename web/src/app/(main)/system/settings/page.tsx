@@ -95,7 +95,7 @@ export default function SystemSettingsPage() {
         apply(s);
         toast.success("Worker agent concurrency saved (applies to tasks started afterward)");
       })
-      .catch((e) => toast.error("Save failed: " + (e as Error).message))
+      .catch((e) => toast.error(`Save failed: ${(e as Error).message}`))
       .finally(() => setSavingWorkers(false));
   };
 
@@ -125,7 +125,7 @@ export default function SystemSettingsPage() {
         apply(s);
         toast.success("Python interpreter settings saved");
       })
-      .catch((e) => toast.error("Save failed: " + (e as Error).message))
+      .catch((e) => toast.error(`Save failed: ${(e as Error).message}`))
       .finally(() => setSaving(false));
   };
   const detectPython = () => {
@@ -245,7 +245,7 @@ export default function SystemSettingsPage() {
         toast.success("Web search settings saved");
       })
       .catch((e) => {
-        toast.error("Save failed: " + (e as Error).message);
+        toast.error(`Save failed: ${(e as Error).message}`);
         api
           .settings()
           .then(apply)
@@ -263,7 +263,7 @@ export default function SystemSettingsPage() {
         setBraveKeyInput("");
         toast.success("Brave API key saved");
       })
-      .catch((e) => toast.error("Save failed: " + (e as Error).message))
+      .catch((e) => toast.error(`Save failed: ${(e as Error).message}`))
       .finally(() => setSavingKey(false));
   };
 
@@ -276,7 +276,7 @@ export default function SystemSettingsPage() {
         setTavilyKeyInput("");
         toast.success("Tavily API key saved");
       })
-      .catch((e) => toast.error("Save failed: " + (e as Error).message))
+      .catch((e) => toast.error(`Save failed: ${(e as Error).message}`))
       .finally(() => setSavingTavilyKey(false));
   };
 
@@ -288,7 +288,7 @@ export default function SystemSettingsPage() {
         apply(s);
         toast.success(proxyInput.trim() ? "Outbound proxy saved" : "Outbound proxy cleared (direct connection)");
       })
-      .catch((e) => toast.error("Save failed: " + (e as Error).message))
+      .catch((e) => toast.error(`Save failed: ${(e as Error).message}`))
       .finally(() => setSavingProxy(false));
   };
 
@@ -300,7 +300,7 @@ export default function SystemSettingsPage() {
         apply(s);
         toast.success(globalProxyInput.trim() ? "Global proxy saved" : "Global proxy cleared (direct connection)");
       })
-      .catch((e) => toast.error("Save failed: " + (e as Error).message))
+      .catch((e) => toast.error(`Save failed: ${(e as Error).message}`))
       .finally(() => setSavingGlobalProxy(false));
   };
 
@@ -317,9 +317,9 @@ export default function SystemSettingsPage() {
       })
       .then((r) => {
         if (r.ok) toast.success(`Search test succeeded · ${r.backend} returned ${r.count} results`);
-        else toast.error("Search test failed: " + (r.error || "Unknown error"));
+        else toast.error(`Search test failed: ${r.error || "Unknown error"}`);
       })
-      .catch((e) => toast.error("Search test failed: " + (e as Error).message))
+      .catch((e) => toast.error(`Search test failed: ${(e as Error).message}`))
       .finally(() => setTesting(false));
   };
 
@@ -329,7 +329,7 @@ export default function SystemSettingsPage() {
   return (
     <div className="flex flex-1 flex-col gap-4 md:gap-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">System Settings</h1>
+        <h1 className="font-semibold text-xl tracking-tight">System Settings</h1>
         <p className="text-muted-foreground text-sm">Global runtime switches</p>
       </div>
 
@@ -354,7 +354,7 @@ export default function SystemSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-between gap-4">
-            <Label htmlFor="traffic-capture" className="text-sm font-normal text-muted-foreground">
+            <Label htmlFor="traffic-capture" className="font-normal text-muted-foreground text-sm">
               {trafficCapture
                 ? "Enabled · recording traffic and injecting the proxy"
                 : "Disabled · no recording or proxy injection"}
@@ -385,7 +385,7 @@ export default function SystemSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-between gap-4">
-            <Label htmlFor="agent-traffic-binding" className="text-sm font-normal text-muted-foreground">
+            <Label htmlFor="agent-traffic-binding" className="font-normal text-muted-foreground text-sm">
               {agentTrafficBinding ? "Enabled · increases token usage" : "Disabled · manual linking remains available"}
             </Label>
             <Switch
@@ -419,7 +419,7 @@ export default function SystemSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            <Label htmlFor="global-proxy" className="text-sm font-normal text-muted-foreground">
+            <Label htmlFor="global-proxy" className="font-normal text-muted-foreground text-sm">
               Proxy URL
             </Label>
             <div className="flex items-center gap-2">
@@ -461,7 +461,7 @@ export default function SystemSettingsPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="inject-planner" className="text-sm font-normal text-muted-foreground">
+              <Label htmlFor="inject-planner" className="font-normal text-muted-foreground text-sm">
                 Inject into planner{injectPlanner ? " · Enabled" : " · Disabled"}
               </Label>
               <Switch
@@ -472,7 +472,7 @@ export default function SystemSettingsPage() {
               />
             </div>
             <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="inject-worker" className="text-sm font-normal text-muted-foreground">
+              <Label htmlFor="inject-worker" className="font-normal text-muted-foreground text-sm">
                 Inject into worker{injectWorker ? " · Enabled" : " · Disabled"}
               </Label>
               <Switch
@@ -503,7 +503,7 @@ export default function SystemSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-between gap-4">
-            <Label htmlFor="noa-compaction" className="text-sm font-normal text-muted-foreground">
+            <Label htmlFor="noa-compaction" className="font-normal text-muted-foreground text-sm">
               noa context compression{noaCompaction ? " · Enabled" : " · Disabled"}
             </Label>
             <Switch
@@ -534,7 +534,7 @@ export default function SystemSettingsPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="web-search" className="text-sm font-normal text-muted-foreground">
+              <Label htmlFor="web-search" className="font-normal text-muted-foreground text-sm">
                 {webSearch
                   ? "Master switch enabled · enable search per agent"
                   : "Disabled · agents cannot enable web search"}
@@ -552,7 +552,7 @@ export default function SystemSettingsPage() {
 
             {webSearch && (
               <div className="flex items-center justify-between gap-4">
-                <Label className="text-sm font-normal text-muted-foreground">Search provider</Label>
+                <Label className="font-normal text-muted-foreground text-sm">Search provider</Label>
                 <Select
                   value={backend}
                   disabled={!loaded || saving}
@@ -575,8 +575,8 @@ export default function SystemSettingsPage() {
             )}
 
             {webSearch && backend === "deepseek" && (
-              <div className="border-border/60 bg-muted/30 flex flex-col gap-2 rounded-md border p-3">
-                <p className="text-sm font-medium">Official DeepSeek web search</p>
+              <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-muted/30 p-3">
+                <p className="font-medium text-sm">Official DeepSeek web search</p>
                 <p className="text-muted-foreground text-xs leading-relaxed">
                   This provider reuses <b>the active LLM profile</b>. It therefore{" "}
                   <b>supports official DeepSeek models only</b>, and that profile <b>must use the anthropic protocol</b>
@@ -598,9 +598,9 @@ export default function SystemSettingsPage() {
 
             {webSearch && backend === "brave-free" && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="brave-key" className="text-sm font-normal text-muted-foreground">
+                <Label htmlFor="brave-key" className="font-normal text-muted-foreground text-sm">
                   Brave Search API Key
-                  {braveKeySet && <span className="ml-2 text-xs text-emerald-500">Configured</span>}
+                  {braveKeySet && <span className="ml-2 text-emerald-500 text-xs">Configured</span>}
                 </Label>
                 <div className="flex items-center gap-2">
                   <Input
@@ -621,7 +621,7 @@ export default function SystemSettingsPage() {
                   </Button>
                 </div>
                 {braveNeedsKey && (
-                  <p className="text-xs text-amber-500">
+                  <p className="text-amber-500 text-xs">
                     Brave is selected but no key is configured. The search tool remains disabled until a key is saved.
                   </p>
                 )}
@@ -633,9 +633,9 @@ export default function SystemSettingsPage() {
 
             {webSearch && backend === "tavily" && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="tavily-key" className="text-sm font-normal text-muted-foreground">
+                <Label htmlFor="tavily-key" className="font-normal text-muted-foreground text-sm">
                   Tavily Search API Key
-                  {tavilyKeySet && <span className="ml-2 text-xs text-emerald-500">Configured</span>}
+                  {tavilyKeySet && <span className="ml-2 text-emerald-500 text-xs">Configured</span>}
                 </Label>
                 <div className="flex items-center gap-2">
                   <Input
@@ -658,7 +658,7 @@ export default function SystemSettingsPage() {
                   </Button>
                 </div>
                 {webSearch && backend === "tavily" && !tavilyKeySet && (
-                  <p className="text-xs text-amber-500">
+                  <p className="text-amber-500 text-xs">
                     Tavily is selected but no key is configured. The search tool remains disabled until a key is saved.
                   </p>
                 )}
@@ -668,7 +668,7 @@ export default function SystemSettingsPage() {
 
             {webSearch && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="ws-proxy" className="text-sm font-normal text-muted-foreground">
+                <Label htmlFor="ws-proxy" className="font-normal text-muted-foreground text-sm">
                   Outbound proxy (optional)
                 </Label>
                 <div className="flex items-center gap-2">
@@ -829,7 +829,7 @@ export default function SystemSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-between gap-4">
-            <Label htmlFor="chat-send-mode" className="text-sm font-normal text-muted-foreground">
+            <Label htmlFor="chat-send-mode" className="font-normal text-muted-foreground text-sm">
               Send shortcut
             </Label>
             <Select value={sendMode} onValueChange={(v) => setChatSendMode(v as ChatSendMode)}>

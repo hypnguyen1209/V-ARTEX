@@ -36,7 +36,7 @@ export function FindingLineageView({ findingId }: { findingId: string }) {
 
   if (loaded && nodes.length === 0) {
     return (
-      <p className="text-muted-foreground p-6 text-sm">
+      <p className="p-6 text-muted-foreground text-sm">
         No attack path available. This vulnerability has no exploration node, or its task was deleted.
       </p>
     );

@@ -1232,13 +1232,11 @@ export interface Tool {
   key: string;
   system: boolean;
   description: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  schema: Record<string, any>; // full JSON-Schema (object with properties)
+  schema: Record<string, unknown>; // full JSON-Schema (object with properties)
   agents: string[]; // bound agent keys
   enabled: boolean;
   kind?: "builtin" | "shell" | "command" | "script" | "http"; // Custom tool type.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  exec?: Record<string, any>; // Custom tool execution specification (kind!=builtin).
+  exec?: Record<string, unknown>; // Custom tool execution specification (kind!=builtin).
   deferred?: boolean; // Deferred schema (SearchExtraTools/ExecuteExtraTool).
   calls?: number; // persistent runtime invocation count (older APIs may omit it)
 }
@@ -1317,8 +1315,7 @@ export interface InterceptPending {
   task_id?: string;
   agent_name: string;
   tool_name: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tool_input: Record<string, any>;
+  tool_input: Record<string, unknown>;
   status: "pending" | "allowed" | "denied" | "timeout";
   reason: string; // Rule message or model judgment reason; model reasons carry a [Model] prefix.
   decided_at?: string;

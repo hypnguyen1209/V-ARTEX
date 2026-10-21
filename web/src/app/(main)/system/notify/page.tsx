@@ -59,13 +59,13 @@ export default function NotifyPage() {
         setBaseURL(m.public_base_url);
         setDigestMin(m.digest_interval_min);
       })
-      .catch((e) => toast.error("Failed to load notification settings: " + (e as Error).message));
+      .catch((e) => toast.error(`Failed to load notification settings: ${(e as Error).message}`));
     // Report channel loading failures explicitly: silently showing no channels
     // could make users believe their configuration was lost.
     api
       .notifyChannels()
       .then(setChannels)
-      .catch((e) => toast.error("Failed to load channels: " + (e as Error).message));
+      .catch((e) => toast.error(`Failed to load channels: ${(e as Error).message}`));
   }, []);
   React.useEffect(() => {
     load();
@@ -190,7 +190,7 @@ export default function NotifyPage() {
       }
       load();
     } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
+      toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -204,7 +204,7 @@ export default function NotifyPage() {
       toast.success(`Test message sent (${r.latency_ms} ms); check the destination group`);
     } catch (e) {
       // Show raw channel errors returned by the backend because they are essential for diagnosing configuration.
-      toast.error("Test failed: " + (e as Error).message, { duration: 12000 });
+      toast.error(`Test failed: ${(e as Error).message}`, { duration: 12000 });
     } finally {
       setTesting(false);
     }
@@ -217,7 +217,7 @@ export default function NotifyPage() {
       setOpen(false);
       load();
     } catch (e) {
-      toast.error("Delete failed: " + (e as Error).message);
+      toast.error(`Delete failed: ${(e as Error).message}`);
     }
   }
 
@@ -226,7 +226,7 @@ export default function NotifyPage() {
       await api.notifyUpdateChannel(ch.id, { enabled: !ch.enabled });
       load();
     } catch (e) {
-      toast.error("Operation failed: " + (e as Error).message);
+      toast.error(`Operation failed: ${(e as Error).message}`);
     }
   }
 
@@ -237,7 +237,7 @@ export default function NotifyPage() {
       setMeta((m) => (m ? { ...m, enabled: on } : m));
       toast.success(on ? "Notifications enabled" : "Notifications paused");
     } catch (e) {
-      toast.error("Operation failed: " + (e as Error).message);
+      toast.error(`Operation failed: ${(e as Error).message}`);
     } finally {
       setGlobalSaving(false);
     }
@@ -253,7 +253,7 @@ export default function NotifyPage() {
       toast.success("Saved");
       load();
     } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
+      toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
       setGlobalSaving(false);
     }
@@ -267,7 +267,7 @@ export default function NotifyPage() {
     <div className="flex flex-1 flex-col gap-4 md:gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Notifications</h1>
+          <h1 className="font-semibold text-xl tracking-tight">Notifications</h1>
           <p className="text-muted-foreground text-sm">
             Send new findings to DingTalk / Feishu / WeCom and other channels. Each channel has its own timing and
             filters.
@@ -357,7 +357,7 @@ export default function NotifyPage() {
             <button
               type="button"
               onClick={openAdd}
-              className="text-foreground/70 border-foreground/70 hover:bg-muted/60 hover:shadow-sm flex min-h-[130px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed transition"
+              className="flex min-h-[130px] flex-col items-center justify-center gap-2 rounded-xl border border-foreground/70 border-dashed text-foreground/70 transition hover:bg-muted/60 hover:shadow-sm"
             >
               <PlusIcon className="size-6" />
               <span className="text-sm">Add channel</span>
@@ -367,11 +367,11 @@ export default function NotifyPage() {
               <Card
                 key={ch.id}
                 onClick={() => openEdit(ch)}
-                className="hover:border-primary/60 cursor-pointer gap-3 transition hover:shadow-sm"
+                className="cursor-pointer gap-3 transition hover:border-primary/60 hover:shadow-sm"
               >
                 <CardHeader>
                   <div className="flex items-center gap-2">
-                    <BellIcon className="text-muted-foreground size-4 shrink-0" />
+                    <BellIcon className="size-4 shrink-0 text-muted-foreground" />
                     <CardTitle className="truncate text-base">{ch.name}</CardTitle>
                     {/* The card opens the editor on click, so both controls must stop propagation themselves. A wrapper div would create an interactive-looking static element with no role and cause accessibility warnings. */}
                     <div className="ml-auto flex items-center gap-2">
@@ -516,7 +516,7 @@ export default function NotifyPage() {
               </div>
 
               <div className="border-t pt-4">
-                <p className="mb-3 text-sm font-medium">Filters (blank = no filtering)</p>
+                <p className="mb-3 font-medium text-sm">Filters (blank = no filtering)</p>
                 <div className="grid gap-4">
                   <div className="grid gap-2">
                     <Label>Minimum severity</Label>

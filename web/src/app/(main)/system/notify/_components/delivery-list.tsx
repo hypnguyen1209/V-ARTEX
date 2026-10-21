@@ -32,7 +32,7 @@ export function DeliveryList({ channels }: { channels: NotificationChannel[] }) 
         setRows(r.deliveries);
         setTotal(r.total);
       })
-      .catch((e) => toast.error("Failed to load delivery records: " + (e as Error).message))
+      .catch((e) => toast.error(`Failed to load delivery records: ${(e as Error).message}`))
       .finally(() => setLoading(false));
   }, [channelID, state, page]);
   React.useEffect(() => {
@@ -45,7 +45,7 @@ export function DeliveryList({ channels }: { channels: NotificationChannel[] }) 
       toast.success("Requeued");
       load();
     } catch (e) {
-      toast.error("Resend failed: " + (e as Error).message);
+      toast.error(`Resend failed: ${(e as Error).message}`);
     }
   }
 
@@ -95,7 +95,7 @@ export function DeliveryList({ channels }: { channels: NotificationChannel[] }) 
         <Button size="sm" variant="outline" onClick={load} disabled={loading}>
           <RefreshCwIcon className={loading ? "animate-spin" : ""} /> Refresh
         </Button>
-        <span className="text-muted-foreground ml-auto text-xs">Total: {total} records</span>
+        <span className="ml-auto text-muted-foreground text-xs">Total: {total} records</span>
       </div>
 
       <Card className="py-0">
@@ -114,14 +114,14 @@ export function DeliveryList({ channels }: { channels: NotificationChannel[] }) 
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-muted-foreground py-8 text-center">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   {loading ? "Loading…" : "No delivery records yet"}
                 </TableCell>
               </TableRow>
             ) : (
               rows.map((d) => (
                 <TableRow key={d.id}>
-                  <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+                  <TableCell className="whitespace-nowrap text-muted-foreground text-xs">
                     {formatTime(d.created_at)}
                   </TableCell>
                   <TableCell>
@@ -144,7 +144,7 @@ export function DeliveryList({ channels }: { channels: NotificationChannel[] }) 
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">{d.attempts}</TableCell>
-                  <TableCell className="text-muted-foreground max-w-md text-xs break-all">{d.last_error}</TableCell>
+                  <TableCell className="max-w-md break-all text-muted-foreground text-xs">{d.last_error}</TableCell>
                   <TableCell>
                     {/* Only failed/skipped deliveries can be resent; resending delivered messages would duplicate notifications. */}
                     {(d.state === "failed" || d.state === "skipped") && (

@@ -113,7 +113,7 @@ export function LinkTrafficDialog({
             <Button
               key={f.finding_id ?? f.id}
               variant={selected?.finding_id === f.finding_id ? "secondary" : "outline"}
-              className="h-auto justify-start p-3 text-left whitespace-normal"
+              className="h-auto justify-start whitespace-normal p-3 text-left"
               aria-pressed={selected?.finding_id === f.finding_id}
               disabled={busy || !f.finding_id || f.inherited}
               onClick={() => setSelected(f)}
@@ -122,12 +122,12 @@ export function LinkTrafficDialog({
                 <span>
                   #{f.finding_id ?? f.id} · {f.name || f.vulnclass}
                 </span>
-                <span className="line-clamp-2 text-xs text-muted-foreground">{f.summary}</span>
+                <span className="line-clamp-2 text-muted-foreground text-xs">{f.summary}</span>
               </span>
             </Button>
           ))}
           {!data?.items.length ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
+            <p className="py-6 text-center text-muted-foreground text-sm">
               {loading ? "Loading…" : "No matching finding. Register a finding first"}
             </p>
           ) : null}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { AlertTriangle, ShieldCheck } from "lucide-react";
@@ -94,8 +95,7 @@ export default function LoginPage() {
           <div className="absolute size-80 rounded-full border border-primary-foreground/10" />
           <div className="absolute size-60 rounded-full border border-primary-foreground/15" />
           <div className="absolute size-40 rounded-full border border-primary-foreground/20" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="ARTEX" width={160} height={160} className="relative brightness-0 invert" />
+          <Image src="/logo.png" alt="ARTEX" width={160} height={160} className="relative brightness-0 invert" />
         </div>
       </div>
 
@@ -103,7 +103,7 @@ export default function LoginPage() {
       <div className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3">
         <div className="w-full max-w-md space-y-10 py-24 lg:py-32">
           <div className="space-y-4 text-center">
-            <h2 className="text-2xl font-medium tracking-tight">Sign in</h2>
+            <h2 className="font-medium text-2xl tracking-tight">Sign in</h2>
             <p className="mx-auto max-w-xl text-muted-foreground">
               Welcome back. Enter your password to continue using ARTEX.
             </p>
@@ -132,7 +132,7 @@ export default function LoginPage() {
                 onCheckedChange={(v) => setAgreed(v === true)}
                 className="mt-0.5"
               />
-              <Label htmlFor="agree-terms" className="text-sm font-normal leading-relaxed text-muted-foreground">
+              <Label htmlFor="agree-terms" className="font-normal text-muted-foreground text-sm leading-relaxed">
                 I have read and agree to{" "}
                 <button
                   type="button"
@@ -143,7 +143,7 @@ export default function LoginPage() {
                 </button>
               </Label>
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-destructive text-sm">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading || !password || !agreed}>
               {loading ? "Signing in..." : "Sign in"}
             </Button>
@@ -159,7 +159,7 @@ export default function LoginPage() {
             </div>
             <div className="space-y-0.5">
               <DialogTitle className="text-base">ARTEX Terms of Use and Disclaimer</DialogTitle>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Version v1.0 · Effective September 18, 2026 · Read all the following terms in full before signing in
               </p>
             </div>
@@ -168,7 +168,7 @@ export default function LoginPage() {
           <div
             ref={termsBodyRef}
             onScroll={handleTermsScroll}
-            className="max-h-[60vh] space-y-5 overflow-y-auto px-6 py-5 text-sm leading-relaxed text-muted-foreground"
+            className="max-h-[60vh] space-y-5 overflow-y-auto px-6 py-5 text-muted-foreground text-sm leading-relaxed"
           >
             <p className="rounded-lg border bg-muted/40 p-3 text-foreground/80">
               These Terms of Use and Disclaimer (the "Statement") form an agreement between you and the ARTEX project
@@ -184,7 +184,7 @@ export default function LoginPage() {
 
             <section className="space-y-1.5">
               <h4 className="flex items-center gap-2 font-medium text-foreground">
-                <span className="flex size-5 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
+                <span className="flex size-5 items-center justify-center rounded-md bg-muted font-semibold text-muted-foreground text-xs">
                   1
                 </span>
                 Article 1 · Definitions and Open Source License
@@ -200,7 +200,7 @@ export default function LoginPage() {
 
             <section className="space-y-1.5">
               <h4 className="flex items-center gap-2 font-medium text-foreground">
-                <span className="flex size-5 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
+                <span className="flex size-5 items-center justify-center rounded-md bg-muted font-semibold text-muted-foreground text-xs">
                   2
                 </span>
                 Article 2 · Permitted Uses
@@ -215,7 +215,7 @@ export default function LoginPage() {
 
             <section className="space-y-2">
               <h4 className="flex items-center gap-2 font-medium text-destructive">
-                <span className="flex size-5 items-center justify-center rounded-md bg-destructive/10 text-xs font-semibold text-destructive">
+                <span className="flex size-5 items-center justify-center rounded-md bg-destructive/10 font-semibold text-destructive text-xs">
                   3
                 </span>
                 <AlertTriangle className="size-4" />
@@ -248,7 +248,7 @@ export default function LoginPage() {
 
             <section className="space-y-1.5">
               <h4 className="flex items-center gap-2 font-medium text-foreground">
-                <span className="flex size-5 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
+                <span className="flex size-5 items-center justify-center rounded-md bg-muted font-semibold text-muted-foreground text-xs">
                   4
                 </span>
                 Article 4 · Intellectual Property
@@ -263,7 +263,7 @@ export default function LoginPage() {
 
             <section className="space-y-1.5">
               <h4 className="flex items-center gap-2 font-medium text-foreground">
-                <span className="flex size-5 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
+                <span className="flex size-5 items-center justify-center rounded-md bg-muted font-semibold text-muted-foreground text-xs">
                   5
                 </span>
                 Article 5 · Data and Privacy
@@ -278,7 +278,7 @@ export default function LoginPage() {
 
             <section className="space-y-1.5">
               <h4 className="flex items-center gap-2 font-medium text-foreground">
-                <span className="flex size-5 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
+                <span className="flex size-5 items-center justify-center rounded-md bg-muted font-semibold text-muted-foreground text-xs">
                   6
                 </span>
                 Article 6 · Compliance and Legal Responsibility
@@ -298,7 +298,7 @@ export default function LoginPage() {
 
             <section className="space-y-1.5">
               <h4 className="flex items-center gap-2 font-medium text-foreground">
-                <span className="flex size-5 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
+                <span className="flex size-5 items-center justify-center rounded-md bg-muted font-semibold text-muted-foreground text-xs">
                   7
                 </span>
                 Article 7 · Disclaimer and Limitation of Liability
@@ -316,7 +316,7 @@ export default function LoginPage() {
 
             <section className="space-y-1.5">
               <h4 className="flex items-center gap-2 font-medium text-foreground">
-                <span className="flex size-5 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
+                <span className="flex size-5 items-center justify-center rounded-md bg-muted font-semibold text-muted-foreground text-xs">
                   8
                 </span>
                 Article 8 · Changes to Terms and Final Interpretation
@@ -332,7 +332,7 @@ export default function LoginPage() {
           </div>
 
           <DialogFooter className="mx-0 mb-0 flex-col items-stretch gap-2 rounded-b-xl px-6 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {readToEnd ? "You have viewed all terms" : "Scroll to the bottom of the terms before confirming"}
             </p>
             <DialogClose asChild>

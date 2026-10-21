@@ -89,7 +89,7 @@ export function TrafficEvidenceViewer({
             {(["request", "response"] as const).map((side) => (
               <TabsContent key={side} value={side}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-muted-foreground text-xs">
                     Body: {detail[side].total.toLocaleString()} bytes{detail[side].truncated ? " · preview" : ""}
                   </span>
                   <Button
