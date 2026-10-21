@@ -70,13 +70,16 @@ export default function SystemSettingsPage() {
     setGlobalProxyInput(s.global_proxy ?? "");
     setPyInterp(s.python_interpreter ?? "");
     setWorkers(String(s.workers ?? 3));
+    setInjectPlanner(s.constraints_inject_planner !== false);
+    setInjectWorker(s.constraints_inject_worker !== false);
+    setNoaCompaction(!!s.noa_compaction);
+  }, []);
+
+  const applyAgentConcurrency = React.useCallback((s: Settings) => {
     setAgentConcurrencyEnabled(!!s.agent_concurrency_enabled);
     setAgentConcurrencyLimit(String(s.agent_concurrency_limit ?? 8));
     setAgentRunsActive(s.agent_runs_active ?? 0);
     setAgentRunsWaiting(s.agent_runs_waiting ?? 0);
-    setInjectPlanner(s.constraints_inject_planner !== false);
-    setInjectWorker(s.constraints_inject_worker !== false);
-    setNoaCompaction(!!s.noa_compaction);
   }, []);
 
   const saveWorkers = () => {
@@ -107,11 +110,8 @@ export default function SystemSettingsPage() {
       .setSettings({ agent_concurrency_enabled: agentConcurrencyEnabled, agent_concurrency_limit: limit })
       .then((settings) => {
         apply(settings);
-        toast.success(
-          agentConcurrencyEnabled
-            ? `Global agent concurrency limited to ${limit}`
-            : "Global agent concurrency limit disabled",
-        );
+        applyAgentConcurrency(settings);
+        toast.success("Global agent concurrency settings saved");
       })
       .catch((error) => toast.error(`Save failed: ${(error as Error).message}`))
       .finally(() => setSavingAgentConcurrency(false));
@@ -140,15 +140,21 @@ export default function SystemSettingsPage() {
   React.useEffect(() => {
     api
       .settings()
-      .then(apply)
+      .then((settings) => {
+        apply(settings);
+        applyAgentConcurrency(settings);
+      })
       .catch(() => undefined)
       .finally(() => setLoaded(true));
-  }, [apply]);
+  }, [apply, applyAgentConcurrency]);
 
   React.useEffect(() => {
     if (!loaded) return;
     let disposed = false;
+    let pending = false;
     const refreshCounters = () => {
+      if (disposed || pending) return;
+      pending = true;
       api
         .settings()
         .then((settings) => {
@@ -157,7 +163,10 @@ export default function SystemSettingsPage() {
             setAgentRunsWaiting(settings.agent_runs_waiting ?? 0);
           }
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => {
+          pending = false;
+        });
     };
     const timer = window.setInterval(refreshCounters, 3000);
     return () => {
