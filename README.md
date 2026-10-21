@@ -249,7 +249,7 @@ Live provider checks are explicitly opt-in:
 ./artex doctor --live-llm
 ```
 
-This networked mode tests every profile with a stored key and may create provider charges.
+This networked mode tests every profile with a non-blank stored key only after validation of all stored profiles succeeds. If any stored profile fails validation, live probing is skipped. Successful probes may create provider charges.
 
 ### Reverse Proxy Deployment (HTTPS / Only Port 443 Exposed)
 

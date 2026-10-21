@@ -7,8 +7,10 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,8 +19,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hypnguyen1209/V-ARTEX/agent"
 	"github.com/hypnguyen1209/V-ARTEX/db"
+	"github.com/jackc/pgx/v5"
 )
 
 type doctorQueryConnector struct {
@@ -505,61 +509,471 @@ func TestDefaultDoctorNeverCallsLLM(t *testing.T) {
 	}
 }
 
+func doctorDSNWithSearchPath(baseDSN, searchPath string) (string, error) {
+	baseDSN = strings.TrimSpace(baseDSN)
+	parsed, err := url.Parse(baseDSN)
+	var isolatedDSN string
+	if err == nil && (strings.EqualFold(parsed.Scheme, "postgres") || strings.EqualFold(parsed.Scheme, "postgresql")) {
+		query := parsed.Query()
+		query.Set("search_path", searchPath)
+		parsed.RawQuery = query.Encode()
+		isolatedDSN = parsed.String()
+	} else {
+		quoted := strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(searchPath)
+		isolatedDSN = baseDSN + " search_path='" + quoted + "'"
+	}
+	config, err := pgx.ParseConfig(isolatedDSN)
+	if err != nil {
+		return "", fmt.Errorf("parse isolated PostgreSQL DSN: %w", err)
+	}
+	if config.RuntimeParams["search_path"] != searchPath {
+		return "", fmt.Errorf("isolated PostgreSQL DSN did not retain search_path")
+	}
+	return isolatedDSN, nil
+}
+
+func TestDoctorDSNWithSearchPathSupportsURLAndKeyword(t *testing.T) {
+	searchPath := pgx.Identifier{`Doctor "Schema`}.Sanitize()
+	for _, baseDSN := range []string{
+		"postgres://doctor:secret@localhost/artex?sslmode=disable",
+		"host=localhost port=5432 user=doctor password=secret dbname=artex sslmode=disable",
+	} {
+		isolatedDSN, err := doctorDSNWithSearchPath(baseDSN, searchPath)
+		if err != nil {
+			t.Fatalf("build isolated DSN from %q: %v", baseDSN, err)
+		}
+		cfg, err := pgx.ParseConfig(isolatedDSN)
+		if err != nil {
+			t.Fatalf("parse isolated DSN from %q: %v", baseDSN, err)
+		}
+		if got := cfg.RuntimeParams["search_path"]; got != searchPath {
+			t.Errorf("search_path from %q = %q, want %q", baseDSN, got, searchPath)
+		}
+	}
+}
+
+type doctorFilesystemEntry struct {
+	Path          string `json:"path"`
+	Type          string `json:"type"`
+	Mode          uint32 `json:"mode"`
+	SymlinkTarget string `json:"symlink_target,omitempty"`
+	Content       []byte `json:"content,omitempty"`
+}
+
+func snapshotDoctorFilesystem(root string) ([]byte, error) {
+	var entries []doctorFilesystemEntry
+	err := filepath.WalkDir(root, func(path string, _ os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		entry := doctorFilesystemEntry{
+			Path: filepath.ToSlash(relative),
+			Type: info.Mode().Type().String(),
+			Mode: uint32(info.Mode()),
+		}
+		switch {
+		case info.Mode().IsRegular():
+			entry.Content, err = os.ReadFile(path)
+		case info.Mode()&os.ModeSymlink != 0:
+			entry.SymlinkTarget, err = os.Readlink(path)
+		}
+		if err != nil {
+			return err
+		}
+		entries = append(entries, entry)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(entries)
+}
+
+func TestDoctorFilesystemSnapshotDetectsPersistentChanges(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink fixture requires no elevated Windows privileges")
+	}
+	root := t.TempDir()
+	empty, err := snapshotDoctorFilesystem(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filePath := filepath.Join(root, "state")
+	if err := os.WriteFile(filePath, []byte("before"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	created, err := snapshotDoctorFilesystem(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(empty, created) {
+		t.Fatal("filesystem snapshot missed a created file")
+	}
+	if err := os.WriteFile(filePath, []byte("after"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	contentChanged, err := snapshotDoctorFilesystem(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(created, contentChanged) {
+		t.Fatal("filesystem snapshot missed changed file content")
+	}
+	if err := os.Chmod(filePath, 0644); err != nil {
+		t.Fatal(err)
+	}
+	modeChanged, err := snapshotDoctorFilesystem(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(contentChanged, modeChanged) {
+		t.Fatal("filesystem snapshot missed a changed file mode")
+	}
+	linkPath := filepath.Join(root, "link")
+	if err := os.Symlink("first-target", linkPath); err != nil {
+		t.Fatal(err)
+	}
+	firstTarget, err := snapshotDoctorFilesystem(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(linkPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("second-target", linkPath); err != nil {
+		t.Fatal(err)
+	}
+	secondTarget, err := snapshotDoctorFilesystem(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(firstTarget, secondTarget) {
+		t.Fatal("filesystem snapshot missed a changed symlink target")
+	}
+}
+
+func openIsolatedDoctorDatabase(t *testing.T, baseDSN string) (string, *sql.DB) {
+	t.Helper()
+	admin, err := sql.Open("pgx", baseDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := admin.PingContext(t.Context()); err != nil {
+		_ = admin.Close()
+		t.Fatal(err)
+	}
+	schema := "doctor_test_" + strings.ReplaceAll(uuid.NewString(), "-", "_")
+	quotedSchema := pgx.Identifier{schema}.Sanitize()
+	if _, err := admin.ExecContext(t.Context(), `CREATE SCHEMA `+quotedSchema); err != nil {
+		_ = admin.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := admin.ExecContext(context.Background(), `DROP SCHEMA IF EXISTS `+quotedSchema+` CASCADE`); err != nil {
+			t.Errorf("drop isolated doctor schema: %v", err)
+		}
+		if err := admin.Close(); err != nil {
+			t.Errorf("close isolated doctor schema connection: %v", err)
+		}
+	})
+
+	isolatedDSN, err := doctorDSNWithSearchPath(baseDSN, quotedSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ARTEX_PG_DSN", isolatedDSN)
+	migrated, err := db.Open(isolatedDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return schema, migrated.DB
+}
+
+type doctorTableContents struct {
+	Name string            `json:"name"`
+	Rows []json.RawMessage `json:"rows"`
+}
+
+type doctorDatabaseSnapshot struct {
+	Tables         []json.RawMessage     `json:"tables"`
+	Columns        []json.RawMessage     `json:"columns"`
+	Indexes        []json.RawMessage     `json:"indexes"`
+	Constraints    []json.RawMessage     `json:"constraints"`
+	Sequences      []json.RawMessage     `json:"sequences"`
+	SequenceValues []json.RawMessage     `json:"sequence_values"`
+	Contents       []doctorTableContents `json:"contents"`
+}
+
+func queryDoctorSnapshotNames(ctx context.Context, database *sql.DB, query string, args ...any) ([]string, error) {
+	rows, err := database.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	names := make([]string, 0)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
+func queryDoctorSnapshotJSON(ctx context.Context, database *sql.DB, query string, args ...any) ([]json.RawMessage, error) {
+	rows, err := database.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	values := make([]json.RawMessage, 0)
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		if !json.Valid([]byte(raw)) {
+			return nil, fmt.Errorf("snapshot query returned invalid JSON")
+		}
+		values = append(values, json.RawMessage(raw))
+	}
+	return values, rows.Err()
+}
+
+func snapshotDoctorDatabase(ctx context.Context, database *sql.DB, schema string) ([]byte, error) {
+	tableNames, err := queryDoctorSnapshotNames(ctx, database, `
+SELECT c.relname
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = $1 AND c.relkind IN ('r', 'p')
+ORDER BY c.relname`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("list base tables: %w", err)
+	}
+	sequenceNames, err := queryDoctorSnapshotNames(ctx, database, `
+SELECT c.relname
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = $1 AND c.relkind = 'S'
+ORDER BY c.relname`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("list sequences: %w", err)
+	}
+
+	snapshot := doctorDatabaseSnapshot{}
+	snapshot.Tables, err = queryDoctorSnapshotJSON(ctx, database, `
+SELECT jsonb_build_object(
+    'name', c.relname,
+    'kind', c.relkind::text,
+    'persistence', c.relpersistence::text,
+    'row_security', c.relrowsecurity,
+    'force_row_security', c.relforcerowsecurity
+)::text
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = $1 AND c.relkind IN ('r', 'p')
+ORDER BY c.relname`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot tables: %w", err)
+	}
+	snapshot.Columns, err = queryDoctorSnapshotJSON(ctx, database, `
+SELECT jsonb_build_object(
+    'table', c.relname,
+    'position', a.attnum,
+    'name', a.attname,
+    'type', pg_catalog.format_type(a.atttypid, a.atttypmod),
+    'not_null', a.attnotnull,
+    'default', pg_catalog.pg_get_expr(d.adbin, d.adrelid),
+    'identity', a.attidentity::text,
+    'generated', a.attgenerated::text,
+    'collation', coll.collname
+)::text
+FROM pg_catalog.pg_attribute a
+JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+LEFT JOIN pg_catalog.pg_collation coll ON coll.oid = a.attcollation
+WHERE n.nspname = $1 AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY c.relname, a.attnum`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot columns: %w", err)
+	}
+	snapshot.Indexes, err = queryDoctorSnapshotJSON(ctx, database, `
+SELECT jsonb_build_object(
+    'table', table_name,
+    'name', index_name,
+    'definition', definition
+)::text
+FROM (
+    SELECT tablename AS table_name, indexname AS index_name, indexdef AS definition
+    FROM pg_catalog.pg_indexes
+    WHERE schemaname = $1
+) indexes
+ORDER BY table_name, index_name`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot indexes: %w", err)
+	}
+	snapshot.Constraints, err = queryDoctorSnapshotJSON(ctx, database, `
+SELECT jsonb_build_object(
+    'table', COALESCE(c.relname, ''),
+    'name', constraint_row.conname,
+    'type', constraint_row.contype::text,
+    'definition', pg_catalog.pg_get_constraintdef(constraint_row.oid, true),
+    'deferrable', constraint_row.condeferrable,
+    'deferred', constraint_row.condeferred,
+    'validated', constraint_row.convalidated
+)::text
+FROM pg_catalog.pg_constraint constraint_row
+JOIN pg_catalog.pg_namespace n ON n.oid = constraint_row.connamespace
+LEFT JOIN pg_catalog.pg_class c ON c.oid = constraint_row.conrelid
+WHERE n.nspname = $1
+ORDER BY COALESCE(c.relname, ''), constraint_row.conname`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot constraints: %w", err)
+	}
+	snapshot.Sequences, err = queryDoctorSnapshotJSON(ctx, database, `
+SELECT jsonb_build_object(
+    'name', c.relname,
+    'type', pg_catalog.format_type(sequence_row.seqtypid, NULL),
+    'start', sequence_row.seqstart,
+    'increment', sequence_row.seqincrement,
+    'minimum', sequence_row.seqmin,
+    'maximum', sequence_row.seqmax,
+    'cache', sequence_row.seqcache,
+    'cycle', sequence_row.seqcycle
+)::text
+FROM pg_catalog.pg_sequence sequence_row
+JOIN pg_catalog.pg_class c ON c.oid = sequence_row.seqrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = $1
+ORDER BY c.relname`, schema)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot sequences: %w", err)
+	}
+
+	snapshot.Contents = make([]doctorTableContents, 0, len(tableNames))
+	for _, table := range tableNames {
+		qualified := pgx.Identifier{schema, table}.Sanitize()
+		rows, err := queryDoctorSnapshotJSON(ctx, database,
+			`SELECT to_jsonb(snapshot_row)::text FROM `+qualified+` AS snapshot_row ORDER BY to_jsonb(snapshot_row)::text`)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot table %s: %w", table, err)
+		}
+		snapshot.Contents = append(snapshot.Contents, doctorTableContents{Name: table, Rows: rows})
+	}
+	snapshot.SequenceValues = make([]json.RawMessage, 0, len(sequenceNames))
+	for _, sequence := range sequenceNames {
+		qualified := pgx.Identifier{schema, sequence}.Sanitize()
+		values, err := queryDoctorSnapshotJSON(ctx, database,
+			`SELECT jsonb_build_object('name', $1::text, 'last_value', last_value, 'is_called', is_called)::text FROM `+qualified,
+			sequence)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot sequence %s: %w", sequence, err)
+		}
+		snapshot.SequenceValues = append(snapshot.SequenceValues, values...)
+	}
+	return json.Marshal(snapshot)
+}
+
 func TestDoctorDoesNotPersistDatabaseOrFilesystemState(t *testing.T) {
-	dsn, _, err := db.DSN()
+	baseDSN, _, err := db.DSN()
 	if err != nil {
 		t.Skip("test PostgreSQL is not configured")
 	}
-	sqlDB, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	schema, sqlDB := openIsolatedDoctorDatabase(t, baseDSN)
 	defer sqlDB.Close()
-	lockConn, err := sqlDB.Conn(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lockConn.Close()
-	if _, err := lockConn.ExecContext(t.Context(), `SELECT pg_advisory_lock(7337741002)`); err != nil {
-		t.Fatal(err)
-	}
-	defer lockConn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(7337741002)`) //nolint:errcheck
-	migrated, err := db.Open(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = migrated.Close()
 
-	count := func(table string) int64 {
-		t.Helper()
-		var value int64
-		if err := sqlDB.QueryRowContext(t.Context(), "SELECT count(*) FROM "+table).Scan(&value); err != nil {
-			t.Fatal(err)
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	skillDir := filepath.Join(root, "skills")
+	jwtDir := filepath.Join(root, "jwt")
+	dataDir := filepath.Join(root, "data")
+	leaves := []string{configPath, skillDir, jwtDir, dataDir}
+	for _, leaf := range leaves {
+		if _, err := os.Lstat(leaf); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("isolated input must start absent: %s: %v", leaf, err)
 		}
-		return value
 	}
-	dataDir := t.TempDir()
-	before, err := os.Stat(dataDir)
+	t.Setenv("ARTEX_CONFIG", configPath)
+	t.Setenv("ARTEX_SKILL_DIR", skillDir)
+	t.Setenv("ARTEX_JWT_KEY_DIR", jwtDir)
+
+	beforeDatabase, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeSettings, beforeTasks := count("settings"), count("tasks")
+	beforeFilesystem, err := snapshotDoctorFilesystem(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var output bytes.Buffer
 	code := runDoctor([]string{"--json", "--addr", "127.0.0.1:0", "--proxy", "", "--data", dataDir}, &output, io.Discard, defaultDoctorDeps())
-	if code == 2 {
-		t.Fatalf("doctor rejected valid arguments: %s", output.String())
+	if code != 1 {
+		t.Fatalf("doctor exit code = %d, want 1 for intentionally missing required paths: %s", code, output.String())
 	}
 	var report doctorReport
 	if err := json.Unmarshal(output.Bytes(), &report); err != nil {
 		t.Fatalf("doctor emitted invalid JSON: %v\n%s", err, output.String())
 	}
-	after, err := os.Stat(dataDir)
+	afterDatabase, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
 	if err != nil {
 		t.Fatal(err)
 	}
-	afterSettings, afterTasks := count("settings"), count("tasks")
-	if beforeSettings != afterSettings || beforeTasks != afterTasks || !before.ModTime().Equal(after.ModTime()) {
-		t.Fatalf("doctor mutated state: settings %d/%d tasks %d/%d mtime %v/%v",
-			beforeSettings, afterSettings, beforeTasks, afterTasks, before.ModTime(), after.ModTime())
+	afterFilesystem, err := snapshotDoctorFilesystem(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(beforeDatabase, afterDatabase) {
+		t.Fatal("doctor mutated persistent PostgreSQL state")
+	}
+	if !bytes.Equal(beforeFilesystem, afterFilesystem) {
+		t.Fatal("doctor mutated an isolated filesystem input")
+	}
+	for _, leaf := range leaves {
+		if _, err := os.Lstat(leaf); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("doctor created an absent filesystem input: %s: %v", leaf, err)
+		}
+	}
+
+	probeTable := pgx.Identifier{schema, "doctor_snapshot_probe"}.Sanitize()
+	if _, err := sqlDB.ExecContext(t.Context(), `CREATE TABLE `+probeTable+` (id BIGSERIAL PRIMARY KEY, value TEXT UNIQUE CHECK (value <> ''))`); err != nil {
+		t.Fatal(err)
+	}
+	metadataChanged, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(afterDatabase, metadataChanged) {
+		t.Fatal("database snapshot missed table, column, index, constraint, or sequence metadata changes")
+	}
+	probeSequence := pgx.Identifier{schema, "doctor_snapshot_probe_id_seq"}.Sanitize()
+	if _, err := sqlDB.ExecContext(t.Context(), `SELECT nextval($1::regclass)`, probeSequence); err != nil {
+		t.Fatal(err)
+	}
+	sequenceChanged, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(metadataChanged, sequenceChanged) {
+		t.Fatal("database snapshot missed a changed sequence value")
+	}
+	if _, err := sqlDB.ExecContext(t.Context(), `INSERT INTO `+probeTable+` (id, value) VALUES (42, 'changed')`); err != nil {
+		t.Fatal(err)
+	}
+	rowChanged, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(sequenceChanged, rowChanged) {
+		t.Fatal("database snapshot missed changed table contents")
 	}
 }
