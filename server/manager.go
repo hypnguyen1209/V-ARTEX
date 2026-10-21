@@ -862,13 +862,13 @@ func (m *Manager) SetGlobalProxy(raw string) error {
 }
 
 func (m *Manager) Close() error {
+	if m.enrich != nil {
+		m.enrich.Close()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.traffic != nil {
 		m.traffic.Close()
-	}
-	if m.enrich != nil {
-		m.enrich.Close()
 	}
 	return m.pg.Close()
 }

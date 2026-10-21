@@ -2,59 +2,68 @@ package server
 
 import (
 	"fmt"
-	"runtime"
-	"strings"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 )
 
-func enrichWorkerCount() int {
-	stack := make([]byte, 1<<20)
-	n := runtime.Stack(stack, true)
-	return strings.Count(string(stack[:n]), "github.com/hypnguyen1209/V-ARTEX/enrich.(*Engine).worker")
-}
-
-func waitForEnrichWorkerCount(match func(int) bool) (int, bool) {
-	deadline := time.NewTimer(2 * time.Second)
-	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		got := enrichWorkerCount()
-		if match(got) {
-			return got, true
-		}
-		select {
-		case <-deadline.C:
-			return got, false
-		case <-ticker.C:
-		}
-	}
-}
-
 func TestManagerCloseStopsEnrichmentWorkers(t *testing.T) {
-	before := enrichWorkerCount()
-	manager, err := NewManager(t.TempDir(), "")
+	requestStarted := make(chan struct{})
+	releaseRequest := make(chan struct{})
+	var requestOnce, releaseOnce sync.Once
+	httpServer := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		requestOnce.Do(func() { close(requestStarted) })
+		<-releaseRequest
+		panic(http.ErrAbortHandler)
+	}))
+	var manager *Manager
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(releaseRequest) })
+		if manager != nil {
+			_ = manager.Close()
+		}
+		httpServer.Close()
+	})
+
+	var err error
+	manager, err = NewManager(t.TempDir(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	closed := false
-	defer func() {
-		if !closed {
-			_ = manager.Close()
-		}
-	}()
+	enrichment := manager.enrich
+	manager.enrich.ProbeSite(1, httpServer.URL)
+	select {
+	case <-requestStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("enrichment worker did not start HTTP request")
+	}
 
-	if got, ok := waitForEnrichWorkerCount(func(got int) bool { return got >= before+4 }); !ok {
-		t.Fatalf("enrichment workers after manager creation=%d, want at least %d", got, before+4)
+	closeResult := make(chan error, 1)
+	go func() { closeResult <- manager.Close() }()
+	select {
+	case err := <-closeResult:
+		if err != nil {
+			t.Fatalf("manager close: %v", err)
+		}
+		t.Fatal("manager close returned before its enrichment worker stopped")
+	case <-time.After(100 * time.Millisecond):
 	}
-	if err := manager.Close(); err != nil {
-		t.Fatal(err)
+
+	releaseOnce.Do(func() { close(releaseRequest) })
+	select {
+	case err := <-closeResult:
+		if err != nil {
+			t.Fatalf("manager close: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("manager close did not return after enrichment worker stopped")
 	}
-	closed = true
-	if got, ok := waitForEnrichWorkerCount(func(got int) bool { return got <= before }); !ok {
-		t.Fatalf("enrichment workers after manager close=%d, want at most %d", got, before)
+	select {
+	case <-enrichment.Done():
+	default:
+		t.Fatal("manager close returned before enrichment engine reported stopped")
 	}
 	if err := manager.Close(); err != nil {
 		t.Fatalf("second manager close: %v", err)

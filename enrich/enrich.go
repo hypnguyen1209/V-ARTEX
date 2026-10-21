@@ -44,10 +44,13 @@ type Engine struct {
 	resolv *dnsx.DNSX
 	client *http.Client
 
-	jobs   chan job
-	cool   sync.Map // dedup/cooldown: "kind:id" -> time.Time (last run)
-	once   sync.Once
-	closed chan struct{}
+	jobs     chan job
+	cool     sync.Map // dedup/cooldown: "kind:id" -> time.Time (last run)
+	stopOnce sync.Once
+	joinOnce sync.Once
+	workers  sync.WaitGroup
+	closed   chan struct{}
+	done     chan struct{}
 }
 
 const (
@@ -80,7 +83,9 @@ func New(as *db.AssetStore, proxy func() string, workers int) *Engine {
 		client: buildClient(proxy),
 		jobs:   make(chan job, queueSize),
 		closed: make(chan struct{}),
+		done:   make(chan struct{}),
 	}
+	e.workers.Add(workers)
 	for i := 0; i < workers; i++ {
 		go e.worker()
 	}
@@ -134,15 +139,23 @@ func (e *Engine) enqueue(j job) {
 
 func id0(id int64) bool { return id <= 0 }
 
-// Close stops the workers (idempotent).
+// Close stops and joins the workers (idempotent).
 func (e *Engine) Close() {
 	if e == nil {
 		return
 	}
-	e.once.Do(func() { close(e.closed) })
+	e.stopOnce.Do(func() { close(e.closed) })
+	e.joinOnce.Do(func() {
+		e.workers.Wait()
+		close(e.done)
+	})
 }
 
+// Done closes after Close has joined every worker.
+func (e *Engine) Done() <-chan struct{} { return e.done }
+
 func (e *Engine) worker() {
+	defer e.workers.Done()
 	for {
 		select {
 		case <-e.closed:
