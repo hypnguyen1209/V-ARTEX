@@ -7,8 +7,12 @@ permissions:
   contents: write # Required to create a Release
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
   # ① Export the static frontend once for reuse across cross-compilation targets
   frontend:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +68,12 @@ jobs:
           ./build.sh --target "${ARTEX_TARGET_OS}/${ARTEX_TARGET_ARCH}"
       - name: Smoke test Linux amd64 binary
         if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
-        run: dist/artex-linux-amd64/artex -h
+        run: |
+          dist/artex-linux-amd64/artex -h
+          doctor_code=0
+          dist/artex-linux-amd64/artex doctor --json --addr 127.0.0.1:0 --proxy '' > doctor.json || doctor_code=$?
+          test "$doctor_code" -eq 0 || test "$doctor_code" -eq 1
+          python3 -m json.tool doctor.json >/dev/null
       - uses: actions/upload-artifact@v4
         with:
           name: pkg-${{ matrix.goos }}-${{ matrix.goarch }}
