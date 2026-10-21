@@ -16,6 +16,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hypnguyen1209/V-ARTEX/agent"
+	"github.com/hypnguyen1209/V-ARTEX/db"
 )
 
 type doctorQueryConnector struct {
@@ -327,5 +330,49 @@ func TestRunDoctorOutputFailures(t *testing.T) {
 				t.Errorf("stderr = %q, want %q", errOut.String(), want)
 			}
 		})
+	}
+}
+
+func TestDoctorLiveLLMChecksKeyedProfiles(t *testing.T) {
+	keyed := &db.LLMProfile{
+		Name: "fixture", Format: "openai", BaseURL: "https://example.test/v1/chat/completions",
+		Proxy: "http://proxy.test", Model: "fixture-model", APIKey: "profile-secret",
+		ThinkingType: "disabled", ReasoningEffort: "high", Streaming: false,
+		MaxTokens: 123, MaxTokensField: "max_completion_tokens", SessionHeaderKey: "x-session",
+	}
+	calls := 0
+	result := checkLiveLLMProfiles(context.Background(), &doctorSession{
+		sql:      &sql.DB{},
+		profiles: []*db.LLMProfile{{Name: "keyless"}, keyed},
+	}, doctorRuntime{liveLLM: func(_ context.Context, cfg agent.Config) (time.Duration, string, error) {
+		calls++
+		if cfg.BaseURL != "https://example.test/v1" || cfg.Proxy != keyed.Proxy || cfg.Model != keyed.Model || cfg.APIKey != keyed.APIKey || cfg.ThinkingType != keyed.ThinkingType || cfg.ReasoningEffort != keyed.ReasoningEffort || cfg.Stream != keyed.Streaming || cfg.MaxTokens != keyed.MaxTokens || cfg.MaxTokensField != keyed.MaxTokensField || cfg.SessionHeaderKey != keyed.SessionHeaderKey {
+			t.Fatalf("live probe configuration = %+v", cfg)
+		}
+		return time.Millisecond, "OK", nil
+	}})
+	if calls != 1 || result.Status != doctorOK || !strings.Contains(result.Detail, "1 keyed profile") {
+		t.Fatalf("calls = %d, result = %+v", calls, result)
+	}
+}
+
+func TestDefaultDoctorNeverCallsLLM(t *testing.T) {
+	t.Setenv("ARTEX_PG_DSN", "postgres://user:secret@127.0.0.1:1/artex?sslmode=disable")
+	calls := 0
+	runtime := doctorRuntime{
+		openSQL:    func(string, string) (*sql.DB, error) { return nil, errors.New("fixture connection failure") },
+		lookPath:   func(name string) (string, error) { return name, nil },
+		runCommand: func(context.Context, string, ...string) ([]byte, error) { return []byte("fixture version"), nil },
+		listen:     net.Listen, stat: os.Stat, readFile: os.ReadFile,
+		liveLLM: func(context.Context, agent.Config) (time.Duration, string, error) {
+			calls++
+			return 0, "", nil
+		},
+	}
+	_ = runDefaultDoctorChecks(t.Context(), doctorOptions{
+		Addr: "127.0.0.1:0", Proxy: "", DataDir: t.TempDir(), LiveLLM: false,
+	}, runtime)
+	if calls != 0 {
+		t.Fatalf("default doctor made %d live LLM calls", calls)
 	}
 }

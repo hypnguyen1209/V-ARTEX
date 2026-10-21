@@ -1,12 +1,16 @@
 package agent
 
 import (
+	"bytes"
+	"context"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/Autumn-27/norma/llm"
 	"github.com/hypnguyen1209/V-ARTEX/llmrec"
 )
 
@@ -121,5 +125,28 @@ func TestRoundTripWithoutCaptureIsUnchanged(t *testing.T) {
 	}
 	if string(got) != "ok" {
 		t.Fatalf("body=%q", got)
+	}
+}
+
+func TestConnectionQuietDoesNotLogWireData(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"fixture","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`)
+	}))
+	defer srv.Close()
+
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previous)
+
+	_, reply, err := TestConnectionQuiet(context.Background(), Config{
+		Format: llm.FormatOpenAI, BaseURL: srv.URL, APIKey: "secret-key", Model: "fixture", Stream: false,
+	})
+	if err != nil || strings.TrimSpace(reply) != "OK" {
+		t.Fatalf("reply=%q err=%v", reply, err)
+	}
+	if strings.Contains(logs.String(), "choices") || strings.Contains(logs.String(), "secret-key") {
+		t.Fatalf("quiet probe logged wire data: %s", logs.String())
 	}
 }

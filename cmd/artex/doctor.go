@@ -120,7 +120,7 @@ func runDoctor(args []string, stdout, stderr io.Writer, deps doctorDeps) int {
 func defaultDoctorDeps() doctorDeps {
 	runtime := doctorRuntime{
 		openSQL: sql.Open, lookPath: exec.LookPath, listen: net.Listen,
-		stat: os.Stat, readFile: os.ReadFile,
+		stat: os.Stat, readFile: os.ReadFile, liveLLM: agent.TestConnectionQuiet,
 		runCommand: func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			command := exec.CommandContext(ctx, name, args...)
 			command.WaitDelay = 250 * time.Millisecond
@@ -383,10 +383,32 @@ func runDefaultDoctorChecks(ctx context.Context, opts doctorOptions, runtime doc
 	return results
 }
 
-func checkLiveLLMProfiles(context.Context, *doctorSession, doctorRuntime) doctorResult {
-	return doctorResult{
-		Name: "llm.live", Status: doctorWarn,
-		Detail:      "Live LLM diagnostics are not available in this build",
-		Remediation: "Omit --live-llm",
-	}
+func checkLiveLLMProfiles(ctx context.Context, session *doctorSession, runtime doctorRuntime) doctorResult {
+	return timedDoctorResult("llm.live", func() doctorResult {
+		if session == nil || session.sql == nil {
+			return doctorResult{Status: doctorWarn, Detail: "Skipped because postgres.connectivity failed", Remediation: "Restore PostgreSQL connectivity and rerun with --live-llm"}
+		}
+		tested := 0
+		for _, profile := range session.profiles {
+			if profile.APIKey == "" {
+				continue
+			}
+			cfg := agent.ConfigFrom(profile.Format, profile.Model, profile.BaseURL, profile.APIKey, profile.Proxy)
+			cfg.ThinkingType, cfg.ReasoningEffort = profile.ThinkingType, profile.ReasoningEffort
+			cfg.Stream = profile.Streaming
+			cfg.MaxTokens, cfg.MaxTokensField = profile.MaxTokens, profile.MaxTokensField
+			cfg.SessionHeaderKey = profile.SessionHeaderKey
+			probeCtx, cancel := context.WithTimeout(ctx, 35*time.Second)
+			_, _, err := runtime.liveLLM(probeCtx, cfg)
+			cancel()
+			if err != nil {
+				return doctorResult{Status: doctorFail, Detail: fmt.Sprintf("Profile %q failed its live probe: %s", profile.Name, err), Remediation: "Verify endpoint, model, key, proxy, and account quota"}
+			}
+			tested++
+		}
+		if tested == 0 {
+			return doctorResult{Status: doctorWarn, Detail: "No keyed profile was available for a live probe", Remediation: "Store an API key or omit --live-llm"}
+		}
+		return doctorResult{Status: doctorOK, Detail: fmt.Sprintf("%d keyed profile(s) completed a live, potentially billable probe", tested)}
+	})
 }
