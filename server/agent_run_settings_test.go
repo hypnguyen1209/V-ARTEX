@@ -45,8 +45,12 @@ func TestAgentConcurrencyDefaultsDisabledAtEight(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	m.agentRuns.configure(false, defaultAgentConcurrencyLimit)
-	if enabled, limit := m.AgentConcurrency(); enabled || limit != 8 {
+	reloaded, err := NewManager(t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reloaded.Close() })
+	if enabled, limit := reloaded.AgentConcurrency(); enabled || limit != 8 {
 		t.Fatalf("AgentConcurrency() = (%v, %d), want (false, 8)", enabled, limit)
 	}
 }
