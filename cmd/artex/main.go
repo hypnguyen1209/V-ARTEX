@@ -62,6 +62,13 @@ func jwtKeyDir() string {
 }
 
 func run() int {
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		return runDoctor(os.Args[2:], os.Stdout, os.Stderr, defaultDoctorDeps())
+	}
+	return runServer()
+}
+
+func runServer() int {
 	var (
 		addr    = flag.String("addr", defaultHTTPAddr, "HTTP listen address")
 		dataDir = flag.String("data", filepath.Join(config.BaseDir(), "data"), "data directory for SQLite stores (default: data/ next to the executable)")
