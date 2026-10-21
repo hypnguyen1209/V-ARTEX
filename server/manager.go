@@ -15,13 +15,13 @@ import (
 	"sync"
 	"time"
 
+	actool "github.com/Autumn-27/norma/tool"
 	"github.com/hypnguyen1209/V-ARTEX/agent"
 	pgdb "github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/enrich"
 	"github.com/hypnguyen1209/V-ARTEX/guard"
 	"github.com/hypnguyen1209/V-ARTEX/intercept"
 	"github.com/hypnguyen1209/V-ARTEX/traffic"
-	actool "github.com/Autumn-27/norma/tool"
 )
 
 // Task is one engagement: a description + goal + its own exploration store,
@@ -220,6 +220,7 @@ type Manager struct {
 	dir         string
 	pg          *pgdb.DB
 	assets      *pgdb.AssetStore
+	agentRuns   *agentRunGate
 	traffic     *traffic.Traffic       // process-wide recording proxy (may be nil)
 	enrich      *enrich.Engine         // engine-side asset auto-completion (DNS/HTTP)
 	interceptor *intercept.Interceptor // user-configured tool-call interception rules
@@ -270,8 +271,10 @@ const (
 	settingLLMPoolOn           = "llm_pool_enabled"
 	settingLLMPoolBindFallback = "llm_pool_bind_fallback"
 	// Task concurrency switch and cap. Default off; enabled default cap is 5 (defaultConcurrencyLimit).
-	settingConcurrencyOn    = "task_concurrency_enabled"
-	settingConcurrencyLimit = "task_concurrency_limit"
+	settingConcurrencyOn         = "task_concurrency_enabled"
+	settingConcurrencyLimit      = "task_concurrency_limit"
+	settingAgentConcurrencyOn    = "agent_concurrency_enabled"
+	settingAgentConcurrencyLimit = "agent_concurrency_limit"
 	// Experimental noa model-driven context compaction (norma v0.4.0), default off.
 	// It replaces built-in compaction for planner/worker/main agent/conversation agents.
 	// Read once per run; toggles affect only subsequent runs.
@@ -313,6 +316,39 @@ func (m *Manager) SetConcurrency(enabled bool, limit int) error {
 		return err
 	}
 	return m.pg.SetSetting(settingConcurrencyOn, strconv.FormatBool(enabled))
+}
+
+func agentConcurrencyFromDB(pg *pgdb.DB) (bool, int) {
+	enabled := pg.GetBool(settingAgentConcurrencyOn, false)
+	limit := defaultAgentConcurrencyLimit
+	if raw, ok, _ := pg.GetSetting(settingAgentConcurrencyLimit); ok {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && parsed >= 1 {
+			limit = parsed
+		}
+	}
+	return enabled, limit
+}
+
+func (m *Manager) AgentConcurrency() (bool, int) {
+	if m == nil || m.agentRuns == nil {
+		return false, defaultAgentConcurrencyLimit
+	}
+	stats := m.agentRuns.snapshot()
+	return stats.Enabled, stats.Limit
+}
+
+func (m *Manager) SetAgentConcurrency(enabled bool, limit int) error {
+	if limit < 1 {
+		return fmt.Errorf("agent concurrency limit must be >0")
+	}
+	if err := m.pg.SetSetting(settingAgentConcurrencyLimit, strconv.Itoa(limit)); err != nil {
+		return err
+	}
+	if err := m.pg.SetSetting(settingAgentConcurrencyOn, strconv.FormatBool(enabled)); err != nil {
+		return err
+	}
+	m.agentRuns.configure(enabled, limit)
+	return nil
 }
 
 // Workers returns the configured concurrent work-agent count (default 3). Read
@@ -378,6 +414,8 @@ func NewManager(dir, proxyAddr string) (*Manager, error) {
 		log.Printf("[llmusage] create table: %v", err)
 	}
 	m := &Manager{dir: dir, pg: pg, assets: pg.Assets(), tasks: map[string]*Task{}, interceptor: intercept.New(pg)}
+	enabled, limit := agentConcurrencyFromDB(pg)
+	m.agentRuns = newAgentRunGate(enabled, limit)
 	if proxyAddr != "" {
 		tr, err := traffic.Open(filepath.Join(dir, "traffic"), proxyAddr)
 		if err != nil {
