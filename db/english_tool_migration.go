@@ -93,5 +93,30 @@ WHERE key=$1 AND system AND schema #> $2::text[]=to_jsonb($3::text)`,
 			}
 		}
 	}
+	return migrateAddIntentSchemaLimit(ctx, store, current)
+}
+
+func migrateAddIntentSchemaLimit(ctx context.Context, store englishMigrationStore, current map[string]EnglishToolDefault) error {
+	tool, ok := current["add_intent"]
+	if !ok {
+		return nil
+	}
+	schema, err := json.Marshal(tool.Schema)
+	if err != nil {
+		return fmt.Errorf("encode add_intent schema: %w", err)
+	}
+	// Only stock arrays without a limit qualify; preserve custom array fields and sibling schema paths.
+	const earlierDescription = "Preferred: new exploration directions processed in order. Each element uses the top-level fields below (summary/asset_ids/parent_ids/priority). The returned ids array has the same length and order."
+	_, err = store.ExecContext(ctx, `UPDATE tools
+SET schema=jsonb_set(schema,'{properties,intents,maxItems}',$1::jsonb #> '{properties,intents,maxItems}',true)
+WHERE key='add_intent' AND system
+AND jsonb_typeof($1::jsonb #> '{properties,intents,maxItems}')='number'
+AND schema #> '{properties,intents}' IN (
+  ($1::jsonb #> '{properties,intents}') - 'maxItems',
+  jsonb_set(($1::jsonb #> '{properties,intents}') - 'maxItems','{description}',to_jsonb($2::text),false)
+)`, string(schema), earlierDescription)
+	if err != nil {
+		return fmt.Errorf("add_intent schema limit: %w", err)
+	}
 	return nil
 }
