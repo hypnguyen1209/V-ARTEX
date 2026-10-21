@@ -365,12 +365,21 @@ func (e *Engine) runFinalPlannerRound(ctx context.Context, t *Task) (met bool) {
 	}
 	defer e.decInflight(t.ID)
 	emit := func(r db.Activity) { e.emitActivity(t, r) }
-	e.emitActivity(t, db.Activity{Worker: "planner", Kind: "round",
-		Summary: fmt.Sprintf("Task timeout settlement · final judgment (round %d)", e.nextPlannerRound(t.ID))})
-	tTaskID, _ := strconv.ParseInt(t.ID, 10, 64)
-	e.BeginLLMCall(t.ID)
-	met, reason, err := planner.Plan(fctx, tTaskID, e.m.assets, t.Store, t.Goal, t.drainTriggers(), emit)
-	e.EndLLMCall(t.ID)
+	releaseRun, acquireErr := e.acquireAgentRun(fctx, t.ID, agentRunControl)
+	if acquireErr != nil {
+		return false
+	}
+	var reason string
+	var err error
+	func() {
+		defer releaseRun()
+		e.emitActivity(t, db.Activity{Worker: "planner", Kind: "round",
+			Summary: fmt.Sprintf("Task timeout settlement · final judgment (round %d)", e.nextPlannerRound(t.ID))})
+		taskID, _ := strconv.ParseInt(t.ID, 10, 64)
+		e.BeginLLMCall(t.ID)
+		defer e.EndLLMCall(t.ID)
+		met, reason, err = planner.Plan(fctx, taskID, e.m.assets, t.Store, t.Goal, t.drainTriggers(), emit)
+	}()
 	if err != nil {
 		log.Printf("[deadline] task %s Final planning failed: %v", t.ID, err)
 	} else if met {

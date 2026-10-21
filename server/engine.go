@@ -11,11 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Autumn-27/norma/harness"
+	"github.com/Autumn-27/norma/llm"
 	"github.com/hypnguyen1209/V-ARTEX/agent"
 	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/intercept"
-	"github.com/Autumn-27/norma/harness"
-	"github.com/Autumn-27/norma/llm"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
@@ -423,6 +423,13 @@ func NewEngine(m *Manager) *Engine {
 		execCancel: map[string]context.CancelCauseFunc{}, execCtx: map[string]context.Context{},
 		work: map[int64]*workExecution{}, steerBox: map[int64][]string{},
 		runtimes: map[string]*taskRuntime{}}
+}
+
+func (e *Engine) acquireAgentRun(ctx context.Context, taskID string, kind agentRunKind) (func(), error) {
+	if e == nil || e.m == nil || e.m.agentRuns == nil {
+		return func() {}, nil
+	}
+	return e.m.agentRuns.acquire(ctx, taskID, kind)
 }
 
 // registerWork records the cancel for the work currently running intentID.
@@ -928,20 +935,30 @@ func (e *Engine) plannerLoop(ctx context.Context, t *Task) {
 			return
 		}
 		log.Printf("[planner] task %s planning… (triggered by %s)", t.ID, src)
-		// round marker: each Plan() is one planner round; emit a boundary so the
-		// UI can separate rounds in the transcript (kind='round').
-		e.emitActivity(t, db.Activity{Worker: "planner", Kind: "round",
-			Summary: fmt.Sprintf("Planning round %d", e.nextPlannerRound(t.ID))})
-		// what fired this round (worker done / finding; may be several — debounce
-		// coalesces a burst; empty for time/heartbeat wakes).
-		triggers := t.drainTriggers()
-		taskIDInt, _ := strconv.ParseInt(t.ID, 10, 64)
-		e.BeginLLMCall(t.ID)
-		met, reason, err := planner.Plan(ectx, taskIDInt, e.m.assets, t.Store, t.Goal, triggers, emit)
-		e.EndLLMCall(t.ID)
+		var met bool
+		var reason string
+		var planErr error
+		acquireErr := func() error {
+			releaseRun, err := e.acquireAgentRun(ectx, t.ID, agentRunControl)
+			if err != nil {
+				return err
+			}
+			defer releaseRun()
+			e.emitActivity(t, db.Activity{Worker: "planner", Kind: "round",
+				Summary: fmt.Sprintf("Planning round %d", e.nextPlannerRound(t.ID))})
+			triggers := t.drainTriggers()
+			taskIDInt, _ := strconv.ParseInt(t.ID, 10, 64)
+			e.BeginLLMCall(t.ID)
+			defer e.EndLLMCall(t.ID)
+			met, reason, planErr = planner.Plan(ectx, taskIDInt, e.m.assets, t.Store, t.Goal, triggers, emit)
+			return nil
+		}()
+		if acquireErr != nil {
+			return
+		}
 		switch {
-		case err != nil && ectx.Err() == nil:
-			log.Printf("[planner] task %s planning failed: %v", t.ID, err)
+		case planErr != nil && ectx.Err() == nil:
+			log.Printf("[planner] task %s planning failed: %v", t.ID, planErr)
 		case met:
 			log.Printf("[planner] task %s goals judged met: %s", t.ID, reason)
 			e.completeGoalMet(ectx, t, reason)
@@ -1086,46 +1103,52 @@ func (e *Engine) runIntent(ctx context.Context, t *Task, name string, worker *ag
 		label:              label,
 	}
 	wTaskID, _ := strconv.ParseInt(t.ID, 10, 64)
-	e.BeginLLMCall(t.ID)
+	releaseRun, acquireErr := e.acquireAgentRun(workCtx, t.ID, agentRunWorker)
 	var reason harness.TerminalReason
 	var wrote agent.WriteCounts
-	var err error
-	if hasChatMessage {
-		reason, wrote, err = worker.ExecuteWithMessage(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding, requestID, message)
-	} else {
-		reason, wrote, err = worker.Execute(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding)
-	}
-	e.EndLLMCall(t.ID)
-	// Retry model_error with backoff only while this work still owns the intent and the task
-	// is neither paused, terminated, cancelled, nor settling. Other branches take precedence.
-	// Avoid retries during settlement so backoff does not consume other workers' grace period.
-	maxRetries, retryBackoff := e.modelErrorRetryPolicy()
-	for attempt := 1; attempt <= maxRetries &&
-		retryableWorkerModelError(reason, err) &&
-		workCtx.Err() == nil && ectx.Err() == nil && !e.IsPaused(t.ID) && !e.isSettling(t.ID); attempt++ {
-		log.Printf("[worker %s] task %s intent #%d ended with model_error; retrying after %v (%d/%d)",
-			name, t.ID, intent.ID, retryBackoff, attempt, maxRetries)
-		if sleepCtx(workCtx, retryBackoff) {
-			break // Cancelled during backoff (terminate/pause): use the branch below.
-		}
-		e.BeginLLMCall(t.ID)
-		if hasChatMessage {
-			reason, wrote, err = worker.ExecuteWithMessage(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding, requestID, message)
-		} else {
-			reason, wrote, err = worker.Execute(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding)
-		}
-		e.EndLLMCall(t.ID)
-	}
-	// Norma skips Stop after a consecutive no-tool continuation, so catch a missed goal wrap-up here.
-	if err == nil && reason == harness.ReasonCompleted && workCtx.Err() == nil && ectx.Err() == nil &&
-		e.isGoalSettling(t.ID) && goalSettlePrompted.CompareAndSwap(false, true) {
-		e.BeginLLMCall(t.ID)
-		var wrapWrote agent.WriteCounts
-		reason, wrapWrote, err = worker.ExecuteWithMessage(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding, "", goalMetWorkerWrapUpPrompt)
-		e.EndLLMCall(t.ID)
-		wrote.Facts += wrapWrote.Facts
-		wrote.Assets += wrapWrote.Assets
-		wrote.Findings += wrapWrote.Findings
+	var err = acquireErr
+	if acquireErr == nil {
+		func() {
+			defer releaseRun()
+			e.BeginLLMCall(t.ID)
+			if hasChatMessage {
+				reason, wrote, err = worker.ExecuteWithMessage(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding, requestID, message)
+			} else {
+				reason, wrote, err = worker.Execute(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding)
+			}
+			e.EndLLMCall(t.ID)
+			// Retry model_error with backoff only while this work still owns the intent and the task
+			// is neither paused, terminated, cancelled, nor settling. Other branches take precedence.
+			// Avoid retries during settlement so backoff does not consume other workers' grace period.
+			maxRetries, retryBackoff := e.modelErrorRetryPolicy()
+			for attempt := 1; attempt <= maxRetries &&
+				retryableWorkerModelError(reason, err) &&
+				workCtx.Err() == nil && ectx.Err() == nil && !e.IsPaused(t.ID) && !e.isSettling(t.ID); attempt++ {
+				log.Printf("[worker %s] task %s intent #%d ended with model_error; retrying after %v (%d/%d)",
+					name, t.ID, intent.ID, retryBackoff, attempt, maxRetries)
+				if sleepCtx(workCtx, retryBackoff) {
+					break // Cancelled during backoff (terminate/pause): use the branch below.
+				}
+				e.BeginLLMCall(t.ID)
+				if hasChatMessage {
+					reason, wrote, err = worker.ExecuteWithMessage(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding, requestID, message)
+				} else {
+					reason, wrote, err = worker.Execute(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding)
+				}
+				e.EndLLMCall(t.ID)
+			}
+			// Norma skips Stop after a consecutive no-tool continuation, so catch a missed goal wrap-up here.
+			if err == nil && reason == harness.ReasonCompleted && workCtx.Err() == nil && ectx.Err() == nil &&
+				e.isGoalSettling(t.ID) && goalSettlePrompted.CompareAndSwap(false, true) {
+				e.BeginLLMCall(t.ID)
+				var wrapWrote agent.WriteCounts
+				reason, wrapWrote, err = worker.ExecuteWithMessage(workCtx, name, wTaskID, e.m.assets, t.Store, intent, hooks, emit, e.m.enrich, t.NotifyFinding, "", goalMetWorkerWrapUpPrompt)
+				e.EndLLMCall(t.ID)
+				wrote.Facts += wrapWrote.Facts
+				wrote.Assets += wrapWrote.Assets
+				wrote.Findings += wrapWrote.Findings
+			}
+		}()
 	}
 	// Capture kill state before detachWork cancels workCtx. kill = this work's
 	// ctx was cancelled (planner kill_work) while the TASK ctx kept running; a

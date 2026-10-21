@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Autumn-27/norma/llm"
+	"github.com/hypnguyen1209/V-ARTEX/agent"
 )
 
 func waitGate(t *testing.T, gate *agentRunGate, active, waiting int) {
@@ -317,4 +321,53 @@ func TestAgentRunReleaseIsIdempotent(t *testing.T) {
 	}
 	wg.Wait()
 	waitGate(t, gate, 0, 0)
+}
+
+func TestRunIntentWaitsForGlobalWorkerPermit(t *testing.T) {
+	m, err := NewManager(t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	m.agentRuns.configure(true, 1)
+	task, err := m.CreateTask("gated worker", "finish one intent", nil, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.DeleteTask(task.ID, DeleteTaskOptions{})
+	intentID, err := task.Store.AddIntent(map[string]any{"summary": "wait for permit"}, 5, nil, "planner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := task.Store.ClaimIntent(intentID, "test"); err != nil || !ok {
+		t.Fatalf("claim=%v err=%v", ok, err)
+	}
+	intent, _ := task.Store.GetNode(intentID)
+	held, _ := m.agentRuns.acquire(t.Context(), task.ID, agentRunControl)
+	var calls atomic.Int32
+	provider := retestProvider{complete: func(context.Context, llm.CompletionRequest) (llm.Message, string, llm.Usage, error) {
+		calls.Add(1)
+		return llm.Message{Role: llm.RoleAssistant, Content: []llm.ContentBlock{llm.TextBlock("done")}}, "end_turn", llm.Usage{}, nil
+	}}
+	worker := agent.NewWorker(provider, "test", m.dir, nil, 10000, 2)
+	worker.SetNonStreaming(func() bool { return true })
+	engine := NewEngine(m)
+	done := make(chan struct{})
+	go func() {
+		engine.runIntent(t.Context(), task, "test", worker, intent, "", "")
+		close(done)
+	}()
+	waitGate(t, m.agentRuns, 1, 1)
+	if calls.Load() != 0 {
+		t.Fatal("worker called the provider before a permit was available")
+	}
+	held()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker did not run after permit release")
+	}
+	if calls.Load() == 0 {
+		t.Fatal("worker never called the provider")
+	}
 }
