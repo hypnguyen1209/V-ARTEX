@@ -232,6 +232,25 @@ Optional: `ARTEX_LLM_PROVIDER` / `ARTEX_LLM_MODEL` / `ARTEX_LLM_BASE_URL` / `ART
 
 **Common arguments**: `./start.sh -addr 127.0.0.1:8787 -proxy 127.0.0.1:8788` (`-addr` serves the frontend and API; `-proxy` is the traffic-recording proxy). The startup script passes arguments unchanged. Passing `-addr :8787` explicitly exposes the HTTP service on every interface.
 
+### Diagnose an installation
+
+Run `./artex doctor` for human-readable diagnostic output, or use stable JSON for automation:
+
+```bash
+./artex doctor
+./artex doctor --json
+```
+
+Default mode does not migrate the database, create keys or directories, change settings, or contact providers. Exit code 0 means no checks failed, 1 means at least one check failed, and 2 means the command usage was invalid.
+
+Live provider checks are explicitly opt-in:
+
+```bash
+./artex doctor --live-llm
+```
+
+This networked mode tests every profile with a stored key and may create provider charges.
+
 ### Reverse Proxy Deployment (HTTPS / Only Port 443 Exposed)
 
 The frontend and API/SSE share one backend port (default `127.0.0.1:8787`). The live activity feed uses a **same-origin** URL by default, so **no `NEXT_PUBLIC_SSE_BASE` configuration is needed**. Expose only 443 publicly and keep 8787 on the internal network.

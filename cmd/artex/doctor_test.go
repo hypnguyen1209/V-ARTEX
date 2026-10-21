@@ -504,3 +504,62 @@ func TestDefaultDoctorNeverCallsLLM(t *testing.T) {
 		t.Fatalf("default doctor made %d live LLM calls", calls)
 	}
 }
+
+func TestDoctorDoesNotPersistDatabaseOrFilesystemState(t *testing.T) {
+	dsn, _, err := db.DSN()
+	if err != nil {
+		t.Skip("test PostgreSQL is not configured")
+	}
+	sqlDB, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	lockConn, err := sqlDB.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lockConn.Close()
+	if _, err := lockConn.ExecContext(t.Context(), `SELECT pg_advisory_lock(7337741002)`); err != nil {
+		t.Fatal(err)
+	}
+	defer lockConn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(7337741002)`) //nolint:errcheck
+	migrated, err := db.Open(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = migrated.Close()
+
+	count := func(table string) int64 {
+		t.Helper()
+		var value int64
+		if err := sqlDB.QueryRowContext(t.Context(), "SELECT count(*) FROM "+table).Scan(&value); err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	dataDir := t.TempDir()
+	before, err := os.Stat(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeSettings, beforeTasks := count("settings"), count("tasks")
+	var output bytes.Buffer
+	code := runDoctor([]string{"--json", "--addr", "127.0.0.1:0", "--proxy", "", "--data", dataDir}, &output, io.Discard, defaultDoctorDeps())
+	if code == 2 {
+		t.Fatalf("doctor rejected valid arguments: %s", output.String())
+	}
+	var report doctorReport
+	if err := json.Unmarshal(output.Bytes(), &report); err != nil {
+		t.Fatalf("doctor emitted invalid JSON: %v\n%s", err, output.String())
+	}
+	after, err := os.Stat(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterSettings, afterTasks := count("settings"), count("tasks")
+	if beforeSettings != afterSettings || beforeTasks != afterTasks || !before.ModTime().Equal(after.ModTime()) {
+		t.Fatalf("doctor mutated state: settings %d/%d tasks %d/%d mtime %v/%v",
+			beforeSettings, afterSettings, beforeTasks, afterTasks, before.ModTime(), after.ModTime())
+	}
+}
