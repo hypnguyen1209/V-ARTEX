@@ -357,6 +357,7 @@ func runDefaultDoctorChecks(ctx context.Context, opts doctorOptions, runtime doc
 	if session.sql != nil {
 		defer session.sql.Close()
 	}
+	profiles := checkDoctorProfiles(ctx, session)
 	results = append(results,
 		connectivity,
 		checkDoctorSchema(ctx, session),
@@ -371,10 +372,16 @@ func runDefaultDoctorChecks(ctx context.Context, opts doctorOptions, runtime doc
 		checkExecutable(ctx, "runtime.npm", []string{"npm"}, runtime),
 		checkExecutable(ctx, "runtime.npx", []string{"npx"}, runtime),
 		checkExecutable(ctx, "runtime.playwright", []string{filepath.Join(config.BaseDir(), "web", "node_modules", ".bin", "playwright"), "playwright"}, runtime),
-		checkDoctorProfiles(ctx, session),
+		profiles,
 	)
 	if opts.LiveLLM {
-		results = append(results, checkLiveLLMProfiles(ctx, session, runtime))
+		if profiles.Status == doctorFail {
+			results = append(results, timedDoctorResult("llm.live", func() doctorResult {
+				return doctorResult{Status: doctorWarn, Detail: "Skipped because llm.profiles validation failed; no live or billable calls were made", Remediation: "Fix the LLM profile configuration and rerun with --live-llm"}
+			}))
+		} else {
+			results = append(results, checkLiveLLMProfiles(ctx, session, runtime))
+		}
 	}
 	for i := range results {
 		results[i].Detail = redactDoctorText(results[i].Detail, session.secrets)
@@ -388,11 +395,13 @@ func checkLiveLLMProfiles(ctx context.Context, session *doctorSession, runtime d
 		if session == nil || session.sql == nil {
 			return doctorResult{Status: doctorWarn, Detail: "Skipped because postgres.connectivity failed", Remediation: "Restore PostgreSQL connectivity and rerun with --live-llm"}
 		}
-		tested := 0
+		attempted, succeeded := 0, 0
+		var failedProfiles []string
 		for _, profile := range session.profiles {
-			if profile.APIKey == "" {
+			if strings.TrimSpace(profile.APIKey) == "" {
 				continue
 			}
+			attempted++
 			cfg := agent.ConfigFrom(profile.Format, profile.Model, profile.BaseURL, profile.APIKey, profile.Proxy)
 			cfg.ThinkingType, cfg.ReasoningEffort = profile.ThinkingType, profile.ReasoningEffort
 			cfg.Stream = profile.Streaming
@@ -402,13 +411,22 @@ func checkLiveLLMProfiles(ctx context.Context, session *doctorSession, runtime d
 			_, _, err := runtime.liveLLM(probeCtx, cfg)
 			cancel()
 			if err != nil {
-				return doctorResult{Status: doctorFail, Detail: fmt.Sprintf("Profile %q failed its live probe: %s", profile.Name, err), Remediation: "Verify endpoint, model, key, proxy, and account quota"}
+				failedProfiles = append(failedProfiles, profile.Name)
+				continue
 			}
-			tested++
+			succeeded++
 		}
-		if tested == 0 {
+		if attempted == 0 {
 			return doctorResult{Status: doctorWarn, Detail: "No keyed profile was available for a live probe", Remediation: "Store an API key or omit --live-llm"}
 		}
-		return doctorResult{Status: doctorOK, Detail: fmt.Sprintf("%d keyed profile(s) completed a live, potentially billable probe", tested)}
+		if len(failedProfiles) != 0 {
+			return doctorResult{
+				Status: doctorFail,
+				Detail: fmt.Sprintf("Live profile probes: %d attempted, %d succeeded, %d failed; failed profiles: %q",
+					attempted, succeeded, len(failedProfiles), strings.Join(failedProfiles, ", ")),
+				Remediation: "Verify the failed profile endpoint, model, key, proxy, and account quota",
+			}
+		}
+		return doctorResult{Status: doctorOK, Detail: fmt.Sprintf("%d keyed profile(s) completed a live, potentially billable probe", succeeded)}
 	})
 }

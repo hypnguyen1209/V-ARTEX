@@ -75,6 +75,22 @@ type doctorProfileRows struct {
 	closed bool
 }
 
+type doctorStaticRows struct {
+	columns []string
+	values  []driver.Value
+}
+
+func (r *doctorStaticRows) Columns() []string { return r.columns }
+func (*doctorStaticRows) Close() error        { return nil }
+func (r *doctorStaticRows) Next(dest []driver.Value) error {
+	if r.values == nil {
+		return io.EOF
+	}
+	copy(dest, r.values)
+	r.values = nil
+	return nil
+}
+
 func (r *doctorProfileRows) Columns() []string {
 	return []string{"id", "name", "format", "base_url", "proxy", "model", "api_key", "thinking_type", "reasoning_effort", "streaming", "max_tokens", "max_tokens_field", "session_header_key"}
 }
@@ -353,6 +369,118 @@ func TestDoctorLiveLLMChecksKeyedProfiles(t *testing.T) {
 	}})
 	if calls != 1 || result.Status != doctorOK || !strings.Contains(result.Detail, "1 keyed profile") {
 		t.Fatalf("calls = %d, result = %+v", calls, result)
+	}
+}
+
+func TestDoctorLiveLLMDoesNotExposeProviderErrors(t *testing.T) {
+	const sentinel = "unknown-provider-secret-sentinel"
+	result := checkLiveLLMProfiles(context.Background(), &doctorSession{
+		sql: &sql.DB{},
+		profiles: []*db.LLMProfile{{
+			Name: "fixture", Format: "openai", Model: "fixture-model", APIKey: "profile-key",
+		}},
+	}, doctorRuntime{liveLLM: func(context.Context, agent.Config) (time.Duration, string, error) {
+		return 0, "", errors.New("provider rejected " + sentinel)
+	}})
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(result.Detail+result.Remediation, sentinel) || bytes.Contains(encoded, []byte(sentinel)) {
+		t.Fatalf("live probe exposed provider error in human or JSON output: %s", encoded)
+	}
+}
+
+func TestDoctorLiveLLMContinuesAfterFailure(t *testing.T) {
+	const sentinel = "first-provider-error-sentinel"
+	var called []string
+	result := checkLiveLLMProfiles(context.Background(), &doctorSession{
+		sql: &sql.DB{},
+		profiles: []*db.LLMProfile{
+			{Name: "first", Format: "openai", Model: "first-model", APIKey: "first-key"},
+			{Name: "second", Format: "openai", Model: "second-model", APIKey: "second-key"},
+		},
+	}, doctorRuntime{liveLLM: func(_ context.Context, cfg agent.Config) (time.Duration, string, error) {
+		called = append(called, cfg.Model)
+		if cfg.Model == "first-model" {
+			return 0, "", errors.New(sentinel)
+		}
+		return time.Millisecond, "OK", nil
+	}})
+	if strings.Join(called, ",") != "first-model,second-model" {
+		t.Fatalf("live probes called %q, want both profiles in order", called)
+	}
+	if result.Status != doctorFail || !strings.Contains(result.Detail, "2 attempted") || !strings.Contains(result.Detail, "1 succeeded") || !strings.Contains(result.Detail, "1 failed") {
+		t.Fatalf("aggregate result = %+v", result)
+	}
+	if strings.Contains(result.Detail+result.Remediation, sentinel) {
+		t.Fatalf("aggregate result exposed provider error: %+v", result)
+	}
+}
+
+func TestDoctorLiveLLMSkipsWhitespaceOnlyAPIKeys(t *testing.T) {
+	calls := 0
+	result := checkLiveLLMProfiles(context.Background(), &doctorSession{
+		sql: &sql.DB{},
+		profiles: []*db.LLMProfile{{
+			Name: "blank-key", Format: "openai", Model: "fixture-model", APIKey: " \t\n ",
+		}},
+	}, doctorRuntime{liveLLM: func(context.Context, agent.Config) (time.Duration, string, error) {
+		calls++
+		return 0, "OK", nil
+	}})
+	if calls != 0 || result.Status != doctorWarn || !strings.Contains(result.Detail, "No keyed profile") {
+		t.Fatalf("calls = %d, result = %+v", calls, result)
+	}
+}
+
+func TestDefaultDoctorSkipsLiveLLMWhenProfileValidationFails(t *testing.T) {
+	database := sql.OpenDB(doctorQueryConnector{query: func(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+		switch {
+		case strings.Contains(query, "SELECT 1"):
+			return &doctorStaticRows{columns: []string{"one"}, values: []driver.Value{int64(1)}}, nil
+		case strings.Contains(query, "to_regclass"):
+			return &doctorStaticRows{columns: []string{"to_regclass"}, values: []driver.Value{"settings"}}, nil
+		case strings.Contains(query, "SHOW server_version"):
+			return &doctorStaticRows{columns: []string{"server_version"}, values: []driver.Value{"16"}}, nil
+		case strings.Contains(query, "FROM llm_profiles"):
+			return &doctorProfileRows{values: []driver.Value{
+				int64(1), "invalid", "unsupported", "https://example.test", "", "fixture-model", "profile-key",
+				"", "", true, int64(0), "", "",
+			}}, nil
+		default:
+			return nil, errors.New("unexpected query: " + query)
+		}
+	}})
+	t.Setenv("ARTEX_PG_DSN", "postgres://doctor:secret@localhost/artex?sslmode=disable")
+	t.Setenv("ARTEX_SKILL_DIR", t.TempDir())
+	calls := 0
+	results := runDefaultDoctorChecks(context.Background(), doctorOptions{
+		Addr: "", Proxy: "", DataDir: t.TempDir(), LiveLLM: true,
+	}, doctorRuntime{
+		openSQL:    func(string, string) (*sql.DB, error) { return database, nil },
+		lookPath:   func(string) (string, error) { return "", os.ErrNotExist },
+		runCommand: func(context.Context, string, ...string) ([]byte, error) { return nil, nil },
+		listen:     net.Listen,
+		stat:       func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+		readFile:   func(string) ([]byte, error) { return nil, os.ErrNotExist },
+		liveLLM: func(context.Context, agent.Config) (time.Duration, string, error) {
+			calls++
+			return 0, "OK", nil
+		},
+	})
+	checks := make(map[string]doctorResult)
+	for _, result := range results {
+		checks[result.Name] = result
+	}
+	if calls != 0 {
+		t.Fatalf("invalid profiles triggered %d live calls", calls)
+	}
+	if result := checks["llm.profiles"]; result.Status != doctorFail {
+		t.Fatalf("profile validation = %+v, want failure", result)
+	}
+	if result := checks["llm.live"]; result.Status != doctorWarn || !strings.Contains(strings.ToLower(result.Detail), "skipped") || !strings.Contains(strings.ToLower(result.Detail), "no live") {
+		t.Fatalf("live check = %+v, want non-billable skipped warning", result)
 	}
 }
 
