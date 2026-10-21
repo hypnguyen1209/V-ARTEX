@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,9 +12,150 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
+
+type doctorQueryConnector struct {
+	query func(context.Context, string, []driver.NamedValue) (driver.Rows, error)
+}
+
+func (c doctorQueryConnector) Connect(context.Context) (driver.Conn, error) {
+	return doctorQueryConn{c}, nil
+}
+func (c doctorQueryConnector) Driver() driver.Driver { return doctorQueryDriver{c} }
+
+type doctorQueryDriver struct{ doctorQueryConnector }
+
+func (d doctorQueryDriver) Open(string) (driver.Conn, error) {
+	return doctorQueryConn{d.doctorQueryConnector}, nil
+}
+
+type doctorQueryConn struct{ doctorQueryConnector }
+
+func (doctorQueryConn) Prepare(string) (driver.Stmt, error) {
+	return nil, errors.New("unexpected prepare")
+}
+func (doctorQueryConn) Close() error { return nil }
+func (doctorQueryConn) Begin() (driver.Tx, error) {
+	return nil, errors.New("unexpected transaction")
+}
+func (c doctorQueryConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	return c.query(ctx, query, args)
+}
+
+func TestDoctorProfilesQueryHasDeadline(t *testing.T) {
+	var queried, bounded bool
+	database := sql.OpenDB(doctorQueryConnector{query: func(ctx context.Context, _ string, _ []driver.NamedValue) (driver.Rows, error) {
+		queried = true
+		_, bounded = ctx.Deadline()
+		return nil, errors.New("fixture query failure")
+	}})
+	defer database.Close()
+	start := time.Now()
+	result := checkDoctorProfiles(context.Background(), &doctorSession{sql: database})
+	if !queried || !bounded {
+		t.Errorf("profile query called = %t, has deadline = %t; want both true", queried, bounded)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("profile query returned after %s, want under one second", elapsed)
+	}
+	if result.Status != doctorFail {
+		t.Errorf("profile query failure = %+v, want failure", result)
+	}
+}
+
+type doctorProfileRows struct {
+	values []driver.Value
+	closed bool
+}
+
+func (r *doctorProfileRows) Columns() []string {
+	return []string{"id", "name", "format", "base_url", "proxy", "model", "api_key", "thinking_type", "reasoning_effort", "streaming", "max_tokens", "max_tokens_field", "session_header_key"}
+}
+func (r *doctorProfileRows) Close() error { r.closed = true; return nil }
+func (r *doctorProfileRows) Next(dest []driver.Value) error {
+	if r.values == nil {
+		return io.EOF
+	}
+	copy(dest, r.values)
+	r.values = nil
+	return nil
+}
+
+func TestDoctorProfilesCollectsLiveProbeConfiguration(t *testing.T) {
+	rows := &doctorProfileRows{values: []driver.Value{
+		int64(7), "fixture", "openai", "https://example.test/v1", "http://proxy.test", "fixture-model", "profile-secret",
+		"disabled", "high", true, int64(123), "max_completion_tokens", "x-session",
+	}}
+	database := sql.OpenDB(doctorQueryConnector{query: func(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
+		return rows, nil
+	}})
+	defer database.Close()
+	session := &doctorSession{sql: database}
+	result := checkDoctorProfiles(context.Background(), session)
+	if result.Status != doctorOK || len(session.profiles) != 1 {
+		t.Fatalf("profile result = %+v, collected = %d", result, len(session.profiles))
+	}
+	p := session.profiles[0]
+	if p.ID != 7 || p.Name != "fixture" || p.Format != "openai" || p.BaseURL != "https://example.test/v1" || p.Proxy != "http://proxy.test" || p.Model != "fixture-model" || p.APIKey != "profile-secret" || p.ThinkingType != "disabled" || p.ReasoningEffort != "high" || !p.Streaming || p.MaxTokens != 123 || p.MaxTokensField != "max_completion_tokens" || p.SessionHeaderKey != "x-session" {
+		t.Fatal("live probe configuration was not preserved")
+	}
+	if !rows.closed {
+		t.Error("profile rows were not closed")
+	}
+	if len(session.secrets) != 1 || session.secrets[0] != p.APIKey {
+		t.Error("profile API key was not collected for redaction")
+	}
+	if strings.Contains(result.Detail+result.Remediation, p.APIKey) {
+		t.Error("profile API key leaked in result")
+	}
+}
+
+func TestDoctorExecutableBoundsInheritedPipes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses a POSIX shell")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "python3"), []byte("#!/bin/sh\n/bin/sleep 4 &\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("ARTEX_CONFIG", filepath.Join(dir, "missing.json"))
+	t.Setenv("ARTEX_PG_DSN", "postgres://%")
+	t.Setenv("ARTEX_SKILL_DIR", dir)
+	start := time.Now()
+	results := defaultDoctorDeps().runChecks(context.Background(), doctorOptions{DataDir: dir})
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("executable with inherited pipes took %s, want under two seconds", elapsed)
+	}
+	for _, result := range results {
+		if result.Name == "runtime.python" {
+			if result.Status != doctorWarn {
+				t.Errorf("inherited-pipe probe = %+v, want warning", result)
+			}
+			return
+		}
+	}
+	t.Fatal("missing Python executable check")
+}
+
+func TestDoctorOpenFailureDoesNotEchoKeywordDSN(t *testing.T) {
+	const secret = "keyword-secret-sentinel"
+	const dsn = "host=localhost user=doctor password=" + secret + " dbname=artex"
+	t.Setenv("ARTEX_PG_DSN", dsn)
+	_, result := openDoctorDatabase(context.Background(), doctorRuntime{
+		openSQL: func(string, string) (*sql.DB, error) { return nil, errors.New("invalid DSN: " + dsn) },
+	})
+	if text := result.Detail + result.Remediation; strings.Contains(text, secret) || strings.Contains(text, dsn) {
+		t.Fatal("PostgreSQL open failure exposes keyword DSN credentials")
+	}
+	if result.Status != doctorFail {
+		t.Errorf("open failure = %+v, want failure", result)
+	}
+}
 
 func TestDoctorSkipsDependentDatabaseChecksAndRedactsDSN(t *testing.T) {
 	t.Setenv("ARTEX_PG_DSN", "postgres://user:secret-pass@127.0.0.1:1/artex?sslmode=disable")

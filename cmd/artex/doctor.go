@@ -122,7 +122,9 @@ func defaultDoctorDeps() doctorDeps {
 		openSQL: sql.Open, lookPath: exec.LookPath, listen: net.Listen,
 		stat: os.Stat, readFile: os.ReadFile,
 		runCommand: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, name, args...).CombinedOutput()
+			command := exec.CommandContext(ctx, name, args...)
+			command.WaitDelay = 250 * time.Millisecond
+			return command.CombinedOutput()
 		},
 	}
 	return doctorDeps{runChecks: func(ctx context.Context, opts doctorOptions) []doctorResult {
@@ -249,7 +251,7 @@ func openDoctorDatabase(ctx context.Context, runtime doctorRuntime) (*doctorSess
 		session.secrets = doctorSecrets(dsn)
 		session.sql, err = runtime.openSQL("pgx", dsn)
 		if err != nil {
-			return doctorResult{Status: doctorFail, Detail: "Cannot open PostgreSQL: " + redactDoctorText(config.Redact(dsn), session.secrets), Remediation: "Check the PostgreSQL connection string syntax"}
+			return doctorResult{Status: doctorFail, Detail: "Cannot open PostgreSQL", Remediation: "Check the PostgreSQL connection string syntax"}
 		}
 		session.sql.SetMaxOpenConns(2)
 		probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -291,23 +293,26 @@ func checkDoctorSchema(ctx context.Context, session *doctorSession) doctorResult
 	})
 }
 
-func checkDoctorProfiles(session *doctorSession) doctorResult {
+func checkDoctorProfiles(ctx context.Context, session *doctorSession) doctorResult {
 	return timedDoctorResult("llm.profiles", func() doctorResult {
 		if session == nil || session.sql == nil {
 			return doctorResult{Status: doctorWarn, Detail: "Skipped due to PostgreSQL connectivity failure", Remediation: "Resolve postgres.connectivity first"}
 		}
-		store := &db.DB{DB: session.sql}
-		profiles, err := store.ListProfiles()
+		probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		rows, err := session.sql.QueryContext(probeCtx, `SELECT id,name,format,COALESCE(base_url,''),COALESCE(proxy,''),model,
+COALESCE(api_key,''),COALESCE(thinking_type,''),COALESCE(reasoning_effort,''),COALESCE(streaming,true),
+COALESCE(max_tokens,0),COALESCE(max_tokens_field,''),COALESCE(session_header_key,'') FROM llm_profiles ORDER BY id`)
 		if err != nil {
 			return doctorResult{Status: doctorFail, Detail: "Cannot read LLM profiles", Remediation: "Check the schema and database read permissions"}
 		}
-		if len(profiles) == 0 {
-			return doctorResult{Status: doctorWarn, Detail: "No LLM profiles configured", Remediation: "Configure an LLM profile in Settings"}
-		}
+		defer rows.Close()
 		keyed, invalid := 0, 0
-		for _, listed := range profiles {
-			profile, err := store.ProfileByID(listed.ID)
-			if err != nil || profile == nil {
+		for rows.Next() {
+			profile := &db.LLMProfile{}
+			if err := rows.Scan(&profile.ID, &profile.Name, &profile.Format, &profile.BaseURL, &profile.Proxy, &profile.Model,
+				&profile.APIKey, &profile.ThinkingType, &profile.ReasoningEffort, &profile.Streaming,
+				&profile.MaxTokens, &profile.MaxTokensField, &profile.SessionHeaderKey); err != nil {
 				return doctorResult{Status: doctorFail, Detail: "Cannot read an LLM profile", Remediation: "Check the schema and database read permissions"}
 			}
 			session.profiles = append(session.profiles, profile)
@@ -320,10 +325,16 @@ func checkDoctorProfiles(session *doctorSession) doctorResult {
 				invalid++
 			}
 		}
+		if err := rows.Err(); err != nil {
+			return doctorResult{Status: doctorFail, Detail: "Cannot read LLM profiles", Remediation: "Check the schema and database read permissions"}
+		}
+		if len(session.profiles) == 0 {
+			return doctorResult{Status: doctorWarn, Detail: "No LLM profiles configured", Remediation: "Configure an LLM profile in Settings"}
+		}
 		if invalid != 0 {
 			return doctorResult{Status: doctorFail, Detail: fmt.Sprintf("%d LLM profiles have invalid configuration", invalid), Remediation: "Set each profile's name, model, and format (anthropic, openai, or openai-responses)"}
 		}
-		detail := fmt.Sprintf("%d LLM profiles configured; %d with API keys", len(profiles), keyed)
+		detail := fmt.Sprintf("%d LLM profiles configured; %d with API keys", len(session.profiles), keyed)
 		if keyed == 0 {
 			return doctorResult{Status: doctorWarn, Detail: detail, Remediation: "Add an API key to an LLM profile if required by the provider"}
 		}
@@ -360,7 +371,7 @@ func runDefaultDoctorChecks(ctx context.Context, opts doctorOptions, runtime doc
 		checkExecutable(ctx, "runtime.npm", []string{"npm"}, runtime),
 		checkExecutable(ctx, "runtime.npx", []string{"npx"}, runtime),
 		checkExecutable(ctx, "runtime.playwright", []string{filepath.Join(config.BaseDir(), "web", "node_modules", ".bin", "playwright"), "playwright"}, runtime),
-		checkDoctorProfiles(session),
+		checkDoctorProfiles(ctx, session),
 	)
 	if opts.LiveLLM {
 		results = append(results, checkLiveLLMProfiles(ctx, session, runtime))
