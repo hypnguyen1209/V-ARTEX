@@ -2,7 +2,15 @@
 
 import * as React from "react";
 
-import { CpuIcon, FlaskConicalIcon, KeyboardIcon, RadioTowerIcon, SearchIcon, ShieldAlertIcon } from "lucide-react";
+import {
+  CpuIcon,
+  FlaskConicalIcon,
+  GaugeIcon,
+  KeyboardIcon,
+  RadioTowerIcon,
+  SearchIcon,
+  ShieldAlertIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -38,6 +46,11 @@ export default function SystemSettingsPage() {
   const [pyInterp, setPyInterp] = React.useState("");
   const [workers, setWorkers] = React.useState("3");
   const [savingWorkers, setSavingWorkers] = React.useState(false);
+  const [agentConcurrencyEnabled, setAgentConcurrencyEnabled] = React.useState(false);
+  const [agentConcurrencyLimit, setAgentConcurrencyLimit] = React.useState("8");
+  const [agentRunsActive, setAgentRunsActive] = React.useState(0);
+  const [agentRunsWaiting, setAgentRunsWaiting] = React.useState(0);
+  const [savingAgentConcurrency, setSavingAgentConcurrency] = React.useState(false);
   // Operation constraint injection scopes (both enabled by default).
   const [injectPlanner, setInjectPlanner] = React.useState(true);
   const [injectWorker, setInjectWorker] = React.useState(true);
@@ -57,6 +70,10 @@ export default function SystemSettingsPage() {
     setGlobalProxyInput(s.global_proxy ?? "");
     setPyInterp(s.python_interpreter ?? "");
     setWorkers(String(s.workers ?? 3));
+    setAgentConcurrencyEnabled(!!s.agent_concurrency_enabled);
+    setAgentConcurrencyLimit(String(s.agent_concurrency_limit ?? 8));
+    setAgentRunsActive(s.agent_runs_active ?? 0);
+    setAgentRunsWaiting(s.agent_runs_waiting ?? 0);
     setInjectPlanner(s.constraints_inject_planner !== false);
     setInjectWorker(s.constraints_inject_worker !== false);
     setNoaCompaction(!!s.noa_compaction);
@@ -77,6 +94,27 @@ export default function SystemSettingsPage() {
       })
       .catch((e) => toast.error("Save failed: " + (e as Error).message))
       .finally(() => setSavingWorkers(false));
+  };
+
+  const saveAgentConcurrency = () => {
+    const limit = Number(agentConcurrencyLimit);
+    if (!Number.isInteger(limit) || limit < 1) {
+      toast.error("Global agent concurrency must be an integer greater than 0");
+      return;
+    }
+    setSavingAgentConcurrency(true);
+    api
+      .setSettings({ agent_concurrency_enabled: agentConcurrencyEnabled, agent_concurrency_limit: limit })
+      .then((settings) => {
+        apply(settings);
+        toast.success(
+          agentConcurrencyEnabled
+            ? `Global agent concurrency limited to ${limit}`
+            : "Global agent concurrency limit disabled",
+        );
+      })
+      .catch((error) => toast.error(`Save failed: ${(error as Error).message}`))
+      .finally(() => setSavingAgentConcurrency(false));
   };
 
   const savePython = () => {
@@ -106,6 +144,27 @@ export default function SystemSettingsPage() {
       .catch(() => undefined)
       .finally(() => setLoaded(true));
   }, [apply]);
+
+  React.useEffect(() => {
+    if (!loaded) return;
+    let disposed = false;
+    const refreshCounters = () => {
+      api
+        .settings()
+        .then((settings) => {
+          if (!disposed) {
+            setAgentRunsActive(settings.agent_runs_active ?? 0);
+            setAgentRunsWaiting(settings.agent_runs_waiting ?? 0);
+          }
+        })
+        .catch(() => undefined);
+    };
+    const timer = window.setInterval(refreshCounters, 3000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [loaded]);
 
   const toggleTraffic = (v: boolean) => {
     setTrafficCapture(v); // optimistic
@@ -698,6 +757,52 @@ export default function SystemSettingsPage() {
                 Save
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-4 break-inside-avoid md:mb-6" aria-labelledby="agent-concurrency-heading">
+          <CardHeader>
+            <CardTitle id="agent-concurrency-heading" className="flex items-center gap-2 text-base">
+              <GaugeIcon className="size-4" />
+              Global Agent Concurrency
+            </CardTitle>
+            <CardDescription>
+              Bounds planner and Worker runs across all tasks. One slot is reserved for planning when the limit is
+              greater than one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="agent-concurrency-enabled" className="font-normal text-muted-foreground text-sm">
+                Enable global agent concurrency limit
+              </Label>
+              <Switch
+                id="agent-concurrency-enabled"
+                checked={agentConcurrencyEnabled}
+                disabled={!loaded || savingAgentConcurrency}
+                onCheckedChange={setAgentConcurrencyEnabled}
+              />
+            </div>
+            <Label htmlFor="agent-concurrency-limit" className="font-normal text-muted-foreground text-sm">
+              Maximum concurrent agent runs
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="agent-concurrency-limit"
+                type="number"
+                min={1}
+                className="w-32 font-mono text-sm"
+                value={agentConcurrencyLimit}
+                disabled={!loaded || savingAgentConcurrency}
+                onChange={(e) => setAgentConcurrencyLimit(e.target.value)}
+              />
+              <Button onClick={saveAgentConcurrency} disabled={!loaded || savingAgentConcurrency}>
+                Save
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs" aria-live="polite">
+              Active: {agentRunsActive} · Waiting: {agentRunsWaiting}
+            </p>
           </CardContent>
         </Card>
 

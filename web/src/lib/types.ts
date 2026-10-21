@@ -928,6 +928,10 @@ export interface Settings {
   global_proxy?: string;
   python_interpreter?: string; // Python interpreter path for custom script tools; empty means detect at runtime.
   workers?: number; // Concurrent worker agents (default 3); applies to tasks started afterward.
+  agent_concurrency_enabled?: boolean;
+  agent_concurrency_limit?: number;
+  agent_runs_active?: number;
+  agent_runs_waiting?: number;
   // Task concurrency cap: maximum running tasks. Disabled=unlimited; excess new tasks queue and start as slots become available.
   task_concurrency_enabled?: boolean; // Default false.
   task_concurrency_limit?: number; // Default 5 when enabled.
