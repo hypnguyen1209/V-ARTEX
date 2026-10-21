@@ -90,7 +90,7 @@ func runDoctor(args []string, stdout, stderr io.Writer, deps doctorDeps) int {
 	} else {
 		fmt.Fprintf(stdout, "V-ARTEX %s doctor (%s)\n", report.Version, report.Status)
 		for _, check := range report.Checks {
-			fmt.Fprintf(stdout, "%s %-28s %s", strings.ToUpper(string(check.Status)), check.Name, check.Detail)
+			fmt.Fprintf(stdout, "%-5s %-28s %s", strings.ToUpper(string(check.Status)), check.Name, check.Detail)
 			if check.Remediation != "" {
 				fmt.Fprintf(stdout, " — %s", check.Remediation)
 			}

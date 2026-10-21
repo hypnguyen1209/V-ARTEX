@@ -63,3 +63,26 @@ func TestRunDoctorDefaultDisablesLiveLLM(t *testing.T) {
 		t.Fatal("live LLM checks enabled by default")
 	}
 }
+
+func TestRunDoctorHumanStatusColumnsAreAligned(t *testing.T) {
+	deps := doctorDeps{runChecks: func(context.Context, doctorOptions) []doctorResult {
+		return []doctorResult{
+			{Name: "fixture", Status: doctorOK},
+			{Name: "fixture", Status: doctorWarn},
+			{Name: "fixture", Status: doctorFail},
+		}
+	}}
+	var out bytes.Buffer
+	if code := runDoctor(nil, &out, io.Discard, deps); code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	lines := bytes.Split(out.Bytes(), []byte("\n"))
+	if len(lines) != 5 {
+		t.Fatalf("unexpected human output: %q", out.String())
+	}
+	for i, prefix := range []string{"OK    fixture", "WARN  fixture", "FAIL  fixture"} {
+		if !bytes.HasPrefix(lines[i+1], []byte(prefix)) {
+			t.Errorf("line = %q, want prefix %q", lines[i+1], prefix)
+		}
+	}
+}
