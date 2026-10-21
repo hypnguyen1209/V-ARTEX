@@ -20,7 +20,7 @@ export default defineConfig({
     command: "npm run dev -- --hostname 127.0.0.1 --port 4173",
     env: { ...process.env, NEXT_PUBLIC_MOCK: "1" },
     url: "http://127.0.0.1:4173/function/tasks",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

@@ -26,6 +26,7 @@ async function expectNoHorizontalOverflow(page: Page) {
 test("tasks and global run-budget settings work in mock mode", async ({ page }) => {
   await page.goto("/function/tasks");
   await expect(page.getByRole("tab", { name: "Current Tasks" })).toBeVisible();
+  await expect(page.getByText("4/4 records", { exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.goto("/system/settings");
