@@ -1037,21 +1037,41 @@ func TestDoctorDoesNotPersistDatabaseOrFilesystemState(t *testing.T) {
 		if _, err := sqlDB.ExecContext(t.Context(), `CREATE OR REPLACE FUNCTION `+functionName+`() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.value := upper(NEW.value); RETURN NEW; END $$`); err != nil {
 			t.Fatal(err)
 		}
+		afterFunctionChange, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Equal(beforeExecutableChange, afterFunctionChange) {
+			t.Fatal("database snapshot missed a changed function definition")
+		}
+
+		if _, err := sqlDB.ExecContext(t.Context(), `ALTER TABLE `+probeTable+` ENABLE REPLICA TRIGGER `+triggerName); err != nil {
+			t.Fatal(err)
+		}
+		afterStatusChange, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Equal(afterFunctionChange, afterStatusChange) {
+			t.Fatal("database snapshot missed a changed trigger status")
+		}
+
 		if _, err := sqlDB.ExecContext(t.Context(), `DROP TRIGGER `+triggerName+` ON `+probeTable); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := sqlDB.ExecContext(t.Context(), `CREATE TRIGGER `+triggerName+` BEFORE INSERT OR UPDATE ON `+probeTable+` FOR EACH ROW EXECUTE FUNCTION `+functionName+`() `); err != nil {
 			t.Fatal(err)
 		}
+		// Reapply the prior status so only the trigger definition differs.
 		if _, err := sqlDB.ExecContext(t.Context(), `ALTER TABLE `+probeTable+` ENABLE REPLICA TRIGGER `+triggerName); err != nil {
 			t.Fatal(err)
 		}
-		afterExecutableChange, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
+		afterDefinitionChange, err := snapshotDoctorDatabase(t.Context(), sqlDB, schema)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if bytes.Equal(beforeExecutableChange, afterExecutableChange) {
-			t.Fatal("database snapshot missed changed function or trigger definitions/status")
+		if bytes.Equal(afterStatusChange, afterDefinitionChange) {
+			t.Fatal("database snapshot missed a changed trigger definition")
 		}
 	})
 }
