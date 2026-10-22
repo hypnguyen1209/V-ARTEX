@@ -247,6 +247,126 @@ func TestDoctorUnavailableAddressIsFailureWithoutRawError(t *testing.T) {
 	}
 }
 
+func TestDoctorPathRejectsWrongKind(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, []byte("fixture-key"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, path string
+		required   bool
+		kind       doctorPathKind
+	}{
+		{name: "path.data", path: file, required: true, kind: doctorPathDirectory},
+		{name: "path.workspace", path: file, kind: doctorPathDirectory},
+		{name: "path.skills", path: file, required: true, kind: doctorPathDirectory},
+		{name: "path.jwt_key", path: dir, kind: doctorPathRegularFile},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := checkPath(tc.name, tc.path, tc.required, tc.kind, os.Stat, func(string) (*os.File, error) {
+				t.Fatal("wrong-kind path must be rejected before opening")
+				return nil, nil
+			})
+			if result.Status != doctorFail {
+				t.Fatalf("wrong-kind path = %+v, want failure", result)
+			}
+		})
+	}
+}
+
+func TestDoctorPathRejectsOpenFailureWithoutRawError(t *testing.T) {
+	const rawError = "filesystem-access-secret-sentinel"
+	dir := t.TempDir()
+	for _, required := range []bool{true, false} {
+		result := checkPath("path.workspace", dir, required, doctorPathDirectory, os.Stat, func(string) (*os.File, error) {
+			return nil, errors.New(rawError)
+		})
+		if result.Status != doctorFail {
+			t.Errorf("directory open failure (required %t) = %+v, want failure", required, result)
+		}
+		if strings.Contains(result.Detail+result.Remediation, rawError) {
+			t.Errorf("directory open failure exposes raw error: %+v", result)
+		}
+	}
+}
+
+func TestDoctorPathRejectsDirectoryReadFailure(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var opened *os.File
+	result := checkPath("path.workspace", dir, false, doctorPathDirectory, os.Stat, func(string) (*os.File, error) {
+		var err error
+		opened, err = os.Open(file)
+		return opened, err
+	})
+	if result.Status != doctorFail {
+		t.Errorf("directory read failure = %+v, want failure", result)
+	}
+	if opened == nil {
+		t.Fatal("directory access was not attempted")
+	}
+	if _, err := opened.Stat(); !errors.Is(err, os.ErrClosed) {
+		_ = opened.Close()
+		t.Errorf("directory descriptor remains open: %v", err)
+	}
+}
+
+func TestDoctorPathMissingAndStatErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		required bool
+		err      error
+		want     doctorStatus
+	}{
+		{name: "required missing", required: true, err: os.ErrNotExist, want: doctorFail},
+		{name: "optional missing", err: os.ErrNotExist, want: doctorWarn},
+		{name: "optional inaccessible", err: os.ErrPermission, want: doctorFail},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := checkPath("path.workspace", "fixture", tc.required, doctorPathDirectory, func(string) (os.FileInfo, error) {
+				return nil, tc.err
+			}, nil)
+			if result.Status != tc.want {
+				t.Fatalf("unavailable path = %+v, want %s", result, tc.want)
+			}
+		})
+	}
+}
+
+func TestDoctorPathReadableKinds(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "jwt.key")
+	for _, tc := range []struct {
+		name, path string
+		kind       doctorPathKind
+	}{
+		{name: "empty directory", path: dir, kind: doctorPathDirectory},
+		{name: "regular file", path: file, kind: doctorPathRegularFile},
+		{name: "populated directory", path: dir, kind: doctorPathDirectory},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.kind == doctorPathRegularFile {
+				if err := os.WriteFile(file, []byte("fixture-key"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			result := checkPath("fixture", tc.path, true, tc.kind, os.Stat, nil)
+			info, err := os.Stat(tc.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantDetail := fmt.Sprintf("%s (mode %s, size %d bytes)", tc.path, info.Mode(), info.Size())
+			if result.Status != doctorOK || result.Detail != wantDetail {
+				t.Fatalf("readable path = %+v, want OK with detail %q", result, wantDetail)
+			}
+		})
+	}
+}
+
 func TestDoctorConfigParseFailureIsFailure(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {

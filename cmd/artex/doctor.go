@@ -123,7 +123,7 @@ func runDoctor(args []string, stdout, stderr io.Writer, deps doctorDeps) int {
 func defaultDoctorDeps() doctorDeps {
 	runtime := doctorRuntime{
 		openSQL: sql.Open, lookPath: exec.LookPath, listen: net.Listen,
-		stat: os.Stat, readFile: os.ReadFile, liveLLM: agent.TestConnectionQuiet,
+		stat: os.Stat, openPath: os.Open, readFile: os.ReadFile, liveLLM: agent.TestConnectionQuiet,
 		runCommand: func(ctx context.Context, name string, args ...string) ([]byte, error) {
 			command := exec.CommandContext(ctx, name, args...)
 			command.WaitDelay = 250 * time.Millisecond
@@ -141,6 +141,7 @@ type doctorRuntime struct {
 	runCommand func(context.Context, string, ...string) ([]byte, error)
 	listen     func(string, string) (net.Listener, error)
 	stat       func(string) (os.FileInfo, error)
+	openPath   func(string) (*os.File, error)
 	readFile   func(string) ([]byte, error)
 	liveLLM    func(context.Context, agent.Config) (time.Duration, string, error)
 }
@@ -188,15 +189,38 @@ func checkAddress(name, address string, listen func(string, string) (net.Listene
 	})
 }
 
-func checkPath(name, path string, required bool, stat func(string) (os.FileInfo, error)) doctorResult {
+type doctorPathKind string
+
+const (
+	doctorPathDirectory   doctorPathKind = "directory"
+	doctorPathRegularFile doctorPathKind = "regular file"
+)
+
+func checkPath(name, path string, required bool, kind doctorPathKind, stat func(string) (os.FileInfo, error), openPath func(string) (*os.File, error)) doctorResult {
 	return timedDoctorResult(name, func() doctorResult {
 		info, err := stat(path)
 		if err != nil {
-			status := doctorWarn
-			if required {
-				status = doctorFail
+			status := doctorFail
+			if !required && errors.Is(err, os.ErrNotExist) {
+				status = doctorWarn
 			}
 			return doctorResult{Status: status, Detail: "Path unavailable: " + path, Remediation: "Check that the path exists and is accessible"}
+		}
+		if (kind == doctorPathDirectory && !info.IsDir()) || (kind == doctorPathRegularFile && !info.Mode().IsRegular()) {
+			return doctorResult{Status: doctorFail, Detail: "Path is not a " + string(kind) + ": " + path, Remediation: "Use a " + string(kind) + " for this path"}
+		}
+		if openPath == nil {
+			openPath = os.Open
+		}
+		file, err := openPath(path)
+		if err != nil {
+			return doctorResult{Status: doctorFail, Detail: "Cannot open path for reading: " + path, Remediation: "Check the path's read permissions"}
+		}
+		defer file.Close()
+		if kind == doctorPathDirectory {
+			if _, err := file.Readdirnames(1); err != nil && !errors.Is(err, io.EOF) {
+				return doctorResult{Status: doctorFail, Detail: "Cannot read directory: " + path, Remediation: "Check the directory's read permissions"}
+			}
 		}
 		return doctorResult{Status: doctorOK, Detail: fmt.Sprintf("%s (mode %s, size %d bytes)", path, info.Mode(), info.Size())}
 	})
@@ -367,10 +391,10 @@ func runDefaultDoctorChecks(ctx context.Context, opts doctorOptions, runtime doc
 	results = append(results,
 		connectivity,
 		checkDoctorSchema(ctx, session),
-		checkPath("path.data", opts.DataDir, true, runtime.stat),
-		checkPath("path.workspace", filepath.Join(opts.DataDir, "tasks"), false, runtime.stat),
-		checkPath("path.skills", doctorSkillDir(), true, runtime.stat),
-		checkPath("path.jwt_key", filepath.Join(jwtKeyDir(), "jwt.key"), false, runtime.stat),
+		checkPath("path.data", opts.DataDir, true, doctorPathDirectory, runtime.stat, runtime.openPath),
+		checkPath("path.workspace", filepath.Join(opts.DataDir, "tasks"), false, doctorPathDirectory, runtime.stat, runtime.openPath),
+		checkPath("path.skills", doctorSkillDir(), true, doctorPathDirectory, runtime.stat, runtime.openPath),
+		checkPath("path.jwt_key", filepath.Join(jwtKeyDir(), "jwt.key"), false, doctorPathRegularFile, runtime.stat, runtime.openPath),
 		checkAddress("network.http", opts.Addr, runtime.listen),
 		checkAddress("network.proxy", opts.Proxy, runtime.listen),
 		checkExecutable(ctx, "runtime.python", []string{"python3", "python"}, runtime),
