@@ -301,6 +301,18 @@ func openDoctorDatabase(ctx context.Context, runtime doctorRuntime) (*doctorSess
 	return session, result
 }
 
+var doctorSchemaProbes = []struct {
+	table string
+	query string
+}{
+	{"settings", `SELECT key,value,updated_at FROM settings LIMIT 0`},
+	{"tasks", `SELECT id,name,category_id,description,goal,exploration_id,status,paused,queued,queued_at,queue_mode,llm_profile_id,active_llm_profile_id,llm_chain_revision,company_id,parent_ref,timeout_seconds,plan_heartbeat_seconds,coverage_enabled,pinned_at,first_run_at,deadline_at,archived_at,deleted_at,completed_at,created_at,updated_at FROM tasks LIMIT 0`},
+	{"explorations", `SELECT id,description,goal,status,round_no,created_at,updated_at FROM explorations LIMIT 0`},
+	{"exploration_nodes", `SELECT id,exploration_id,kind,payload,priority,state,origin,owner,blocked_reason,delete_reason,content_version,cold_since_round,created_at,updated_at,completed_at FROM exploration_nodes LIMIT 0`},
+	{"llm_profiles", `SELECT id,name,format,base_url,proxy,model,api_key,api_key_hint,rate_per_second,rate_per_minute,context_window_k,reasoning_effort,thinking_type,is_default,priority,pool_exclude,streaming,max_tokens,max_tokens_field,session_header_key,retry_connect_attempts,retry_connect_interval_ms,retry_empty_attempts,retry_empty_interval_ms,retry_stream_attempts,retry_stream_interval_ms,created_at,updated_at FROM llm_profiles LIMIT 0`},
+	{"agents", `SELECT id,key,name,description,role,builtin,enabled,llm_profile_id,current_prompt_id,max_turns,run_seconds,web_search,interactive_shell,wrapup_prompt,wrapup_max_turns,task_timeout_wrapup_prompt,task_timeout_wrapup_max_turns,trigger_run_mode,trigger_merge_mode,trigger_max_parallel,created_at,updated_at FROM agents LIMIT 0`},
+}
+
 func checkDoctorSchema(ctx context.Context, session *doctorSession) doctorResult {
 	return timedDoctorResult("postgres.schema", func() doctorResult {
 		if session == nil || session.sql == nil {
@@ -308,10 +320,13 @@ func checkDoctorSchema(ctx context.Context, session *doctorSession) doctorResult
 		}
 		probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		for _, table := range []string{"settings", "tasks", "explorations", "exploration_nodes", "llm_profiles", "agents"} {
-			var relation sql.NullString
-			if err := session.sql.QueryRowContext(probeCtx, "SELECT to_regclass($1)", table).Scan(&relation); err != nil || !relation.Valid {
-				return doctorResult{Status: doctorFail, Detail: "Required table missing or unreadable: " + table, Remediation: "Run the normal V-ARTEX startup migration with an authorized database account"}
+		for _, probe := range doctorSchemaProbes {
+			rows, err := session.sql.QueryContext(probeCtx, probe.query)
+			if err != nil {
+				return doctorResult{Status: doctorFail, Detail: "Required table is missing, incompatible, or unreadable: " + probe.table, Remediation: "Run the normal V-ARTEX startup migration with an authorized database account and grant SELECT access"}
+			}
+			if err := rows.Close(); err != nil {
+				return doctorResult{Status: doctorFail, Detail: "Required table is unreadable: " + probe.table, Remediation: "Check PostgreSQL read permissions and connectivity"}
 			}
 		}
 		detail := "Required tables are present"

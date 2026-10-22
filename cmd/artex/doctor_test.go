@@ -96,6 +96,37 @@ func (r *doctorStaticRows) Next(dest []driver.Value) error {
 	return nil
 }
 
+func TestDoctorSchemaFailsWhenRequiredTableQueryFails(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		raw  string
+	}{
+		{name: "missing required column", raw: "fixture undefined column"},
+		{name: "missing select permission", raw: "fixture permission denied"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			database := sql.OpenDB(doctorQueryConnector{query: func(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+				if strings.Contains(query, "FROM tasks LIMIT 0") {
+					return nil, errors.New(test.raw)
+				}
+				if strings.Contains(query, "SHOW server_version") {
+					return &doctorStaticRows{columns: []string{"server_version"}, values: []driver.Value{"17"}}, nil
+				}
+				return &doctorStaticRows{columns: []string{"probe"}}, nil
+			}})
+			defer database.Close()
+
+			result := checkDoctorSchema(context.Background(), &doctorSession{sql: database})
+			if result.Status != doctorFail || !strings.Contains(result.Detail, "tasks") {
+				t.Fatalf("schema result = %+v, want tasks failure", result)
+			}
+			if strings.Contains(result.Detail+result.Remediation, test.raw) {
+				t.Fatalf("raw database error leaked: %+v", result)
+			}
+		})
+	}
+}
+
 func (r *doctorProfileRows) Columns() []string {
 	return []string{"id", "name", "format", "base_url", "proxy", "model", "api_key", "thinking_type", "reasoning_effort", "streaming", "max_tokens", "max_tokens_field", "session_header_key"}
 }
@@ -592,8 +623,8 @@ func TestDefaultDoctorSkipsLiveLLMWhenProfileValidationFails(t *testing.T) {
 		switch {
 		case strings.Contains(query, "SELECT 1"):
 			return &doctorStaticRows{columns: []string{"one"}, values: []driver.Value{int64(1)}}, nil
-		case strings.Contains(query, "to_regclass"):
-			return &doctorStaticRows{columns: []string{"to_regclass"}, values: []driver.Value{"settings"}}, nil
+		case strings.Contains(query, "LIMIT 0"):
+			return &doctorStaticRows{columns: []string{"probe"}}, nil
 		case strings.Contains(query, "SHOW server_version"):
 			return &doctorStaticRows{columns: []string{"server_version"}, values: []driver.Value{"16"}}, nil
 		case strings.Contains(query, "FROM llm_profiles"):
