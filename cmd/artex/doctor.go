@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/hypnguyen1209/V-ARTEX/agent"
@@ -175,7 +176,10 @@ func checkAddress(name, address string, listen func(string, string) (net.Listene
 		}
 		listener, err := listen("tcp", address)
 		if err != nil {
-			return doctorResult{Status: doctorWarn, Detail: address + " is already in use or unavailable", Remediation: "It may be a running V-ARTEX instance; check the address or choose another port"}
+			if errors.Is(err, syscall.EADDRINUSE) {
+				return doctorResult{Status: doctorWarn, Detail: address + " is already in use", Remediation: "It may be a running V-ARTEX instance; check the address or choose another port"}
+			}
+			return doctorResult{Status: doctorFail, Detail: "Cannot bind to configured address: " + address, Remediation: "Check the address syntax, port range, and bind permissions"}
 		}
 		_ = listener.Close()
 		return doctorResult{Status: doctorOK, Detail: address + " is available"}

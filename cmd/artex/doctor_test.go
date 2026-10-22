@@ -217,6 +217,25 @@ func TestDoctorOccupiedPortIsWarning(t *testing.T) {
 	}
 }
 
+func TestDoctorInvalidAddressIsFailure(t *testing.T) {
+	if result := checkAddress("network.http", "127.0.0.1:99999", net.Listen); result.Status != doctorFail {
+		t.Fatalf("invalid address = %+v, want failure", result)
+	}
+}
+
+func TestDoctorUnavailableAddressIsFailureWithoutRawError(t *testing.T) {
+	const rawError = "listen tcp: fixture unavailable error"
+	result := checkAddress("network.http", "127.0.0.1:8080", func(string, string) (net.Listener, error) {
+		return nil, errors.New(rawError)
+	})
+	if result.Status != doctorFail {
+		t.Fatalf("unavailable address = %+v, want failure", result)
+	}
+	if strings.Contains(result.Detail, rawError) || strings.Contains(result.Remediation, rawError) {
+		t.Fatalf("unavailable address exposes raw error: %+v", result)
+	}
+}
+
 func TestDoctorConfigParseFailureIsFailure(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
