@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-22
 
-**Status:** Approved approach; awaiting written-spec review
+**Status:** Approved for implementation planning
 
 ## Context
 
