@@ -31,6 +31,8 @@ const (
 	doctorFail doctorStatus = "fail"
 )
 
+const winsockEADDRINUSE syscall.Errno = 10048
+
 type doctorResult struct {
 	Name        string       `json:"name"`
 	Status      doctorStatus `json:"status"`
@@ -176,7 +178,7 @@ func checkAddress(name, address string, listen func(string, string) (net.Listene
 		}
 		listener, err := listen("tcp", address)
 		if err != nil {
-			if errors.Is(err, syscall.EADDRINUSE) {
+			if errors.Is(err, syscall.EADDRINUSE) || errors.Is(err, winsockEADDRINUSE) {
 				return doctorResult{Status: doctorWarn, Detail: address + " is already in use", Remediation: "It may be a running V-ARTEX instance; check the address or choose another port"}
 			}
 			return doctorResult{Status: doctorFail, Detail: "Cannot bind to configured address: " + address, Remediation: "Check the address syntax, port range, and bind permissions"}

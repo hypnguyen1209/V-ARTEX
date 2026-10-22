@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -214,6 +215,16 @@ func TestDoctorOccupiedPortIsWarning(t *testing.T) {
 	defer listener.Close()
 	if result := checkAddress("network.http", listener.Addr().String(), net.Listen); result.Status != doctorWarn {
 		t.Fatalf("occupied address = %+v, want warning", result)
+	}
+}
+
+func TestDoctorWinsockOccupiedPortIsWarning(t *testing.T) {
+	err := &net.OpError{Op: "listen", Net: "tcp", Err: &os.SyscallError{Syscall: "bind", Err: syscall.Errno(10048)}}
+	result := checkAddress("network.http", "127.0.0.1:8080", func(string, string) (net.Listener, error) {
+		return nil, err
+	})
+	if result.Status != doctorWarn {
+		t.Fatalf("Winsock occupied address = %+v, want warning", result)
 	}
 }
 
