@@ -309,8 +309,7 @@ func TestDoctorPathRejectsDirectoryReadFailure(t *testing.T) {
 	if opened == nil {
 		t.Fatal("directory access was not attempted")
 	}
-	if _, err := opened.Stat(); !errors.Is(err, os.ErrClosed) {
-		_ = opened.Close()
+	if err := opened.Close(); !errors.Is(err, os.ErrClosed) {
 		t.Errorf("directory descriptor remains open: %v", err)
 	}
 }
