@@ -321,6 +321,8 @@ func TestCompanyScopeAttribution(t *testing.T) {
 	as := d.Assets()
 	cs := d.Companies()
 	var cid int64
+	var fixtureAssetIDs []int64
+	var sentinelID int64
 
 	var startMax int64
 	if err := d.QueryRow(`SELECT COALESCE(MAX(id),0) FROM assets`).Scan(&startMax); err != nil {
@@ -329,9 +331,19 @@ func TestCompanyScopeAttribution(t *testing.T) {
 		}
 		t.Fatalf("startMax: %v", err)
 	}
+	cleanupAssets := func() {
+		for _, id := range fixtureAssetIDs {
+			if _, err := d.Exec(`DELETE FROM assets WHERE id=$1 AND id>$2`, id, startMax); err != nil {
+				t.Errorf("cleanup asset %d: %v", id, err)
+			}
+		}
+	}
 	t.Cleanup(func() {
-		if _, err := d.Exec(`DELETE FROM assets WHERE id > $1`, startMax); err != nil {
-			t.Errorf("cleanup assets: %v", err)
+		cleanupAssets()
+		if sentinelID != 0 {
+			if _, err := d.Exec(`DELETE FROM assets WHERE id=$1 AND id>$2`, sentinelID, startMax); err != nil {
+				t.Errorf("cleanup sentinel asset %d: %v", sentinelID, err)
+			}
 		}
 		if cid != 0 {
 			if _, err := d.Exec(`DELETE FROM companies WHERE id=$1`, cid); err != nil {
@@ -362,6 +374,12 @@ func TestCompanyScopeAttribution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pre upsert: %v", err)
 	}
+	fixtureAssetIDs = append(fixtureAssetIDs, preID)
+	var rootID int64
+	if err := d.QueryRow(`SELECT id FROM assets WHERE type='root_domain' AND domain=$1`, root).Scan(&rootID); err != nil {
+		t.Fatalf("pre upsert root asset: %v", err)
+	}
+	fixtureAssetIDs = append(fixtureAssetIDs, rootID)
 	var preCompanyID *int64
 	d.QueryRow(`SELECT company_id FROM assets WHERE id = $1`, preID).Scan(&preCompanyID)
 	if preCompanyID != nil {
@@ -396,12 +414,14 @@ func TestCompanyScopeAttribution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertIP in: %v", err)
 	}
+	fixtureAssetIDs = append(fixtureAssetIDs, ipInID)
 	mustCid(ipInID, cid, "in-CIDR ip (insert-time)")
 
 	sub2ID, err := as.UpsertSubdomain(UpsertSubdomainReq{Domain: "www." + root})
 	if err != nil {
 		t.Fatalf("UpsertSubdomain: %v", err)
 	}
+	fixtureAssetIDs = append(fixtureAssetIDs, sub2ID)
 	mustCid(sub2ID, cid, "new subdomain (insert-time)")
 
 	// out of scope stays unattributed.
@@ -409,11 +429,33 @@ func TestCompanyScopeAttribution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertRootDomain out: %v", err)
 	}
+	fixtureAssetIDs = append(fixtureAssetIDs, outID)
 	mustNil(outID, "out-of-scope domain")
 
 	ipOutID, err := as.UpsertIP(UpsertIPReq{IP: ipOut})
 	if err != nil {
 		t.Fatalf("UpsertIP out: %v", err)
 	}
+	fixtureAssetIDs = append(fixtureAssetIDs, ipOutID)
 	mustNil(ipOutID, "out-of-CIDR ip")
+
+	sentinelID, err = as.UpsertRootDomain(UpsertRootDomainReq{Domain: fmt.Sprintf("unrelated-%d.invalid", uniq)})
+	if err != nil {
+		t.Fatalf("UpsertRootDomain sentinel: %v", err)
+	}
+	if sentinelID <= startMax {
+		t.Fatalf("sentinel asset id=%d, want greater than startMax=%d", sentinelID, startMax)
+	}
+	cleanupAssets()
+	var sentinelExists bool
+	if err := d.QueryRow(`SELECT EXISTS(SELECT 1 FROM assets WHERE id=$1)`, sentinelID).Scan(&sentinelExists); err != nil {
+		t.Fatalf("check sentinel asset: %v", err)
+	}
+	if !sentinelExists {
+		t.Fatalf("cleanup deleted unrelated sentinel asset %d", sentinelID)
+	}
+	if _, err := d.Exec(`DELETE FROM assets WHERE id=$1 AND id>$2`, sentinelID, startMax); err != nil {
+		t.Fatalf("delete sentinel asset %d: %v", sentinelID, err)
+	}
+	sentinelID = 0
 }
