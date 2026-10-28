@@ -320,28 +320,42 @@ func TestCompanyScopeAttribution(t *testing.T) {
 	}
 	as := d.Assets()
 	cs := d.Companies()
+	var cid int64
 
 	var startMax int64
 	if err := d.QueryRow(`SELECT COALESCE(MAX(id),0) FROM assets`).Scan(&startMax); err != nil {
-		d.Close()
+		if closeErr := d.Close(); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
+		}
 		t.Fatalf("startMax: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = d.Exec(`DELETE FROM assets WHERE id > $1`, startMax)
-		d.Close()
+		if _, err := d.Exec(`DELETE FROM assets WHERE id > $1`, startMax); err != nil {
+			t.Errorf("cleanup assets: %v", err)
+		}
+		if cid != 0 {
+			if _, err := d.Exec(`DELETE FROM companies WHERE id=$1`, cid); err != nil {
+				t.Errorf("cleanup company %d: %v", cid, err)
+			}
+		}
+		if err := d.Close(); err != nil {
+			t.Errorf("close database: %v", err)
+		}
 	})
 
-	uniq := startMax + 1
-	root := fmt.Sprintf("scopetest%d.com", uniq)
-	sub := "api." + root
-	ipIn := "198.51.100.9"
-	ipOut := "203.0.113.9"
-	outDomain := fmt.Sprintf("other%d.net", uniq)
-
-	cid, _, err := cs.UpsertCompany(fmt.Sprintf("ScopeCo %d", uniq), "")
+	uniq := time.Now().UnixNano()
+	cid, _, err = cs.UpsertCompany(fmt.Sprintf("ScopeCo %d", uniq), "")
 	if err != nil {
 		t.Fatalf("UpsertCompany: %v", err)
 	}
+	high := uint64(cid) >> 16 & 0xffff
+	low := uint64(cid) & 0xffff
+	root := fmt.Sprintf("scopetest-%d.invalid", cid)
+	sub := "api." + root
+	network := fmt.Sprintf("2001:db8:%x:%x::/64", high, low)
+	ipIn := fmt.Sprintf("2001:db8:%x:%x::9", high, low)
+	ipOut := fmt.Sprintf("2001:db8:%x:%x::9", high, low^0x8000)
+	outDomain := fmt.Sprintf("other-%d.invalid", cid)
 
 	// a pre-existing asset (inserted BEFORE any scope) — must be back-filled.
 	preID, err := as.UpsertSubdomain(UpsertSubdomainReq{Domain: sub})
@@ -354,7 +368,7 @@ func TestCompanyScopeAttribution(t *testing.T) {
 		t.Fatalf("pre-scope asset should be unattributed, got %v", *preCompanyID)
 	}
 
-	cs.AddScope(cid, []string{root, "198.51.100.0/24"}, "unit test")
+	cs.AddScope(cid, []string{root, network}, "unit test")
 
 	mustCid := func(id int64, want int64, label string) {
 		var cID *int64
