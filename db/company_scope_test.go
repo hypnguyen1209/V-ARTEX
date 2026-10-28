@@ -370,16 +370,16 @@ func TestCompanyScopeAttribution(t *testing.T) {
 	outDomain := fmt.Sprintf("other-%d.invalid", cid)
 
 	// a pre-existing asset (inserted BEFORE any scope) — must be back-filled.
+	rootID, err := as.UpsertRootDomain(UpsertRootDomainReq{Domain: root})
+	if err != nil {
+		t.Fatalf("pre upsert root: %v", err)
+	}
+	fixtureAssetIDs = append(fixtureAssetIDs, rootID)
 	preID, err := as.UpsertSubdomain(UpsertSubdomainReq{Domain: sub})
 	if err != nil {
 		t.Fatalf("pre upsert: %v", err)
 	}
 	fixtureAssetIDs = append(fixtureAssetIDs, preID)
-	var rootID int64
-	if err := d.QueryRow(`SELECT id FROM assets WHERE type='root_domain' AND domain=$1`, root).Scan(&rootID); err != nil {
-		t.Fatalf("pre upsert root asset: %v", err)
-	}
-	fixtureAssetIDs = append(fixtureAssetIDs, rootID)
 	var preCompanyID *int64
 	d.QueryRow(`SELECT company_id FROM assets WHERE id = $1`, preID).Scan(&preCompanyID)
 	if preCompanyID != nil {
