@@ -142,6 +142,7 @@ git commit -m "test(db): isolate company scope attribution"
 - Modify: `web/package-lock.json`
 - Modify: `web/src/app/globals.css`
 - Create: `web/src/styles/shadcn-tailwind.css`
+- Create: `web/public/shadcn-LICENSE.txt`
 
 - [ ] **Step 1: Record the RED audit baseline**
 
@@ -204,8 +205,9 @@ The application imports `shadcn/tailwind.css` but never executes or imports the 
  */
 ```
 
-4. Change `@import "shadcn/tailwind.css";` in `web/src/app/globals.css` to `@import "../styles/shadcn-tailwind.css";`.
-5. Run `npm install --package-lock-only` to remove the CLI dependency tree from the lockfile, followed by `npm ci`.
+4. Add `web/public/shadcn-LICENSE.txt` containing the complete plain-text MIT License from `node_modules/shadcn/LICENSE.md`. This file is required because PostCSS strips the source comment from compiled CSS.
+5. Change `@import "shadcn/tailwind.css";` in `web/src/app/globals.css` to `@import "../styles/shadcn-tailwind.css";`.
+6. Run `npm install --package-lock-only` to remove the CLI dependency tree from the lockfile, followed by `npm ci`.
 
 Verify the vendored body before the license header is byte-for-byte identical to the installed 4.23.0 stylesheet, and verify no source or script imports the CLI:
 
@@ -248,6 +250,15 @@ cd ..
 
 Expected: 64 unit tests pass, Biome exits zero, 31 static pages build, and both desktop/mobile Playwright tests pass.
 
+After the static build, verify the distributed notice:
+
+```bash
+cmp web/public/shadcn-LICENSE.txt web/out/shadcn-LICENSE.txt
+rg -n 'Copyright \(c\) 2023 shadcn|Permission is hereby granted|THE SOFTWARE IS PROVIDED "AS IS"' web/out/shadcn-LICENSE.txt
+```
+
+Expected: the exported notice is byte-for-byte identical and contains all three license clauses.
+
 - [ ] **Step 6: Clean generated frontend artifacts**
 
 Run from the repository root:
@@ -259,12 +270,12 @@ done
 git status --short
 ```
 
-Expected: only `web/package.json`, `web/package-lock.json`, `web/src/app/globals.css`, and `web/src/styles/shadcn-tailwind.css` remain changed for this task.
+Expected: only `web/package.json`, `web/package-lock.json`, `web/src/app/globals.css`, `web/src/styles/shadcn-tailwind.css`, and `web/public/shadcn-LICENSE.txt` remain changed for this task.
 
 - [ ] **Step 7: Commit the dependency remediation**
 
 ```bash
-git add web/package.json web/package-lock.json web/src/app/globals.css web/src/styles/shadcn-tailwind.css
+git add web/package.json web/package-lock.json web/src/app/globals.css web/src/styles/shadcn-tailwind.css web/public/shadcn-LICENSE.txt
 GIT_AUTHOR_NAME=hypnguyen1209 \
 GIT_AUTHOR_EMAIL=hypnguyen1209@gmail.com \
 GIT_COMMITTER_NAME=hypnguyen1209 \

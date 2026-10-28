@@ -31,7 +31,7 @@ Linux continues to own the complete PostgreSQL-backed normal and race suites. Cr
 
 First update npm packages within the semver ranges already allowed by `web/package.json`. The expected direct updates include Next.js, PostCSS, shadcn, and Zod; transitive packages will follow from the regenerated lockfile.
 
-The safe npm update leaves three low advisories in the `shadcn` CLI tree because `deepmerge` has no fixed compatible release. V-ARTEX does not execute the CLI, but it imports the CLI package's `tailwind.css`. Vendor the exact MIT-licensed stylesheet from `shadcn@4.23.0` into `web/src/styles`, retain its license notice, change the global stylesheet to the local import, and remove only the `shadcn` CLI dependency. Keep the separately used `@shadcn/react` package.
+The safe npm update leaves three low advisories in the `shadcn` CLI tree because `deepmerge` has no fixed compatible release. V-ARTEX does not execute the CLI, but it imports the CLI package's `tailwind.css`. Vendor the exact MIT-licensed stylesheet from `shadcn@4.23.0` into `web/src/styles`, retain its source license notice, change the global stylesheet to the local import, and remove only the `shadcn` CLI dependency. Keep the separately used `@shadcn/react` package. Because Tailwind/PostCSS removes CSS comments from release output, also publish the complete notice as `web/public/shadcn-LICENSE.txt` so static exports and embedded binaries retain it.
 
 Do not run `npm audit fix --force`, accept npm's breaking `shadcn@1.0.0` downgrade, add an override, or suppress an advisory. The acceptance target is a clean `npm audit --json` report with zero advisories.
 
