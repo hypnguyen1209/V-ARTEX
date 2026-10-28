@@ -1,6 +1,6 @@
 # Native Runtime, Dependency, and Test Isolation Hardening Design
 
-**Status:** Approved for specification
+**Status:** Approved for implementation planning
 
 ## Goal
 
