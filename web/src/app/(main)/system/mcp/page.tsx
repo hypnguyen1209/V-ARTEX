@@ -117,7 +117,7 @@ export default function MCPPage() {
       name: s.name,
       transport: s.transport,
       command: s.command ?? "",
-      args: s.args.join(" "),
+      args: (s.args ?? []).join(" "),
       url: s.url ?? "",
       env: envToText(s.env),
       insecure: s.insecure ?? false,

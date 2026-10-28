@@ -1177,7 +1177,7 @@ export interface MCPServer {
   name: string;
   transport: "stdio" | "http" | "sse";
   command?: string;
-  args: string[];
+  args: string[] | null;
   env: Record<string, string>;
   url?: string;
   enabled: boolean;
@@ -1232,7 +1232,7 @@ export interface Tool {
   key: string;
   system: boolean;
   description: string;
-  schema: Record<string, unknown>; // full JSON-Schema (object with properties)
+  schema: Record<string, unknown> | null; // full JSON-Schema; null uses code defaults
   agents: string[]; // bound agent keys
   enabled: boolean;
   kind?: "builtin" | "shell" | "command" | "script" | "http"; // Custom tool type.

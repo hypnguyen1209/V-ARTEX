@@ -48,8 +48,8 @@ type JsonSchema = Record<string, unknown> & {
   items?: JsonSchema;
 };
 
-function toRows(schema: Record<string, unknown>): ParamRow[] {
-  const root = schema as JsonSchema;
+function toRows(schema: Record<string, unknown> | null): ParamRow[] {
+  const root = (schema ?? {}) as JsonSchema;
   const props = root.properties ?? {};
   const required = new Set(root.required ?? []);
   const rows: ParamRow[] = [];
@@ -102,8 +102,8 @@ function coerceDefault(type: string, raw: string): unknown {
 }
 
 // applyRows writes edited rows back into a deep-copied schema (structure untouched).
-function applyRows(schema: Record<string, unknown>, rows: ParamRow[]): Record<string, unknown> {
-  const next = structuredClone(schema) as JsonSchema;
+function applyRows(schema: Record<string, unknown> | null, rows: ParamRow[]): Record<string, unknown> {
+  const next = structuredClone(schema ?? {}) as JsonSchema;
   const props = next.properties ?? {};
   for (const r of rows) {
     if (r.parentKey) {
