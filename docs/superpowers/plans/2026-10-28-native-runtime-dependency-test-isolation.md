@@ -16,7 +16,7 @@
 - Do not deploy or merge.
 - Use author and committer `hypnguyen1209 <hypnguyen1209@gmail.com>` on every commit.
 - Do not rewrite existing commits; add new commits.
-- Do not use `npm audit fix --force`, dependency overrides, advisory suppression, or a breaking downgrade.
+- Do not use `npm audit fix --force`, dependency overrides, advisory suppression, or npm's breaking `shadcn@1.0.0` downgrade.
 - Use a fresh PostgreSQL database for each full normal/race acceptance run and remove every temporary database/container.
 - After each implementation task, run a fresh spec review and a fresh code-quality review before continuing.
 
@@ -138,8 +138,10 @@ git commit -m "test(db): isolate company scope attribution"
 ### Task 2: Remove npm advisories without breaking versions
 
 **Files:**
+- Modify: `web/package.json`
 - Modify: `web/package-lock.json`
-- Verify unchanged: `web/package.json`
+- Modify: `web/src/app/globals.css`
+- Create: `web/src/styles/shadcn-tailwind.css`
 
 - [ ] **Step 1: Record the RED audit baseline**
 
@@ -170,9 +172,50 @@ npm ci
 cd ..
 ```
 
-Expected: only `web/package-lock.json` changes. If npm proposes a major downgrade, an override, or requires `--force`, stop and reassess instead of applying it.
+Expected: `web/package-lock.json` changes and the audit falls from 22 findings to the three low findings in `shadcn`, `@shadcn/registry`, and `deepmerge`. If npm proposes a major downgrade, an override, or requires `--force`, do not apply it.
 
-- [ ] **Step 3: Require a clean audit**
+- [ ] **Step 3: Replace the vulnerable CLI with its required static CSS**
+
+The application imports `shadcn/tailwind.css` but never executes or imports the `shadcn` CLI JavaScript. Make these exact changes:
+
+1. Remove `"shadcn": "^4.12.0"` from `web/package.json`; retain `"@shadcn/react": "^0.1.0"`.
+2. Copy the exact contents of `node_modules/shadcn/dist/tailwind.css` from installed `shadcn@4.23.0` to `web/src/styles/shadcn-tailwind.css` using `apply_patch`.
+3. Prepend this license/source header to the vendored file:
+
+```css
+/*
+ * Vendored from shadcn@4.23.0/dist/tailwind.css.
+ * MIT License — Copyright (c) 2023 shadcn.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+```
+
+4. Change `@import "shadcn/tailwind.css";` in `web/src/app/globals.css` to `@import "../styles/shadcn-tailwind.css";`.
+5. Run `npm install --package-lock-only` to remove the CLI dependency tree from the lockfile, followed by `npm ci`.
+
+Verify the vendored body before the license header is byte-for-byte identical to the installed 4.23.0 stylesheet, and verify no source or script imports the CLI:
+
+```bash
+rg -n --glob '!node_modules/**' 'from ["'"']shadcn["'"']|require\(["'"']shadcn["'"']\)|npm exec shadcn|npx shadcn' .
+```
+
+Expected: no executable CLI references. `components.json` and descriptive comments may still mention shadcn.
+
+- [ ] **Step 4: Require a clean audit**
 
 Run:
 
@@ -185,7 +228,7 @@ cd ..
 
 Expected: npm exits zero and the total is `0`.
 
-- [ ] **Step 4: Verify the complete frontend contract**
+- [ ] **Step 5: Verify the complete frontend contract**
 
 Run:
 
@@ -205,7 +248,7 @@ cd ..
 
 Expected: 64 unit tests pass, Biome exits zero, 31 static pages build, and both desktop/mobile Playwright tests pass.
 
-- [ ] **Step 5: Clean generated frontend artifacts**
+- [ ] **Step 6: Clean generated frontend artifacts**
 
 Run from the repository root:
 
@@ -216,12 +259,12 @@ done
 git status --short
 ```
 
-Expected: only `web/package-lock.json` remains modified for this task.
+Expected: only `web/package.json`, `web/package-lock.json`, `web/src/app/globals.css`, and `web/src/styles/shadcn-tailwind.css` remain changed for this task.
 
-- [ ] **Step 6: Commit the dependency remediation**
+- [ ] **Step 7: Commit the dependency remediation**
 
 ```bash
-git add web/package-lock.json
+git add web/package.json web/package-lock.json web/src/app/globals.css web/src/styles/shadcn-tailwind.css
 GIT_AUTHOR_NAME=hypnguyen1209 \
 GIT_AUTHOR_EMAIL=hypnguyen1209@gmail.com \
 GIT_COMMITTER_NAME=hypnguyen1209 \

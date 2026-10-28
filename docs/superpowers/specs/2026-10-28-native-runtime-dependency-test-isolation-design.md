@@ -29,9 +29,11 @@ Linux continues to own the complete PostgreSQL-backed normal and race suites. Cr
 
 ### Dependency advisories
 
-Update npm packages only within the semver ranges already allowed by `web/package.json`. The expected direct updates include Next.js, PostCSS, shadcn, and Zod; transitive packages will follow from the regenerated lockfile.
+First update npm packages within the semver ranges already allowed by `web/package.json`. The expected direct updates include Next.js, PostCSS, shadcn, and Zod; transitive packages will follow from the regenerated lockfile.
 
-Do not run `npm audit fix --force`, accept a major-version downgrade, add an override, or suppress an advisory. The acceptance target is a clean `npm audit --json` report with zero advisories. If a remaining advisory requires a breaking update, stop and reassess instead of forcing it.
+The safe npm update leaves three low advisories in the `shadcn` CLI tree because `deepmerge` has no fixed compatible release. V-ARTEX does not execute the CLI, but it imports the CLI package's `tailwind.css`. Vendor the exact MIT-licensed stylesheet from `shadcn@4.23.0` into `web/src/styles`, retain its license notice, change the global stylesheet to the local import, and remove only the `shadcn` CLI dependency. Keep the separately used `@shadcn/react` package.
+
+Do not run `npm audit fix --force`, accept npm's breaking `shadcn@1.0.0` downgrade, add an override, or suppress an advisory. The acceptance target is a clean `npm audit --json` report with zero advisories.
 
 After the lockfile update, run the existing 64 unit tests, Biome check, static export/typecheck, and desktop/mobile Playwright smoke tests. This protects the static frontend contract even though several vulnerable packages are build-time dependencies rather than part of the Go-served runtime.
 
@@ -52,7 +54,7 @@ The regression proof is:
 - No production database migration or runtime write path changes.
 - No existing user company, scope, asset, or setting is deleted.
 - Test cleanup targets only the company ID created by that test.
-- Dependency remediation is lockfile-driven and keeps declared compatibility ranges.
+- Dependency remediation keeps declared compatibility ranges and replaces an unused vulnerable CLI with its required MIT-licensed static stylesheet.
 - GitHub Actions retain read-only default permissions and full-SHA action pins.
 - Native jobs do not receive deployment secrets and do not perform releases.
 
