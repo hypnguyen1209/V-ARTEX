@@ -4,15 +4,19 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write # Required to create a Release
+  contents: read
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
   # ① Export the static frontend once for reuse across cross-compilation targets
   frontend:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
@@ -21,7 +25,7 @@ jobs:
         working-directory: web
       - run: npm run build:static
         working-directory: web
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: web-dist
           path: web/out
@@ -39,12 +43,12 @@ jobs:
           - { goos: darwin, goarch: arm64 }
           - { goos: windows, goarch: amd64 }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.26"
           cache: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: web-dist
           path: server/webui/dist
@@ -64,14 +68,19 @@ jobs:
           ./build.sh --target "${ARTEX_TARGET_OS}/${ARTEX_TARGET_ARCH}"
       - name: Smoke test Linux amd64 binary
         if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
-        run: dist/artex-linux-amd64/artex -h
-      - uses: actions/upload-artifact@v4
+        run: |
+          dist/artex-linux-amd64/artex -h
+          doctor_code=0
+          dist/artex-linux-amd64/artex doctor --json --addr 127.0.0.1:0 --proxy '' > doctor.json || doctor_code=$?
+          test "$doctor_code" -eq 0 || test "$doctor_code" -eq 1
+          python3 -m json.tool doctor.json >/dev/null
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pkg-${{ matrix.goos }}-${{ matrix.goarch }}
           path: "dist/*.zip"
       # Upload raw Linux binaries separately for the docker job to reuse without rebuilding the frontend or Go code
       - if: matrix.goos == 'linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bin-linux-${{ matrix.goarch }}
           path: dist/artex-linux-${{ matrix.goarch }}/artex
@@ -80,16 +89,18 @@ jobs:
   release:
     needs: binaries
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: pkg-*
           merge-multiple: true
           path: dist
       - name: Generate checksums
         working-directory: dist
-        run: sha256sum *.zip > SHA256SUMS
-      - uses: softprops/action-gh-release@v2
+        run: sha256sum -- *.zip > SHA256SUMS
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             dist/*.zip
@@ -102,29 +113,30 @@ jobs:
     needs: binaries
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # Get Dockerfile and skills/
-      - uses: actions/download-artifact@v4
+      # Get Dockerfile and skills/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bin-linux-amd64
           path: dist/amd64
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: bin-linux-arm64
           path: dist/arm64
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: meta
         with:
           images: autumn27/artex
           tags: |
             type=ref,event=tag
             type=raw,value=latest
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64

@@ -146,18 +146,18 @@ export function FindingTrafficPanel({
                   <Badge variant="secondary">
                     {b.snapshot.method} · {b.snapshot.status}
                   </Badge>
-                  <span className="text-xs text-muted-foreground">Evidence #{b.id}</span>
+                  <span className="text-muted-foreground text-xs">Evidence #{b.id}</span>
                 </div>
                 <Button
                   variant="link"
-                  className="h-auto justify-start p-0 text-left whitespace-normal"
+                  className="h-auto justify-start whitespace-normal p-0 text-left"
                   onClick={() => setPreview(b.id)}
                 >
                   <span className="break-all font-mono text-xs">{b.snapshot.url}</span>
                 </Button>
-                {b.note ? <p className="text-sm whitespace-pre-wrap">{b.note}</p> : null}
+                {b.note ? <p className="whitespace-pre-wrap text-sm">{b.note}</p> : null}
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-muted-foreground text-xs">
                     {new Date(b.snapshot.captured_at * 1000).toLocaleString("en-US")}
                   </span>
                   <div className="flex flex-wrap gap-1">

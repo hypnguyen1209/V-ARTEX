@@ -248,7 +248,10 @@ export const api = {
   initPassword: (password: string, setupToken: string) =>
     post<{ token: string }>("/auth/init", { password, setup_token: setupToken }),
   changePassword: (oldPassword: string, newPassword: string) =>
-    post<{ ok: boolean; token: string }>("/auth/change-password", { old_password: oldPassword, new_password: newPassword }),
+    post<{ ok: boolean; token: string }>("/auth/change-password", {
+      old_password: oldPassword,
+      new_password: newPassword,
+    }),
 
   // ---- tasks ----
   tasks: () =>

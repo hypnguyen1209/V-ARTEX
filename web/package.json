@@ -12,12 +12,12 @@
     "check": "biome check",
     "check:fix": "biome check --write",
     "prepare": "husky",
-    "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/generate-theme-presets.ts"
+    "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/generate-theme-presets.ts",
+    "test": "node --test",
+    "test:e2e": "playwright test"
   },
   "lint-staged": {
-    "*.{js,ts,jsx,tsx}": [
-      "biome check --write --no-errors-on-unmatched"
-    ]
+    "*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched"]
   },
   "dependencies": {
     "@antv/g6": "^5.1.1",
@@ -52,7 +52,6 @@
     "react-resizable-panels": "^4.12.0",
     "recharts": "^3.8.0",
     "remark-gfm": "^4.0.1",
-    "shadcn": "^4.12.0",
     "simple-icons": "^16.24.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
@@ -64,6 +63,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/d3-geo": "^3.1.0",
     "@types/node": "^22.20.0",

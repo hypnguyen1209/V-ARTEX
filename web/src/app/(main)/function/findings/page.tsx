@@ -818,7 +818,7 @@ export default function FindingsPage() {
     <div className="flex flex-1 flex-col gap-4 md:gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Findings</h1>
+          <h1 className="font-semibold text-xl tracking-tight">Findings</h1>
           <p className="text-muted-foreground text-sm">Vulnerabilities across tasks</p>
         </div>
         <Tabs value={view} onValueChange={(v) => setView(v as FindingView)}>
@@ -951,7 +951,7 @@ export default function FindingsPage() {
 
           <div className="ml-auto flex items-center gap-3">
             {selectedIds.size > 0 && (
-              <span className="text-xs text-muted-foreground tabular-nums">{selectedIds.size} selected</span>
+              <span className="text-muted-foreground text-xs tabular-nums">{selectedIds.size} selected</span>
             )}
             <Button size="sm" variant="outline" onClick={openExport}>
               <DownloadIcon /> Export
@@ -984,7 +984,7 @@ export default function FindingsPage() {
               </CardContent>
             </Card>
             <div className="flex min-w-0 flex-col gap-2">
-              <div className="flex min-w-0 flex-wrap items-center gap-1 text-sm text-muted-foreground">
+              <div className="flex min-w-0 flex-wrap items-center gap-1 text-muted-foreground text-sm">
                 <button
                   type="button"
                   className={cn("hover:text-foreground", assetScope === null && "font-medium text-foreground")}
@@ -1065,11 +1065,11 @@ export default function FindingsPage() {
                           return (
                             <span key={level} className="inline-flex items-center gap-1">
                               <StatusBadge domain="severity" value={level} dot />
-                              <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+                              <span className="text-muted-foreground text-xs tabular-nums">{count}</span>
                             </span>
                           );
                         })}
-                        <span className="text-xs tabular-nums text-muted-foreground">
+                        <span className="text-muted-foreground text-xs tabular-nums">
                           {fmtTime(group.last_found_at)}
                         </span>
                         {group.task_id !== null && (
@@ -1114,7 +1114,7 @@ export default function FindingsPage() {
             })}
             {groups.length === 0 && (
               <Card>
-                <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                <CardContent className="py-12 text-center text-muted-foreground text-sm">
                   No matching findings.
                 </CardContent>
               </Card>
@@ -1219,7 +1219,7 @@ export default function FindingsPage() {
 
           <div className="flex flex-col gap-5 py-1">
             <div className="flex flex-col gap-2">
-              <span className="text-xs text-muted-foreground">Export Scope</span>
+              <span className="text-muted-foreground text-xs">Export Scope</span>
               <RadioGroup value={exportScope} onValueChange={(v) => setExportScope(v as typeof exportScope)}>
                 <label htmlFor="export-scope-filtered" className="flex items-center gap-2 text-sm">
                   <RadioGroupItem id="export-scope-filtered" value="filtered" /> Export filtered results (
@@ -1239,7 +1239,7 @@ export default function FindingsPage() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-xs text-muted-foreground">Export Format</span>
+              <span className="text-muted-foreground text-xs">Export Format</span>
               <RadioGroup value={exportFormat} onValueChange={(v) => setExportFormat(v as typeof exportFormat)}>
                 <label htmlFor="export-format-md-single" className="flex items-center gap-2 text-sm">
                   <RadioGroupItem id="export-format-md-single" value="md-single" /> Combined Markdown report (single .md

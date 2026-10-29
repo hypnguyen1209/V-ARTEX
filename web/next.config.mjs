@@ -6,6 +6,27 @@ const isExport = process.env.NEXT_EXPORT === "1";
 // Vercel demo: the whole site uses mock data, with no backend or /api proxy.
 const isMock = process.env.NEXT_PUBLIC_MOCK === "1";
 
+let deploymentConfig;
+if (isExport) {
+  deploymentConfig = {
+    // Static export: no Node runtime, no image optimization, and each route produces <route>/index.html.
+    output: "export",
+    images: { unoptimized: true },
+    trailingSlash: true,
+  };
+} else if (isMock) {
+  // Vercel mock demo: no backend or /api proxy required.
+  deploymentConfig = { images: { unoptimized: true } };
+} else {
+  deploymentConfig = {
+    // Development: proxy /api/* to the Go backend (default :8787, overridden by AUTOPENTEST_API).
+    async rewrites() {
+      const backend = process.env.AUTOPENTEST_API ?? "http://localhost:8787";
+      return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];
+    },
+  };
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Prevent a parent lockfile from affecting root inference and generated asset paths.
@@ -18,25 +39,7 @@ const nextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },
-  ...(isExport
-    ? {
-        // Static export: no Node runtime, no image optimization, and each route produces <route>/index.html.
-        output: "export",
-        images: { unoptimized: true },
-        trailingSlash: true,
-      }
-    : isMock
-      ? {
-          // Vercel mock demo: no backend or /api proxy required.
-          images: { unoptimized: true },
-        }
-      : {
-          // Development: proxy /api/* to the Go backend (default :8787, overridden by AUTOPENTEST_API).
-          async rewrites() {
-            const backend = process.env.AUTOPENTEST_API ?? "http://localhost:8787";
-            return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];
-          },
-        }),
+  ...deploymentConfig,
 };
 
 export default nextConfig;

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"unicode"
 
+	actool "github.com/Autumn-27/norma/tool"
 	"github.com/hypnguyen1209/V-ARTEX/agent"
 	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/traffic"
-	actool "github.com/Autumn-27/norma/tool"
 )
 
 type legacyToolFixture struct {
@@ -243,6 +243,7 @@ func TestEnglishStartupPreservesIndependentToolCustomizations(t *testing.T) {
 	}{
 		{"list_assets", []string{"properties", "dsl"}},
 		{"insert_assets", []string{"properties", "assets", "items", "properties", "domain"}},
+		{"add_intent", []string{"properties", "summary"}},
 		{"add_hint", []string{"properties", "hints", "items", "properties", "traffic_refs", "items", "properties", "note"}},
 		{"traffic_get", []string{"properties", "id"}},
 		{"spawn_task", []string{"properties", "description"}},
@@ -298,6 +299,85 @@ func TestEnglishStartupPreservesIndependentToolCustomizations(t *testing.T) {
 			}
 			if !equal {
 				t.Errorf("custom schema/default/structure changed or legacy sibling paths were not migrated: %s", got.Schema)
+			}
+		})
+	}
+}
+
+func TestEnglishStartupMigratesOnlyStockAddIntentArrayLimit(t *testing.T) {
+	pg := toolMigrationDB(t)
+	setPriorToolMigrationFlags(t, pg)
+	current := currentToolCatalog(t)["add_intent"]
+	for _, tc := range []struct {
+		name        string
+		field       string
+		value       any
+		nonSystem   bool
+		missing     bool
+		wantUpgrade bool
+	}{
+		{name: "current stock without limit", wantUpgrade: true},
+		{name: "earlier English stock", field: "description", value: "Preferred: new exploration directions processed in order. Each element uses the top-level fields below (summary/asset_ids/parent_ids/priority). The returned ids array has the same length and order.", wantUpgrade: true},
+		{name: "custom description", field: "description", value: "Operator directions"},
+		{name: "custom default", field: "default", value: []any{map[string]any{"summary": "Operator default"}}},
+		{name: "custom type", field: "type", value: "string"},
+		{name: "custom items", field: "items", value: map[string]any{"type": "string"}},
+		{name: "custom limit", field: "maxItems", value: 12},
+		{name: "missing intents", missing: true},
+		{name: "non-system tool", nonSystem: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, _ := json.Marshal(current.Schema)
+			var schema map[string]any
+			if err := json.Unmarshal(raw, &schema); err != nil {
+				t.Fatal(err)
+			}
+			props := schema["properties"].(map[string]any)
+			intents := props["intents"].(map[string]any)
+			delete(intents, "maxItems")
+			if tc.field != "" {
+				intents[tc.field] = tc.value
+			}
+			if tc.missing {
+				delete(props, "intents")
+			}
+			// An unrelated operator field must survive even when the stock array upgrades.
+			props["operator_extension"] = map[string]any{"type": "integer", "default": json.Number("9007199254740993")}
+			tool := current
+			tool.Schema = schema
+			installLegacyTool(t, pg, tool)
+			if tc.nonSystem {
+				if _, err := pg.Exec("UPDATE tools SET system=false WHERE key='add_intent'"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := migrateEnglishDefaults(t.Context(), pg); err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantUpgrade {
+				intents["maxItems"] = 4
+			}
+			expected, _ := json.Marshal(schema)
+			var equal bool
+			if err := pg.QueryRow("SELECT schema=$1::jsonb FROM tools WHERE key='add_intent'", string(expected)).Scan(&equal); err != nil {
+				t.Fatal(err)
+			}
+			if !equal {
+				t.Errorf("schema differs from expected guarded upgrade: %s", toolSnapshot(t, pg, "add_intent"))
+			}
+			got, err := pg.GetTool("add_intent")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Enabled || !got.Deferred || got.Kind != "script" || !reflect.DeepEqual(got.Agents, []string{"operator"}) || string(got.Exec) != `{"script": "operator"}` {
+				t.Errorf("operator settings changed: %+v", got)
+			}
+			before := toolSnapshot(t, pg, "add_intent")
+			if err := migrateEnglishDefaults(t.Context(), pg); err != nil {
+				t.Fatal(err)
+			}
+			if after := toolSnapshot(t, pg, "add_intent"); after != before {
+				t.Error("repeated startup changed tool")
 			}
 		})
 	}

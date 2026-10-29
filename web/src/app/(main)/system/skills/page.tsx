@@ -67,19 +67,22 @@ function buildTree(entries: string[]): TreeNode[] {
   const root: TreeNode[] = [];
   const dirMap = new Map<string, TreeNode>();
 
-  function ensureDir(dirPath: string, parentNodes: TreeNode[]): TreeNode[] {
-    if (dirMap.has(dirPath)) return dirMap.get(dirPath)!.children;
+  function ensureDir(dirPath: string): TreeNode[] {
+    const existing = dirMap.get(dirPath);
+    if (existing) return existing.children;
     const parts = dirPath.split("/");
     let nodes = root;
     let cur = "";
     for (const part of parts) {
       cur = cur ? `${cur}/${part}` : part;
-      if (!dirMap.has(cur)) {
+      let dir = dirMap.get(cur);
+      if (!dir) {
         const d: TreeNode = { name: part, path: cur, type: "dir", children: [] };
         nodes.push(d);
         dirMap.set(cur, d);
+        dir = d;
       }
-      nodes = dirMap.get(cur)!.children;
+      nodes = dir.children;
     }
     return nodes;
   }
@@ -87,7 +90,7 @@ function buildTree(entries: string[]): TreeNode[] {
   for (const entry of [...entries].sort()) {
     if (entry.endsWith("/")) {
       // Explicit directory entry — ensure the node exists (may already be created)
-      ensureDir(entry.slice(0, -1), root);
+      ensureDir(entry.slice(0, -1));
     } else {
       // File — ensure parent dirs exist, then push file node
       const parts = entry.split("/");
@@ -95,12 +98,14 @@ function buildTree(entries: string[]): TreeNode[] {
       let cur = "";
       for (let i = 0; i < parts.length - 1; i++) {
         cur = cur ? `${cur}/${parts[i]}` : parts[i];
-        if (!dirMap.has(cur)) {
+        let dir = dirMap.get(cur);
+        if (!dir) {
           const d: TreeNode = { name: parts[i], path: cur, type: "dir", children: [] };
           nodes.push(d);
           dirMap.set(cur, d);
+          dir = d;
         }
-        nodes = dirMap.get(cur)!.children;
+        nodes = dir.children;
       }
       const fname = parts[parts.length - 1];
       if (fname) nodes.push({ name: fname, path: entry, type: "file", children: [] });
@@ -157,7 +162,7 @@ function SkillsOverview({
     const neverUsed = skills.filter((s) => s.calls === 0);
     const recent = skills
       .filter((s) => s.last_used)
-      .sort((a, b) => (a.last_used! < b.last_used! ? 1 : -1))
+      .sort((a, b) => ((a.last_used ?? "") < (b.last_used ?? "") ? 1 : -1))
       .slice(0, 6);
     const missingCalls = missing.reduce((n, m) => n + m.calls, 0);
     return {
@@ -174,7 +179,7 @@ function SkillsOverview({
   if (skills.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           No skills yet. Click New skill or Upload archive in the sidebar to get started.
         </p>
       </div>
@@ -199,7 +204,7 @@ function SkillsOverview({
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
       <div>
-        <h2 className="text-base font-semibold">Skill library overview</h2>
+        <h2 className="font-semibold text-base">Skill library overview</h2>
         <p className="text-muted-foreground text-sm">
           Select a skill on the left to view details and call history, or review overall usage here.
         </p>
@@ -209,18 +214,18 @@ function SkillsOverview({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="rounded-lg border p-3">
-            <p className="text-2xl font-semibold tabular-nums">{s.value}</p>
-            <p className="text-xs font-medium">{s.label}</p>
-            {s.hint && <p className="text-muted-foreground mt-0.5 text-[11px]">{s.hint}</p>}
+            <p className="font-semibold text-2xl tabular-nums">{s.value}</p>
+            <p className="font-medium text-xs">{s.label}</p>
+            {s.hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{s.hint}</p>}
           </div>
         ))}
       </div>
 
       {/* Usage ranking */}
       <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Most used</Label>
+        <Label className="text-muted-foreground text-xs">Most used</Label>
         {agg.ranked.length === 0 ? (
-          <p className="text-muted-foreground rounded-lg border border-dashed p-4 text-center text-xs">
+          <p className="rounded-lg border border-dashed p-4 text-center text-muted-foreground text-xs">
             No skill calls recorded yet.
           </p>
         ) : (
@@ -241,7 +246,7 @@ function SkillsOverview({
                     style={{ width: `${agg.topCalls > 0 ? (s.calls / agg.topCalls) * 100 : 0}%` }}
                   />
                 </span>
-                <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                <span className="w-16 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
                   {s.calls} times
                 </span>
               </button>
@@ -253,7 +258,7 @@ function SkillsOverview({
       <div className="grid gap-6 sm:grid-cols-2">
         {/* Recent calls */}
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Last used</Label>
+          <Label className="text-muted-foreground text-xs">Last used</Label>
           {agg.recent.length === 0 ? (
             <p className="text-muted-foreground text-xs">No records yet.</p>
           ) : (
@@ -268,7 +273,7 @@ function SkillsOverview({
                   <span className="min-w-0 flex-1 truncate font-mono text-xs" title={s.name}>
                     {s.name}
                   </span>
-                  <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                  <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
                     {fmtTime(s.last_used)}
                   </span>
                 </button>
@@ -279,7 +284,7 @@ function SkillsOverview({
 
         {/* Unused skills (candidates for cleanup or discovery) */}
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">
+          <Label className="text-muted-foreground text-xs">
             Unused skills
             {agg.neverUsed.length > 0 && <span className="ml-1 font-normal">({agg.neverUsed.length})</span>}
           </Label>
@@ -291,7 +296,7 @@ function SkillsOverview({
                 <button key={s.name} type="button" onClick={() => onSelect(s.name)} title={s.name}>
                   <Badge
                     variant="outline"
-                    className="max-w-[12rem] cursor-pointer truncate font-mono text-xs font-normal hover:bg-muted"
+                    className="max-w-[12rem] cursor-pointer truncate font-mono font-normal text-xs hover:bg-muted"
                   >
                     {s.name}
                   </Badge>
@@ -358,27 +363,37 @@ export default function SkillsPage() {
     api
       .agents()
       .then(setAgents)
-      .catch(() => {});
+      .catch(() => {
+        // Skill editing remains available when agent metadata is unavailable.
+      });
     api
       .mcpServers()
       .then(setMcpOptions)
-      .catch(() => {});
+      .catch(() => {
+        // Linked MCP metadata is optional for the rest of the skill editor.
+      });
     api
       .missingSkills()
       .then(setMissing)
-      .catch(() => {});
+      .catch(() => {
+        // Missing-skill telemetry is supplementary.
+      });
     api
       .skills()
       .then((ss) => {
         setSkills(ss);
-        ss.forEach((s) =>
-          api
+        ss.forEach((s) => {
+          void api
             .skillVisibility(s.name)
             .then((ids) => setVisibility((v) => ({ ...v, [s.name]: ids })))
-            .catch(() => {}),
-        );
+            .catch(() => {
+              // Visibility lookups fail independently per skill.
+            });
+        });
       })
-      .catch(() => {});
+      .catch(() => {
+        // Keep the create flow available when the library cannot be loaded.
+      });
   }, []);
 
   React.useEffect(() => {
@@ -401,7 +416,7 @@ export default function SkillsPage() {
           return;
         }
       } else {
-        toast.error("Upload failed: " + msg);
+        toast.error(`Upload failed: ${msg}`);
       }
     } finally {
       setUploading(false);
@@ -410,7 +425,7 @@ export default function SkillsPage() {
   function onUploadPick(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     e.target.value = ""; // reset so picking the same file again re-fires
-    if (f) uploadZip(f);
+    if (f) void uploadZip(f);
   }
 
   React.useEffect(() => {
@@ -527,7 +542,7 @@ export default function SkillsPage() {
       }
       load();
     } catch (e) {
-      toast.error("Create failed: " + (e as Error).message);
+      toast.error(`Create failed: ${(e as Error).message}`);
     }
   }
 
@@ -544,7 +559,7 @@ export default function SkillsPage() {
       if (selected?.skill === skill && selected.path === path) setSelected(null);
       load();
     } catch (e) {
-      toast.error("Delete failed: " + (e as Error).message);
+      toast.error(`Delete failed: ${(e as Error).message}`);
     }
   }
 
@@ -555,7 +570,7 @@ export default function SkillsPage() {
       if (selected?.skill === name) setSelected(null);
       load();
     } catch (e) {
-      toast.error("Delete failed: " + (e as Error).message);
+      toast.error(`Delete failed: ${(e as Error).message}`);
     }
   }
 
@@ -580,7 +595,7 @@ export default function SkillsPage() {
       toast.success("Saved");
       setDirty(false);
     } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
+      toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -596,7 +611,7 @@ export default function SkillsPage() {
     } catch (e) {
       // roll back on error
       setDetailMcps(detailMcps);
-      toast.error("Operation failed: " + (e as Error).message);
+      toast.error(`Operation failed: ${(e as Error).message}`);
     }
   }
 
@@ -608,7 +623,7 @@ export default function SkillsPage() {
       const ids = await api.skillVisibility(skillName);
       setVisibility((v) => ({ ...v, [skillName]: ids }));
     } catch (e) {
-      toast.error("Operation failed: " + (e as Error).message);
+      toast.error(`Operation failed: ${(e as Error).message}`);
     }
   }
 
@@ -645,7 +660,7 @@ export default function SkillsPage() {
       setNewVisibility([]);
       load();
     } catch (e) {
-      toast.error("Create failed: " + (e as Error).message);
+      toast.error(`Create failed: ${(e as Error).message}`);
     } finally {
       setCreatingSkill(false);
     }
@@ -693,20 +708,23 @@ export default function SkillsPage() {
         const open = expanded.has(key);
         return (
           <div key={node.path}>
-            <div
-              className="group relative flex cursor-pointer select-none items-center gap-1 rounded py-0.5 pr-1 text-sm hover:bg-muted"
-              style={{ paddingLeft: baseIndent }}
-              onClick={() => toggleExpanded(key)}
-            >
-              <ChevronRightIcon className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />
-              {open ? (
-                <FolderOpenIcon className="size-3.5 shrink-0 text-amber-500" />
-              ) : (
-                <FolderIcon className="size-3.5 shrink-0 text-amber-500" />
-              )}
-              <span className="min-w-0 flex-1 truncate" title={node.path}>
-                {node.name}
-              </span>
+            <div className="group relative flex select-none items-center rounded py-0.5 pr-1 text-sm hover:bg-muted">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left"
+                style={{ paddingLeft: baseIndent }}
+                onClick={() => toggleExpanded(key)}
+              >
+                <ChevronRightIcon className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />
+                {open ? (
+                  <FolderOpenIcon className="size-3.5 shrink-0 text-amber-500" />
+                ) : (
+                  <FolderIcon className="size-3.5 shrink-0 text-amber-500" />
+                )}
+                <span className="min-w-0 flex-1 truncate" title={node.path}>
+                  {node.name}
+                </span>
+              </button>
               {/* Absolute so a long name can never push the actions out of view */}
               <span className="absolute inset-y-0 right-1 hidden items-center gap-0.5 rounded bg-muted pl-1 group-hover:flex">
                 <Button
@@ -763,16 +781,21 @@ export default function SkillsPage() {
         <div
           key={node.path}
           className={cn(
-            "group relative flex cursor-pointer select-none items-center gap-1 rounded py-0.5 pr-1 text-sm",
+            "group relative flex select-none items-center rounded py-0.5 pr-1 text-sm",
             isSelected ? "bg-accent text-accent-foreground" : "hover:bg-muted",
           )}
-          style={{ paddingLeft: baseIndent + 16 }}
-          onClick={() => setSelected({ skill, path: node.path })}
         >
-          <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate font-mono text-xs" title={node.path}>
-            {node.name}
-          </span>
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left"
+            style={{ paddingLeft: baseIndent + 16 }}
+            onClick={() => setSelected({ skill, path: node.path })}
+          >
+            <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate font-mono text-xs" title={node.path}>
+              {node.name}
+            </span>
+          </button>
           <span
             className={cn(
               "absolute inset-y-0 right-1 hidden items-center rounded pl-1 group-hover:flex",
@@ -803,7 +826,7 @@ export default function SkillsPage() {
     <div data-content-padding="false" className="flex flex-1 flex-col overflow-hidden">
       <div className="flex items-center gap-3 border-b px-4 py-2.5 lg:px-6">
         <div className="flex flex-col gap-0.5">
-          <h1 className="text-sm font-semibold leading-tight">Skill</h1>
+          <h1 className="font-semibold text-sm leading-tight">Skill</h1>
           <p className="text-muted-foreground text-xs">
             Skill library · agentskills.io specification · visibility granted per agent
           </p>
@@ -818,7 +841,7 @@ export default function SkillsPage() {
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-80">
-              <p className="mb-2 text-xs text-muted-foreground">
+              <p className="mb-2 text-muted-foreground text-xs">
                 Skills requested by agents that are missing from the library, sorted by request count.
               </p>
               <div className="space-y-1">
@@ -827,8 +850,8 @@ export default function SkillsPage() {
                     <code className="min-w-0 flex-1 truncate font-mono text-xs" title={m.skill}>
                       {m.skill}
                     </code>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{m.calls} times</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{fmtTime(m.last_used)}</span>
+                    <span className="shrink-0 text-muted-foreground text-xs tabular-nums">{m.calls} times</span>
+                    <span className="shrink-0 text-muted-foreground text-xs">{fmtTime(m.last_used)}</span>
                   </div>
                 ))}
               </div>
@@ -866,7 +889,7 @@ export default function SkillsPage() {
           {/* Radix viewport wraps children in a display:table div that grows with
               content — force it to block so long names truncate instead of
               widening the rows past the sidebar. */}
-          <ScrollArea className="flex-1 [&>[data-slot=scroll-area-viewport]>div]:!block">
+          <ScrollArea className="[&>[data-slot=scroll-area-viewport]>div]:!block flex-1">
             <div className="p-1">
               {skills.map((s) => {
                 const isOpen = expanded.has(s.name);
@@ -877,33 +900,38 @@ export default function SkillsPage() {
                     {/* Skill root node */}
                     <div
                       className={cn(
-                        "group relative flex cursor-pointer select-none items-center gap-1 rounded px-2 py-1 text-sm",
+                        "group relative flex select-none items-center rounded py-1 pr-1 text-sm",
                         isSkillSelected ? "bg-accent text-accent-foreground" : "hover:bg-muted",
                       )}
-                      onClick={() => {
-                        toggleExpanded(s.name);
-                        setSelected({ skill: s.name, path: null });
-                      }}
                     >
-                      <ChevronRightIcon
-                        className={cn("size-3.5 shrink-0 transition-transform", isOpen && "rotate-90")}
-                      />
-                      {isOpen ? (
-                        <FolderOpenIcon className="size-3.5 shrink-0 text-blue-500" />
-                      ) : (
-                        <FolderIcon className="size-3.5 shrink-0 text-blue-500" />
-                      )}
-                      <span className="min-w-0 flex-1 truncate font-semibold" title={s.name}>
-                        {s.name}
-                      </span>
-                      {s.calls > 0 && (
-                        <span
-                          className="shrink-0 rounded bg-muted px-1 text-[10px] tabular-nums text-muted-foreground"
-                          title={`Used ${s.calls} times · last used ${fmtTime(s.last_used)}`}
-                        >
-                          {s.calls}
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 px-2 text-left"
+                        onClick={() => {
+                          toggleExpanded(s.name);
+                          setSelected({ skill: s.name, path: null });
+                        }}
+                      >
+                        <ChevronRightIcon
+                          className={cn("size-3.5 shrink-0 transition-transform", isOpen && "rotate-90")}
+                        />
+                        {isOpen ? (
+                          <FolderOpenIcon className="size-3.5 shrink-0 text-blue-500" />
+                        ) : (
+                          <FolderIcon className="size-3.5 shrink-0 text-blue-500" />
+                        )}
+                        <span className="min-w-0 flex-1 truncate font-semibold" title={s.name}>
+                          {s.name}
                         </span>
-                      )}
+                        {s.calls > 0 && (
+                          <span
+                            className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground tabular-nums"
+                            title={`Used ${s.calls} times · last used ${fmtTime(s.last_used)}`}
+                          >
+                            {s.calls}
+                          </span>
+                        )}
+                      </button>
                       <span
                         className={cn(
                           "absolute inset-y-0 right-1 hidden items-center gap-0.5 rounded pl-1 group-hover:flex",
@@ -961,7 +989,7 @@ export default function SkillsPage() {
               })}
 
               {skills.length === 0 && (
-                <p className="p-3 text-xs text-muted-foreground">No skills yet. Click New skill to get started.</p>
+                <p className="p-3 text-muted-foreground text-xs">No skills yet. Click New skill to get started.</p>
               )}
             </div>
           </ScrollArea>
@@ -980,18 +1008,18 @@ export default function SkillsPage() {
           {selected && selected.path === null && selectedSkill && (
             <div className="max-w-5xl space-y-5">
               <div>
-                <h2 className="font-mono text-base font-semibold">{selectedSkill.name}</h2>
+                <h2 className="font-mono font-semibold text-base">{selectedSkill.name}</h2>
                 {selectedSkill.description && (
-                  <p className="mt-1 text-sm text-muted-foreground">{selectedSkill.description}</p>
+                  <p className="mt-1 text-muted-foreground text-sm">{selectedSkill.description}</p>
                 )}
                 <div className="mt-2 flex flex-wrap gap-2">
                   {selectedSkill.license && (
-                    <Badge variant="outline" className="text-xs font-normal">
+                    <Badge variant="outline" className="font-normal text-xs">
                       License: {selectedSkill.license}
                     </Badge>
                   )}
                   {selectedSkill.compatibility && (
-                    <Badge variant="secondary" className="text-xs font-normal">
+                    <Badge variant="secondary" className="font-normal text-xs">
                       {selectedSkill.compatibility}
                     </Badge>
                   )}
@@ -1002,38 +1030,38 @@ export default function SkillsPage() {
               <div className="flex flex-col gap-6 lg:flex-row-reverse lg:items-start">
                 {/* Right: call statistics */}
                 <div className="space-y-2 lg:w-80 lg:shrink-0">
-                  <Label className="text-xs text-muted-foreground">Call statistics</Label>
+                  <Label className="text-muted-foreground text-xs">Call statistics</Label>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="rounded-md border p-2">
-                      <p className="text-lg font-semibold tabular-nums">{selectedSkill.calls}</p>
-                      <p className="text-xs text-muted-foreground">Total calls</p>
+                      <p className="font-semibold text-lg tabular-nums">{selectedSkill.calls}</p>
+                      <p className="text-muted-foreground text-xs">Total calls</p>
                     </div>
                     <div className="rounded-md border p-2">
-                      <p className="text-lg font-semibold tabular-nums">{selectedSkill.tasks}</p>
-                      <p className="text-xs text-muted-foreground">Tasks covered</p>
+                      <p className="font-semibold text-lg tabular-nums">{selectedSkill.tasks}</p>
+                      <p className="text-muted-foreground text-xs">Tasks covered</p>
                     </div>
                     <div className="rounded-md border p-2">
-                      <p className="truncate text-sm font-medium" title={fmtTime(selectedSkill.last_used)}>
+                      <p className="truncate font-medium text-sm" title={fmtTime(selectedSkill.last_used)}>
                         {fmtTime(selectedSkill.last_used)}
                       </p>
-                      <p className="text-xs text-muted-foreground">Last used</p>
+                      <p className="text-muted-foreground text-xs">Last used</p>
                     </div>
                   </div>
                   {selectedSkill.usage_agents.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1">
-                      <span className="text-xs text-muted-foreground">Callers:</span>
+                      <span className="text-muted-foreground text-xs">Callers:</span>
                       {selectedSkill.usage_agents.map((k) => (
-                        <Badge key={k} variant="secondary" className="text-xs font-normal">
+                        <Badge key={k} variant="secondary" className="font-normal text-xs">
                           {k}
                         </Badge>
                       ))}
                     </div>
                   )}
                   {usageLoading ? (
-                    <p className="text-xs text-muted-foreground">Loading call details…</p>
+                    <p className="text-muted-foreground text-xs">Loading call details…</p>
                   ) : usageCalls.length > 0 ? (
                     <div className="rounded-md border">
-                      <div className="border-b px-2 py-1 text-xs text-muted-foreground">
+                      <div className="border-b px-2 py-1 text-muted-foreground text-xs">
                         Last {usageCalls.length} calls
                       </div>
                       <div className="max-h-56 overflow-y-auto">
@@ -1042,7 +1070,7 @@ export default function SkillsPage() {
                             key={`${c.ts}-${i}`}
                             className="flex items-center gap-2 border-b px-2 py-1 text-xs last:border-b-0"
                           >
-                            <span className="tabular-nums text-muted-foreground">{fmtTime(c.ts)}</span>
+                            <span className="text-muted-foreground tabular-nums">{fmtTime(c.ts)}</span>
                             <Badge variant="outline" className="font-normal">
                               {c.agent_key || "—"}
                             </Badge>
@@ -1054,49 +1082,65 @@ export default function SkillsPage() {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">No calls recorded yet.</p>
+                    <p className="text-muted-foreground text-xs">No calls recorded yet.</p>
                   )}
                 </div>
 
                 {/* Left: MCP links and visibility */}
                 <div className="space-y-5 lg:min-w-0 lg:flex-1">
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">
+                    <Label className="text-muted-foreground text-xs">
                       Linked MCP
                       <span className="ml-1 font-normal">
                         (tools are disclosed / unlocked only when the skill loads)
                       </span>
                     </Label>
                     {mcpOptions.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No MCP servers yet. Add one on the MCP page.</p>
+                      <p className="text-muted-foreground text-xs">No MCP servers yet. Add one on the MCP page.</p>
                     ) : (
                       <div className="flex flex-wrap gap-x-4 gap-y-2">
-                        {mcpOptions.map((m) => (
-                          <label key={m.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                            <Checkbox
-                              checked={detailMcps.includes(m.name)}
-                              onCheckedChange={(on) => toggleSkillMcp(selectedSkill.name, m.name, !!on)}
-                            />
-                            {m.name}
-                          </label>
-                        ))}
+                        {mcpOptions.map((m) => {
+                          const checkboxId = `skill-detail-mcp-${m.id}`;
+                          return (
+                            <label
+                              key={m.id}
+                              htmlFor={checkboxId}
+                              className="flex cursor-pointer items-center gap-2 text-sm"
+                            >
+                              <Checkbox
+                                id={checkboxId}
+                                checked={detailMcps.includes(m.name)}
+                                onCheckedChange={(on) => toggleSkillMcp(selectedSkill.name, m.name, !!on)}
+                              />
+                              {m.name}
+                            </label>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Visibility (per agent)</Label>
+                    <Label className="text-muted-foreground text-xs">Visibility (per agent)</Label>
                     <div className="space-y-2">
-                      {agents.map((a) => (
-                        <label key={a.key} className="flex cursor-pointer items-center gap-2 text-sm">
-                          <Checkbox
-                            checked={(visibility[selectedSkill.name] ?? []).includes(a.id)}
-                            onCheckedChange={() => toggleVisibility(selectedSkill.name, a.id, a.name)}
-                          />
-                          {a.name}
-                        </label>
-                      ))}
-                      {agents.length === 0 && <span className="text-xs text-muted-foreground">(No agents yet)</span>}
+                      {agents.map((a) => {
+                        const checkboxId = `skill-detail-agent-${encodeURIComponent(a.id)}`;
+                        return (
+                          <label
+                            key={a.key}
+                            htmlFor={checkboxId}
+                            className="flex cursor-pointer items-center gap-2 text-sm"
+                          >
+                            <Checkbox
+                              id={checkboxId}
+                              checked={(visibility[selectedSkill.name] ?? []).includes(a.id)}
+                              onCheckedChange={() => toggleVisibility(selectedSkill.name, a.id, a.name)}
+                            />
+                            {a.name}
+                          </label>
+                        );
+                      })}
+                      {agents.length === 0 && <span className="text-muted-foreground text-xs">(No agents yet)</span>}
                     </div>
                   </div>
                 </div>
@@ -1106,7 +1150,7 @@ export default function SkillsPage() {
 
           {selected && selected.path !== null && (
             <div className="flex h-full flex-col gap-2">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 text-muted-foreground text-xs">
                 <span className="font-medium text-foreground">{selected.skill}</span>
                 <span>/</span>
                 <span className="font-mono">{selected.path}</span>
@@ -1115,7 +1159,7 @@ export default function SkillsPage() {
                 </Button>
               </div>
               {fileLoading ? (
-                <p className="text-xs text-muted-foreground">Loading…</p>
+                <p className="text-muted-foreground text-xs">Loading…</p>
               ) : (
                 <Textarea
                   className="flex-1 resize-none font-mono text-xs"
@@ -1180,7 +1224,7 @@ export default function SkillsPage() {
               <TabsTrigger value="mcp">
                 Linked MCP
                 {newMcps.length > 0 && (
-                  <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none text-primary-foreground">
+                  <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground leading-none">
                     {newMcps.length}
                   </span>
                 )}
@@ -1188,7 +1232,7 @@ export default function SkillsPage() {
               <TabsTrigger value="visibility">
                 Visibility
                 {newVisibility.length > 0 && (
-                  <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] leading-none text-primary-foreground">
+                  <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground leading-none">
                     {newVisibility.length}
                   </span>
                 )}
@@ -1198,7 +1242,7 @@ export default function SkillsPage() {
             {/* Basics */}
             <TabsContent
               value="basic"
-              className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4 pt-4 data-[state=inactive]:hidden"
+              className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pt-4 pb-4 data-[state=inactive]:hidden"
             >
               <div className="grid gap-1.5">
                 <Label htmlFor="sk-name">
@@ -1246,7 +1290,7 @@ export default function SkillsPage() {
               <div className="flex min-h-0 flex-1 flex-col gap-1.5">
                 <Label htmlFor="sk-inst">
                   Instructions{" "}
-                  <span className="text-muted-foreground text-xs font-normal">
+                  <span className="font-normal text-muted-foreground text-xs">
                     (leave blank to generate a template)
                   </span>
                 </Label>
@@ -1263,49 +1307,61 @@ export default function SkillsPage() {
             </TabsContent>
 
             {/* Linked MCP */}
-            <TabsContent value="mcp" className="overflow-y-auto px-4 pb-4 pt-4 data-[state=inactive]:hidden">
-              <p className="mb-3 text-xs text-muted-foreground">
+            <TabsContent value="mcp" className="overflow-y-auto px-4 pt-4 pb-4 data-[state=inactive]:hidden">
+              <p className="mb-3 text-muted-foreground text-xs">
                 Selected MCP tools are disclosed and unlocked only when the skill loads.
               </p>
               {mcpOptions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No MCP servers yet. Add one on the MCP page.</p>
+                <p className="text-muted-foreground text-xs">No MCP servers yet. Add one on the MCP page.</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {mcpOptions.map((m) => (
-                    <label key={m.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={newMcps.includes(m.name)}
-                        onCheckedChange={(on) =>
-                          setNewMcps((cur) => (on ? [...cur, m.name] : cur.filter((n) => n !== m.name)))
-                        }
-                      />
-                      {m.name}
-                    </label>
-                  ))}
+                  {mcpOptions.map((m) => {
+                    const checkboxId = `new-skill-mcp-${m.id}`;
+                    return (
+                      <label key={m.id} htmlFor={checkboxId} className="flex cursor-pointer items-center gap-2 text-sm">
+                        <Checkbox
+                          id={checkboxId}
+                          checked={newMcps.includes(m.name)}
+                          onCheckedChange={(on) =>
+                            setNewMcps((cur) => (on ? [...cur, m.name] : cur.filter((n) => n !== m.name)))
+                          }
+                        />
+                        {m.name}
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </TabsContent>
 
             {/* Visibility */}
-            <TabsContent value="visibility" className="overflow-y-auto px-4 pb-4 pt-4 data-[state=inactive]:hidden">
-              <p className="mb-3 text-xs text-muted-foreground">
+            <TabsContent value="visibility" className="overflow-y-auto px-4 pt-4 pb-4 data-[state=inactive]:hidden">
+              <p className="mb-3 text-muted-foreground text-xs">
                 Selected agents can access this skill after creation.
               </p>
               {agents.length === 0 ? (
-                <p className="text-xs text-muted-foreground">(No agents yet)</p>
+                <p className="text-muted-foreground text-xs">(No agents yet)</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {agents.map((a) => (
-                    <label key={a.key} className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={newVisibility.includes(a.id)}
-                        onCheckedChange={(on) =>
-                          setNewVisibility((cur) => (on ? [...cur, a.id] : cur.filter((id) => id !== a.id)))
-                        }
-                      />
-                      {a.name}
-                    </label>
-                  ))}
+                  {agents.map((a) => {
+                    const checkboxId = `new-skill-agent-${encodeURIComponent(a.id)}`;
+                    return (
+                      <label
+                        key={a.key}
+                        htmlFor={checkboxId}
+                        className="flex cursor-pointer items-center gap-2 text-sm"
+                      >
+                        <Checkbox
+                          id={checkboxId}
+                          checked={newVisibility.includes(a.id)}
+                          onCheckedChange={(on) =>
+                            setNewVisibility((cur) => (on ? [...cur, a.id] : cur.filter((id) => id !== a.id)))
+                          }
+                        />
+                        {a.name}
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </TabsContent>

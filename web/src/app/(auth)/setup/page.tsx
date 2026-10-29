@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -72,8 +73,7 @@ export default function SetupPage() {
           <div className="absolute size-80 rounded-full border border-primary-foreground/10" />
           <div className="absolute size-60 rounded-full border border-primary-foreground/15" />
           <div className="absolute size-40 rounded-full border border-primary-foreground/20" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="ARTEX" width={160} height={160} className="relative brightness-0 invert" />
+          <Image src="/logo.png" alt="ARTEX" width={160} height={160} className="relative brightness-0 invert" />
         </div>
       </div>
 
@@ -81,7 +81,7 @@ export default function SetupPage() {
       <div className="flex w-full items-center justify-center bg-background p-8 lg:w-2/3">
         <div className="w-full max-w-md space-y-10 py-24 lg:py-32">
           <div className="space-y-4 text-center">
-            <h2 className="text-2xl font-medium tracking-tight">
+            <h2 className="font-medium text-2xl tracking-tight">
               {unavailable ? "Unable to verify initialization status" : "Set up your password"}
             </h2>
             <p className="mx-auto max-w-xl text-muted-foreground">
@@ -92,7 +92,7 @@ export default function SetupPage() {
           </div>
           {unavailable ? (
             <div className="flex flex-col gap-4">
-              {error && <p className="text-center text-sm text-destructive">{error}</p>}
+              {error && <p className="text-center text-destructive text-sm">{error}</p>}
               <Button type="button" className="w-full" onClick={() => window.location.reload()}>
                 Retry
               </Button>
@@ -112,8 +112,9 @@ export default function SetupPage() {
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Docker: run <code>docker compose logs artex</code>. Managed deployments use the configured setup token.
+                <p className="text-muted-foreground text-xs">
+                  Docker: run <code>docker compose logs artex</code>. Managed deployments use the configured setup
+                  token.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -138,8 +139,12 @@ export default function SetupPage() {
                   autoComplete="new-password"
                 />
               </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={loading || !setupToken.trim() || !password || !confirm}>
+              {error && <p className="text-destructive text-sm">{error}</p>}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={loading || !setupToken.trim() || !password || !confirm}
+              >
                 {loading ? "Saving..." : "Set password and sign in"}
               </Button>
             </form>

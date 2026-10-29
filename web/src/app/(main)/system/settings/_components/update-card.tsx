@@ -53,13 +53,13 @@ export function UpdateCard() {
       .then((r) => {
         setInfo(r);
         if (!quiet) {
-          if (r.error) toast.error("Update check failed: " + r.error);
+          if (r.error) toast.error(`Update check failed: ${r.error}`);
           else if (r.has_update) toast.success(`New version available ${r.latest}`);
           else if (r.comparable) toast.success("Already up to date");
         }
       })
       .catch((e) => {
-        if (!quiet) toast.error("Update check failed: " + (e as Error).message);
+        if (!quiet) toast.error(`Update check failed: ${(e as Error).message}`);
       })
       .finally(() => setChecking(false));
   }, []);
@@ -113,7 +113,7 @@ export function UpdateCard() {
         if (p.phase === "failed") {
           es.close();
           setBusy(false);
-          toast.error("Update failed: " + (p.error || p.message));
+          toast.error(`Update failed: ${p.error || p.message}`);
           return;
         }
         if (p.phase === "staged") {
@@ -151,7 +151,7 @@ export function UpdateCard() {
       es.close();
       setBusy(false);
       setProgress(null);
-      toast.error("Failed to start update: " + (e as Error).message);
+      toast.error(`Failed to start update: ${(e as Error).message}`);
     });
   };
 
@@ -173,7 +173,7 @@ export function UpdateCard() {
       })
       .catch((e) => {
         setBusy(false);
-        toast.error("Rollback failed: " + (e as Error).message);
+        toast.error(`Rollback failed: ${(e as Error).message}`);
       });
   };
 
@@ -224,7 +224,7 @@ export function UpdateCard() {
               href={info.html_url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:underline"
+              className="inline-flex items-center gap-1 text-muted-foreground text-xs underline-offset-4 hover:underline"
             >
               Release notes <ExternalLinkIcon className="size-3" />
             </a>
@@ -232,24 +232,24 @@ export function UpdateCard() {
         </div>
 
         {info?.boot_notice && (
-          <p className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+          <p className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-amber-700 text-xs dark:text-amber-400">
             <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
             {info.boot_notice}
           </p>
         )}
 
         {info?.error && (
-          <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+          <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-destructive text-xs">
             <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
             Cannot connect to GitHub:{info.error}
             {"　"}Configure the global proxy above and try again.
           </p>
         )}
 
-        {info && !info.comparable && info.reason && <p className="text-xs text-muted-foreground">{info.reason}</p>}
+        {info && !info.comparable && info.reason && <p className="text-muted-foreground text-xs">{info.reason}</p>}
 
         {info?.has_update && info.asset_available === false && (
-          <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+          <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-destructive text-xs">
             <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
             {info.latest} No release package is available for {info.os}/{info.arch} (missing {info.asset}); automatic
             updates are unavailable.
@@ -257,7 +257,7 @@ export function UpdateCard() {
         )}
 
         {info?.has_update && info.asset_available !== false && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Downloads <span className="font-mono">{info.asset}</span>
             {info.size ? `(${humanSize(info.size)})` : ""}, verifies SHA256, and runs a smoke test before replacement.
             Failures automatically preserve the current version.
@@ -265,14 +265,14 @@ export function UpdateCard() {
         )}
 
         {info && !info.has_update && info.comparable && !info.error && (
-          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <p className="flex items-center gap-2 text-muted-foreground text-xs">
             <CheckCircle2Icon className="size-3.5 text-emerald-600" />
             Already up to date.
           </p>
         )}
 
         {info?.mode === "docker" && info.has_update && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Docker updates replace only the application, not bundled tools such as playwright / nmap. Recreating the
             container with <span className="font-mono">docker compose up -d</span> restores the image version. To update
             the image as well, run
@@ -283,7 +283,7 @@ export function UpdateCard() {
         {showProgress && (
           <div className="space-y-1.5">
             <Progress value={pct} className={downloading ? undefined : "animate-pulse"} />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {restarting
                 ? "Restarting and applying the new version. Please wait; the page will refresh automatically…"
                 : progress?.message}
@@ -312,7 +312,7 @@ export function UpdateCard() {
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           One-click updates depend on the supervisor script to restart the application. Launch ARTEX with{" "}
           <span className="font-mono">start.sh</span> (or on Windows
           <span className="font-mono"> start.bat</span>). Running the artex binary directly will not restart it after it

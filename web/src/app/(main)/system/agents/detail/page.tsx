@@ -26,8 +26,8 @@ function AgentDetailInner() {
           </Link>
         </Button>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Agent</h1>
-          <p className="text-muted-foreground font-mono text-xs">{key}</p>
+          <h1 className="font-semibold text-xl tracking-tight">Agent</h1>
+          <p className="font-mono text-muted-foreground text-xs">{key}</p>
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col rounded-lg border">

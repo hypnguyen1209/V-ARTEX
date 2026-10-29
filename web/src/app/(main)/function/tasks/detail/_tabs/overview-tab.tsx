@@ -43,15 +43,15 @@ import type {
 
 // Compact token counts (12345 → 12.3k, 2000000 → 2M).
 function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + "M";
-  if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
   return String(n);
 }
 
 // Cache hit rate = cache reads / input; InputTokens includes cache_read, so the ratio stays between 0 and 100%.
 function cacheHitRate(cacheRead: number, input: number): string {
   if (input <= 0) return "—";
-  return Math.round((cacheRead / input) * 100) + "%";
+  return `${Math.round((cacheRead / input) * 100)}%`;
 }
 
 // Display value for a scope entry: domain, CIDR, or company.
@@ -98,7 +98,7 @@ function StatCard({
         </CardDescription>
         <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
       </CardHeader>
-      {sub && <CardContent className="text-xs text-muted-foreground">{sub}</CardContent>}
+      {sub && <CardContent className="text-muted-foreground text-xs">{sub}</CardContent>}
     </Card>
   );
 }
@@ -441,12 +441,12 @@ export function OverviewTab({ taskId }: { taskId: string }) {
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
-            <div className="text-xs font-medium text-muted-foreground">Description</div>
-            <p className="text-sm whitespace-pre-wrap break-words">{task?.description?.trim() || "—"}</p>
+            <div className="font-medium text-muted-foreground text-xs">Description</div>
+            <p className="whitespace-pre-wrap break-words text-sm">{task?.description?.trim() || "—"}</p>
           </div>
           <div className="flex flex-col gap-1.5">
-            <div className="text-xs font-medium text-muted-foreground">Goal</div>
-            <p className="text-sm whitespace-pre-wrap break-words">{task?.goal?.trim() || "—"}</p>
+            <div className="font-medium text-muted-foreground text-xs">Goal</div>
+            <p className="whitespace-pre-wrap break-words text-sm">{task?.goal?.trim() || "—"}</p>
           </div>
         </CardContent>
       </Card>
@@ -456,7 +456,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <ListChecksIcon className="size-4 text-primary" /> Goal Management
-            <span className="text-muted-foreground text-xs font-normal">
+            <span className="font-normal text-muted-foreground text-xs">
               (Verifiable end goals: {goals.length}; adding/editing notifies the planner and reactivates the task)
             </span>
           </CardTitle>
@@ -487,7 +487,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
             <Button size="sm" variant="outline" disabled={goalBusy || !goalText.trim()} onClick={() => void addGoal()}>
               <PlusIcon className="size-3.5" /> Add
             </Button>
-            {goalErr && <span className="text-xs text-red-500">{goalErr}</span>}
+            {goalErr && <span className="text-red-500 text-xs">{goalErr}</span>}
           </div>
           {/* Goal list */}
           {goals.length > 0 ? (
@@ -541,7 +541,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
                     <StatusBadge domain="goal" value={g.state} />
                     <span className="min-w-0 flex-1 break-words">{g.text}</span>
                     {g.vulnclass && (
-                      <span className="bg-muted text-muted-foreground shrink-0 rounded px-1.5 py-0.5 text-xs">
+                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-muted-foreground text-xs">
                         {g.vulnclass}
                       </span>
                     )}
@@ -581,7 +581,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldAlertIcon className="size-4 text-amber-500" /> Operation Constraints
-            <span className="text-muted-foreground text-xs font-normal">
+            <span className="font-normal text-muted-foreground text-xs">
               (Planner/worker exploration boundaries: {constraints.length}; changes take effect in the next planning
               round)
             </span>
@@ -616,7 +616,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
             >
               <PlusIcon className="size-3.5" /> Add
             </Button>
-            {conErr && <span className="text-xs text-red-500">{conErr}</span>}
+            {conErr && <span className="text-red-500 text-xs">{conErr}</span>}
           </div>
           {/* Constraint list */}
           {constraints.length > 0 ? (
@@ -710,13 +710,13 @@ export function OverviewTab({ taskId }: { taskId: string }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TargetIcon className="size-4 text-emerald-500" /> Asset Test Coverage
-              <span className="text-muted-foreground text-xs font-normal">(rough estimate, for reference only)</span>
+              <span className="font-normal text-muted-foreground text-xs">(rough estimate, for reference only)</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex items-baseline gap-3">
-              <span className="text-2xl font-semibold tabular-nums">
-                {coverage.pct != null ? Math.round(coverage.pct * 100) + "%" : "—"}
+              <span className="font-semibold text-2xl tabular-nums">
+                {coverage.pct != null ? `${Math.round(coverage.pct * 100)}%` : "—"}
               </span>
               <span className="text-muted-foreground text-sm">
                 Tested {coverage.tested} / In scope {coverage.denominator}
@@ -726,9 +726,9 @@ export function OverviewTab({ taskId }: { taskId: string }) {
             {coverage.by_type.length > 0 && (
               <div className="flex flex-wrap gap-1.5 text-xs">
                 {coverage.by_type.map((b) => (
-                  <span key={b.type} className="bg-muted rounded px-1.5 py-0.5">
+                  <span key={b.type} className="rounded bg-muted px-1.5 py-0.5">
                     <span className="text-muted-foreground">{b.type}</span>{" "}
-                    <span className="tabular-nums font-medium">
+                    <span className="font-medium tabular-nums">
                       {b.tested}/{b.total}
                     </span>
                   </span>
@@ -743,7 +743,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <CoinsIcon className="size-4 text-amber-500" /> LLM Token Usage
-            <span className="text-muted-foreground text-xs font-normal">
+            <span className="font-normal text-muted-foreground text-xs">
               (By model{tokenTotals.calls > 0 ? `; ${tokenTotals.calls} calls` : ""})
             </span>
           </CardTitle>
@@ -776,7 +776,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-muted-foreground border-b text-left text-xs">
+                    <tr className="border-b text-left text-muted-foreground text-xs">
                       <th className="py-1.5 pr-3 font-medium">Model</th>
                       <th className="py-1.5 pr-3 text-right font-medium">Calls</th>
                       <th className="py-1.5 pr-3 text-right font-medium">Input</th>
@@ -795,7 +795,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
                         <td className="py-1.5 pr-3 text-right tabular-nums">{fmtTokens(m.input_tokens)}</td>
                         <td className="py-1.5 pr-3 text-right tabular-nums">{fmtTokens(m.output_tokens)}</td>
                         <td className="py-1.5 pr-3 text-right tabular-nums">{fmtTokens(m.cache_read_tokens)}</td>
-                        <td className="py-1.5 text-right tabular-nums text-emerald-500">
+                        <td className="py-1.5 text-right text-emerald-500 tabular-nums">
                           {cacheHitRate(m.cache_read_tokens, m.input_tokens)}
                         </td>
                       </tr>
@@ -816,7 +816,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldCheckIcon className="size-4 text-emerald-500" /> Test Scope
-            <span className="text-muted-foreground text-xs font-normal">
+            <span className="font-normal text-muted-foreground text-xs">
               (Coverage denominator and authorization boundary: {scope.length} entries)
             </span>
           </CardTitle>
@@ -865,18 +865,18 @@ export function OverviewTab({ taskId }: { taskId: string }) {
             >
               <PlusIcon className="size-3.5" /> Add
             </Button>
-            {scopeErr && <span className="text-xs text-red-500">{scopeErr}</span>}
+            {scopeErr && <span className="text-red-500 text-xs">{scopeErr}</span>}
           </div>
           {/* Scope list */}
           {scope.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               {scope.map((row) => (
                 <div key={row.id} className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm">
-                  <span className="bg-muted text-muted-foreground shrink-0 rounded px-1.5 py-0.5 text-xs">
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-muted-foreground text-xs">
                     {SCOPE_KIND_LABELS[row.kind]}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-mono text-xs">{scopeValue(row)}</span>
-                  <span className="text-muted-foreground shrink-0 text-xs">{SCOPE_SOURCE_LABELS[row.source]}</span>
+                  <span className="shrink-0 text-muted-foreground text-xs">{SCOPE_SOURCE_LABELS[row.source]}</span>
                   {row.task_id.toString() === taskId ? (
                     <Button
                       size="sm"
@@ -887,7 +887,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
                       <Trash2Icon className="size-3.5 text-red-500" />
                     </Button>
                   ) : (
-                    <span className="text-muted-foreground shrink-0 text-xs">Inherited</span>
+                    <span className="shrink-0 text-muted-foreground text-xs">Inherited</span>
                   )}
                 </div>
               ))}
@@ -908,7 +908,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>
-            <div className="text-xs text-muted-foreground">Engine State</div>
+            <div className="text-muted-foreground text-xs">Engine State</div>
             <StatusBadge
               domain="engine"
               value={stats?.engine_mode ?? task?.engine_mode ?? "idle"}
@@ -917,25 +917,25 @@ export function OverviewTab({ taskId }: { taskId: string }) {
             />
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Running Workers</div>
-            <div className="mt-1 text-lg font-semibold tabular-nums">{running.length}</div>
+            <div className="text-muted-foreground text-xs">Running Workers</div>
+            <div className="mt-1 font-semibold text-lg tabular-nums">{running.length}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">Latest Activity</div>
+            <div className="text-muted-foreground text-xs">Latest Activity</div>
             <div className="mt-1 inline-flex items-center gap-1 text-sm">
               <ClockIcon className="size-3.5" />
               {task?.last_activity ? new Date(task.last_activity).toLocaleTimeString("en-US") : "—"}
             </div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-muted-foreground text-xs">
               Goal {task?.goals_met ?? 0}/{task?.goals_total ?? 0}
             </div>
             <Progress value={goalsPct} className="mt-2" />
           </div>
           {task?.completed_unix && task.completed_unix > 0 ? (
             <div>
-              <div className="text-xs text-muted-foreground">Completed At</div>
+              <div className="text-muted-foreground text-xs">Completed At</div>
               <div className="mt-1 inline-flex items-center gap-1 text-sm">
                 <ClockIcon className="size-3.5" />
                 {new Date(task.completed_unix * 1000).toLocaleString("en-US")}
@@ -960,7 +960,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
                 <span className="min-w-0 flex-1 truncate">{i.payload}</span>
               </div>
             ))}
-            {running.length === 0 && <p className="text-sm text-muted-foreground">No running intents</p>}
+            {running.length === 0 && <p className="text-muted-foreground text-sm">No running intents</p>}
           </CardContent>
         </Card>
 
@@ -972,20 +972,20 @@ export function OverviewTab({ taskId }: { taskId: string }) {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <div className="text-2xl font-semibold tabular-nums text-red-600">{taskFindings.length}</div>
-              <div className="text-xs text-muted-foreground">Confirmed Findings</div>
+              <div className="font-semibold text-2xl text-red-600 tabular-nums">{taskFindings.length}</div>
+              <div className="text-muted-foreground text-xs">Confirmed Findings</div>
             </div>
             <div>
-              <div className="text-2xl font-semibold tabular-nums text-blue-600">{running.length}</div>
-              <div className="text-xs text-muted-foreground">Running</div>
+              <div className="font-semibold text-2xl text-blue-600 tabular-nums">{running.length}</div>
+              <div className="text-muted-foreground text-xs">Running</div>
             </div>
             <div>
-              <div className="text-2xl font-semibold tabular-nums">{open.length}</div>
-              <div className="text-xs text-muted-foreground">Pending Frontier</div>
+              <div className="font-semibold text-2xl tabular-nums">{open.length}</div>
+              <div className="text-muted-foreground text-xs">Pending Frontier</div>
             </div>
             <div>
-              <div className="text-2xl font-semibold tabular-nums text-red-600">{blocked.length}</div>
-              <div className="text-xs text-muted-foreground">Blocked Intents</div>
+              <div className="font-semibold text-2xl text-red-600 tabular-nums">{blocked.length}</div>
+              <div className="text-muted-foreground text-xs">Blocked Intents</div>
             </div>
           </CardContent>
         </Card>
@@ -1003,7 +1003,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
                 <span className="min-w-0 flex-1 truncate">{f.summary}</span>
               </div>
             ))}
-            {taskFindings.length === 0 && <p className="text-sm text-muted-foreground">No findings yet</p>}
+            {taskFindings.length === 0 && <p className="text-muted-foreground text-sm">No findings yet</p>}
           </CardContent>
         </Card>
       </div>
@@ -1015,7 +1015,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
           <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
             <CardTitle className="flex items-center gap-2 text-sm">
               <AlertTriangleIcon className="size-4 text-red-500" /> Blocked / Failed Intents
-              <span className="text-xs font-normal text-muted-foreground">({blocked.length} entries; can rerun)</span>
+              <span className="font-normal text-muted-foreground text-xs">({blocked.length} entries; can rerun)</span>
             </CardTitle>
             <Button size="sm" variant="outline" disabled={rerunning.has("__all__")} onClick={() => void rerunAll()}>
               <RefreshCwIcon className={`size-3.5 ${rerunning.has("__all__") ? "animate-spin" : ""}`} />
@@ -1040,7 +1040,7 @@ export function OverviewTab({ taskId }: { taskId: string }) {
               </div>
             ))}
             {blocked.length > 20 && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Showing the first 20 entries. Click “Rerun all” to process the remaining {blocked.length - 20} entries.
               </p>
             )}
@@ -1182,7 +1182,7 @@ function TaskInterceptRulesCard({ taskId }: { taskId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <ShieldCheckIcon className="size-4 text-sky-500" /> Task Asset Interception / Allow Rules
-          <span className="text-muted-foreground text-xs font-normal">
+          <span className="font-normal text-muted-foreground text-xs">
             (Task only, not global; block rules precede allow rules; {rules.length} entries)
           </span>
         </CardTitle>
@@ -1221,7 +1221,7 @@ function TaskInterceptRulesCard({ taskId }: { taskId: string }) {
           <Button size="sm" variant="outline" disabled={busy || !newPattern.trim()} onClick={() => void add()}>
             <PlusIcon className="size-3.5" /> Add
           </Button>
-          {err && <span className="text-xs text-red-500">{err}</span>}
+          {err && <span className="text-red-500 text-xs">{err}</span>}
         </div>
         {/* Rule list */}
         {rules.length > 0 ? (
@@ -1296,10 +1296,10 @@ function TaskInterceptRulesCard({ taskId }: { taskId: string }) {
                   >
                     {r.action === "allow" ? "Allow" : "Block"}
                   </span>
-                  <span className="text-muted-foreground shrink-0 text-xs">{TASK_RULE_KIND_LABEL[r.kind]}</span>
-                  <code className="bg-muted min-w-0 flex-1 truncate rounded px-1.5 py-0.5 text-xs">{r.pattern}</code>
+                  <span className="shrink-0 text-muted-foreground text-xs">{TASK_RULE_KIND_LABEL[r.kind]}</span>
+                  <code className="min-w-0 flex-1 truncate rounded bg-muted px-1.5 py-0.5 text-xs">{r.pattern}</code>
                   {r.note && (
-                    <span className="text-muted-foreground max-w-[120px] shrink-0 truncate text-xs">{r.note}</span>
+                    <span className="max-w-[120px] shrink-0 truncate text-muted-foreground text-xs">{r.note}</span>
                   )}
                   <Switch checked={r.enabled} onCheckedChange={() => void toggle(r)} />
                   <Button

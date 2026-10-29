@@ -928,6 +928,10 @@ export interface Settings {
   global_proxy?: string;
   python_interpreter?: string; // Python interpreter path for custom script tools; empty means detect at runtime.
   workers?: number; // Concurrent worker agents (default 3); applies to tasks started afterward.
+  agent_concurrency_enabled?: boolean;
+  agent_concurrency_limit?: number;
+  agent_runs_active?: number;
+  agent_runs_waiting?: number;
   // Task concurrency cap: maximum running tasks. Disabled=unlimited; excess new tasks queue and start as slots become available.
   task_concurrency_enabled?: boolean; // Default false.
   task_concurrency_limit?: number; // Default 5 when enabled.
@@ -1173,7 +1177,7 @@ export interface MCPServer {
   name: string;
   transport: "stdio" | "http" | "sse";
   command?: string;
-  args: string[];
+  args: string[] | null;
   env: Record<string, string>;
   url?: string;
   enabled: boolean;
@@ -1228,13 +1232,11 @@ export interface Tool {
   key: string;
   system: boolean;
   description: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  schema: Record<string, any>; // full JSON-Schema (object with properties)
+  schema: Record<string, unknown> | null; // full JSON-Schema; null uses code defaults
   agents: string[]; // bound agent keys
   enabled: boolean;
   kind?: "builtin" | "shell" | "command" | "script" | "http"; // Custom tool type.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  exec?: Record<string, any>; // Custom tool execution specification (kind!=builtin).
+  exec?: Record<string, unknown>; // Custom tool execution specification (kind!=builtin).
   deferred?: boolean; // Deferred schema (SearchExtraTools/ExecuteExtraTool).
   calls?: number; // persistent runtime invocation count (older APIs may omit it)
 }
@@ -1313,8 +1315,7 @@ export interface InterceptPending {
   task_id?: string;
   agent_name: string;
   tool_name: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tool_input: Record<string, any>;
+  tool_input: Record<string, unknown>;
   status: "pending" | "allowed" | "denied" | "timeout";
   reason: string; // Rule message or model judgment reason; model reasons carry a [Model] prefix.
   decided_at?: string;

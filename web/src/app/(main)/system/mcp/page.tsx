@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,19 +56,25 @@ export default function MCPPage() {
     api
       .agents()
       .then(setAgents)
-      .catch(() => {});
+      .catch(() => {
+        // Keep the page usable when agent metadata is unavailable.
+      });
     api
       .mcpServers()
       .then((ss) => {
         setServers(ss);
-        ss.forEach((s) =>
-          api
+        ss.forEach((s) => {
+          void api
             .resourceVisibility("mcp", s.id)
             .then((ids) => setVisibility((v) => ({ ...v, [s.id]: ids })))
-            .catch(() => {}),
-        );
+            .catch(() => {
+              // Visibility is supplementary; an individual lookup may fail independently.
+            });
+        });
       })
-      .catch(() => {});
+      .catch(() => {
+        // Keep the add flow available when existing servers cannot be loaded.
+      });
   }, []);
   React.useEffect(() => {
     load();
@@ -118,7 +124,7 @@ export default function MCPPage() {
     });
     setTab("config");
     setOpen(true);
-    loadTools(s.id);
+    void loadTools(s.id);
   }
 
   async function loadTools(id: number) {
@@ -174,7 +180,7 @@ export default function MCPPage() {
       if (!editing) setOpen(false);
       load();
     } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
+      toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -189,7 +195,7 @@ export default function MCPPage() {
       toast.success(`Discovered ${t.length} tools`);
       load();
     } catch (e) {
-      toast.error("Refresh failed: " + (e as Error).message);
+      toast.error(`Refresh failed: ${(e as Error).message}`);
     } finally {
       setRefreshing(false);
     }
@@ -202,7 +208,7 @@ export default function MCPPage() {
       setOpen(false);
       load();
     } catch (e) {
-      toast.error("Delete failed: " + (e as Error).message);
+      toast.error(`Delete failed: ${(e as Error).message}`);
     }
   }
 
@@ -211,7 +217,7 @@ export default function MCPPage() {
       await api.saveMcpServer({ ...s, enabled: !s.enabled });
       load();
     } catch (e) {
-      toast.error("Operation failed: " + (e as Error).message);
+      toast.error(`Operation failed: ${(e as Error).message}`);
     }
   }
 
@@ -222,7 +228,7 @@ export default function MCPPage() {
       toast.success(`${on ? "Revoked" : "Granted"} visibility for "${agentName}"`);
       load();
     } catch (e) {
-      toast.error("Operation failed: " + (e as Error).message);
+      toast.error(`Operation failed: ${(e as Error).message}`);
     }
   }
 
@@ -297,8 +303,12 @@ export default function MCPPage() {
               value={form.url}
               onChange={(e) => setF({ url: e.target.value })}
             />
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={form.insecure} onCheckedChange={(v) => setF({ insecure: v === true })} />
+            <label htmlFor="m-insecure" className="flex items-center gap-2 text-sm">
+              <Checkbox
+                id="m-insecure"
+                checked={form.insecure}
+                onCheckedChange={(v) => setF({ insecure: v === true })}
+              />
               Skip TLS certificate verification (self-signed certificates)
             </label>
           </div>
@@ -340,7 +350,7 @@ export default function MCPPage() {
               <div key={t.name} className="py-2.5">
                 <code className="font-mono text-sm">{t.name}</code>
                 {t.description && (
-                  <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">{t.description}</p>
+                  <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">{t.description}</p>
                 )}
               </div>
             ))}
@@ -353,7 +363,7 @@ export default function MCPPage() {
   return (
     <div className="flex flex-1 flex-col gap-4 md:gap-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">MCP</h1>
+        <h1 className="font-semibold text-xl tracking-tight">MCP</h1>
         <p className="text-muted-foreground text-sm">External MCP tool servers · visibility granted per agent</p>
       </div>
 
@@ -361,26 +371,28 @@ export default function MCPPage() {
         <button
           type="button"
           onClick={openAdd}
-          className="text-foreground/70 border-foreground/70 hover:bg-muted/60 hover:shadow-sm flex min-h-[116px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed transition"
+          className="flex min-h-[116px] flex-col items-center justify-center gap-2 rounded-xl border border-foreground/70 border-dashed text-foreground/70 transition hover:bg-muted/60 hover:shadow-sm"
         >
           <PlusIcon className="size-6" />
           <span className="text-sm">Add MCP</span>
         </button>
 
         {servers.map((s) => (
-          <Card
-            key={s.id}
-            onClick={() => openEdit(s)}
-            className="hover:border-primary/60 cursor-pointer gap-3 transition hover:shadow-sm"
-          >
+          <Card key={s.id} className="gap-3 transition hover:border-primary/60 hover:shadow-sm">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <ServerIcon className="text-muted-foreground size-4 shrink-0" />
-                <CardTitle className="truncate text-base">{s.name}</CardTitle>
-                <Badge variant="outline" className="uppercase">
-                  {s.transport}
-                </Badge>
-                <div className="ml-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  onClick={() => openEdit(s)}
+                >
+                  <ServerIcon className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate font-semibold text-base leading-none">{s.name}</span>
+                  <Badge variant="outline" className="uppercase">
+                    {s.transport}
+                  </Badge>
+                </button>
+                <div className="ml-auto flex items-center gap-2">
                   <Switch checked={s.enabled} onCheckedChange={() => toggleEnabled(s)} aria-label="Enable" />
                   <Button size="icon" variant="outline" aria-label="Delete" onClick={() => removeServer(s)}>
                     <Trash2Icon className="text-destructive" />
@@ -389,21 +401,25 @@ export default function MCPPage() {
               </div>
             </CardHeader>
             <CardContent className="grid gap-3">
-              <p className="text-muted-foreground text-sm">
+              <button type="button" className="text-left text-muted-foreground text-sm" onClick={() => openEdit(s)}>
                 {s.tools && s.tools.length > 0 ? `${s.tools.length} tools` : "No tools discovered yet"}
-              </p>
-              <div className="grid gap-2" onClick={(e) => e.stopPropagation()}>
+              </button>
+              <div className="grid gap-2">
                 <span className="text-muted-foreground text-xs">Visibility (per agent)</span>
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
-                  {agents.map((a) => (
-                    <label key={a.key} className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={(visibility[s.id] ?? []).includes(a.id)}
-                        onCheckedChange={() => toggleVisibility(s.id, a.id, a.name)}
-                      />
-                      {a.name}
-                    </label>
-                  ))}
+                  {agents.map((a) => {
+                    const checkboxId = `mcp-${s.id}-agent-${encodeURIComponent(a.id)}`;
+                    return (
+                      <label key={a.key} htmlFor={checkboxId} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          id={checkboxId}
+                          checked={(visibility[s.id] ?? []).includes(a.id)}
+                          onCheckedChange={() => toggleVisibility(s.id, a.id, a.name)}
+                        />
+                        {a.name}
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             </CardContent>

@@ -19,6 +19,9 @@ web/next-env.d.ts
 # development tools
 .playwright-mcp/
 .playwright-cli/
+# Playwright artifacts
+/web/playwright-report/
+/web/test-results/
 .idea/
 .vscode/
 *.swp

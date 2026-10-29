@@ -31,8 +31,8 @@ import type {
 
 // fmtTokens formats compact token counts (1.2k / 3.4M) for approval usage statistics.
 function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
 
@@ -41,7 +41,7 @@ function JudgeStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border bg-muted/20 px-3 py-2">
       <div className="text-[10px] text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-lg font-semibold tabular-nums">{value}</div>
+      <div className="mt-0.5 font-semibold text-lg tabular-nums">{value}</div>
     </div>
   );
 }
@@ -156,7 +156,7 @@ function ActionBadge({ action }: { action: InterceptAction }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</Label>
+      <Label className="font-medium text-muted-foreground text-xs uppercase tracking-wide">{label}</Label>
       {children}
     </div>
   );
@@ -199,19 +199,19 @@ function JudgeCard() {
       setCfg(j);
       setProfiles(ps);
     } catch (e) {
-      toast.error("Failed to load model fallback settings: " + (e as Error).message);
+      toast.error(`Failed to load model fallback settings: ${(e as Error).message}`);
     } finally {
       setLoading(false);
     }
   }, []);
 
   React.useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   // Fetch approval usage when enabled, including when initial settings load as true.
   React.useEffect(() => {
-    if (cfg.enabled) loadUsage();
+    if (cfg.enabled) void loadUsage();
   }, [cfg.enabled, loadUsage]);
 
   function patch(p: Partial<JudgeConfig>) {
@@ -225,7 +225,7 @@ function JudgeCard() {
       toast.success("Model fallback settings saved");
       await load(); // Read back the built-in template if the prompt was cleared.
     } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
+      toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -240,7 +240,7 @@ function JudgeCard() {
       setCfg(j);
       toast.success("Built-in default template restored");
     } catch (e) {
-      toast.error("Restore failed: " + (e as Error).message);
+      toast.error(`Restore failed: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -257,8 +257,8 @@ function JudgeCard() {
         <div className="flex items-center gap-2.5">
           <BotIcon className={`h-5 w-5 shrink-0 ${cfg.enabled ? "text-violet-600" : "text-muted-foreground"}`} />
           <div>
-            <p className="text-sm font-semibold leading-tight">Model fallback approval</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="font-semibold text-sm leading-tight">Model fallback approval</p>
+            <p className="mt-0.5 text-muted-foreground text-xs">
               Commands in the <span className="font-medium text-foreground">Interception scope</span> that{" "}
               <span className="font-medium text-foreground">match no interception rule</span> are evaluated by the model
               (allow / request approval / block).
@@ -266,7 +266,7 @@ function JudgeCard() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="text-xs text-muted-foreground">{cfg.enabled ? "Enabled" : "Disabled"}</span>
+          <span className="text-muted-foreground text-xs">{cfg.enabled ? "Enabled" : "Disabled"}</span>
           <Switch checked={cfg.enabled} disabled={loading} onCheckedChange={(v) => patch({ enabled: v })} />
         </div>
       </div>
@@ -277,8 +277,8 @@ function JudgeCard() {
           <CardContent className="p-4">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium">Approval token usage</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="font-medium text-sm">Approval token usage</p>
+                <p className="text-muted-foreground text-xs">
                   Cumulative model fallback usage, tracked separately (worker=judge) from individual model profiles.
                 </p>
               </div>
@@ -295,7 +295,7 @@ function JudgeCard() {
             </div>
             {usage.daily.length > 0 && (
               <div className="mt-4">
-                <p className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                <p className="mb-2 text-[10px] text-muted-foreground uppercase tracking-wider">
                   Daily usage over the last 30 days (input + output)
                 </p>
                 <JudgeSparkbars daily={usage.daily} />
@@ -312,8 +312,8 @@ function JudgeCard() {
             <CardContent className="flex h-full flex-col gap-2 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">Approval prompt</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="font-medium text-sm">Approval prompt</p>
+                  <p className="text-muted-foreground text-xs">
                     Edit the prompt the model uses to decide ALLOW / ASK / DENY
                   </p>
                 </div>
@@ -336,7 +336,7 @@ function JudgeCard() {
           <Card className="lg:col-span-2">
             <CardContent className="space-y-5 p-4">
               <div className="space-y-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <p className="font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">
                   Decision model and policy
                 </p>
                 <Field label="Approval model">
@@ -385,7 +385,7 @@ function JudgeCard() {
               <Separator />
 
               <div className="space-y-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <p className="font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">
                   Human approval (when requested by the model)
                 </p>
                 <Field label="Approval wait timeout (seconds)">
@@ -471,8 +471,8 @@ export default function InterceptPage() {
   }, []);
 
   React.useEffect(() => {
-    load();
-    loadScope();
+    void load();
+    void loadScope();
   }, [load, loadScope]);
 
   React.useEffect(() => {
@@ -548,7 +548,7 @@ export default function InterceptPage() {
         toast.success("Rule created");
       }
       setOpen(false);
-      load();
+      await load();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -560,7 +560,7 @@ export default function InterceptPage() {
     try {
       await api.deleteInterceptRule(id);
       toast.success("Rule deleted");
-      load();
+      await load();
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -569,7 +569,7 @@ export default function InterceptPage() {
   async function handleToggle(rule: InterceptRule) {
     try {
       await api.toggleInterceptRule(rule.id, !rule.enabled);
-      load();
+      await load();
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -585,7 +585,7 @@ export default function InterceptPage() {
       setAllTools(tools);
       setEnabledTools(new Set(cfg.enabled_tools));
     } catch (e) {
-      toast.error("Load failed: " + (e as Error).message);
+      toast.error(`Load failed: ${(e as Error).message}`);
     } finally {
       setScopeLoading(false);
     }
@@ -608,7 +608,7 @@ export default function InterceptPage() {
       setScopeTools([...enabledTools]);
       setScopeOpen(false);
     } catch (e) {
-      toast.error("Save failed: " + (e as Error).message);
+      toast.error(`Save failed: ${(e as Error).message}`);
     } finally {
       setScopeSaving(false);
     }
@@ -624,8 +624,8 @@ export default function InterceptPage() {
       <div className="flex items-center gap-2.5">
         <ShieldAlertIcon className="h-5 w-5 shrink-0" />
         <div>
-          <h1 className="text-lg font-semibold leading-tight">Command Interception</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <h1 className="font-semibold text-lg leading-tight">Command Interception</h1>
+          <p className="mt-0.5 text-muted-foreground text-sm">
             Match interception rules before tool execution; unmatched commands can be evaluated by the fallback model.
           </p>
         </div>
@@ -675,7 +675,7 @@ export default function InterceptPage() {
         {/* Tab: interception rules */}
         <TabsContent value="rules" className="mt-4 flex flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Rules are checked by priority (highest first); the first matching rule takes effect.
             </p>
             <Button onClick={openNew} size="sm" className="shrink-0">
@@ -687,11 +687,11 @@ export default function InterceptPage() {
           <Card>
             <CardContent className="p-0">
               {loading ? (
-                <p className="p-6 text-sm text-muted-foreground">Loading…</p>
+                <p className="p-6 text-muted-foreground text-sm">Loading…</p>
               ) : rules.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
                   <ShieldAlertIcon className="h-8 w-8 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">No rules yet</p>
+                  <p className="text-muted-foreground text-sm">No rules yet</p>
                   <Button size="sm" variant="outline" onClick={openNew}>
                     <PlusIcon className="h-4 w-4" />
                     Create the first rule
@@ -719,17 +719,17 @@ export default function InterceptPage() {
                         </TableCell>
                         <TableCell className="font-medium text-sm">{rule.name}</TableCell>
                         <TableCell>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-muted-foreground text-xs">
                             {rule.match_target === "tool_name" ? "Tool name" : "Input"}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-muted-foreground text-xs">
                             {rule.match_type === "regex" ? "Regex" : "String"}
                           </span>
                         </TableCell>
                         <TableCell className="max-w-[220px]">
-                          <code className="block truncate rounded bg-muted px-1.5 py-0.5 text-xs font-mono">
+                          <code className="block truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
                             {rule.pattern}
                           </code>
                         </TableCell>
@@ -779,7 +779,7 @@ export default function InterceptPage() {
             </SheetDescription>
           </SheetHeader>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
             <Field label="Name">
               <Input
                 placeholder="Give this rule a name"
@@ -792,7 +792,7 @@ export default function InterceptPage() {
               <Input
                 type="number"
                 value={form.priority}
-                onChange={(e) => set({ priority: parseInt(e.target.value) || 0 })}
+                onChange={(e) => set({ priority: Number.parseInt(e.target.value, 10) || 0 })}
               />
             </Field>
 
@@ -832,9 +832,9 @@ export default function InterceptPage() {
                 onChange={(e) => set({ pattern: e.target.value })}
                 className={regexErr ? "border-destructive focus-visible:ring-destructive" : ""}
               />
-              {regexErr && <p className="text-xs text-destructive mt-1">{regexErr}</p>}
+              {regexErr && <p className="mt-1 text-destructive text-xs">{regexErr}</p>}
               {regexWarn && (
-                <p className="text-xs text-amber-600 mt-1">
+                <p className="mt-1 text-amber-600 text-xs">
                   Contains Go RE2 extensions (e.g. <code className="font-mono">(?i)</code>), which the browser cannot
                   preview. The server validates the pattern on submission.
                 </p>
@@ -877,8 +877,8 @@ export default function InterceptPage() {
                 <Separator />
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium">Enable approval timeout</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="font-medium text-sm">Enable approval timeout</p>
+                    <p className="text-muted-foreground text-xs">
                       Automatically handle the request when the timeout expires
                     </p>
                   </div>
@@ -927,7 +927,7 @@ export default function InterceptPage() {
             </div>
           </div>
 
-          <SheetFooter className="border-t px-6 py-4 flex-row justify-end gap-2">
+          <SheetFooter className="flex-row justify-end gap-2 border-t px-6 py-4">
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
@@ -941,7 +941,7 @@ export default function InterceptPage() {
       {/* ---- scope dialog ---- */}
       <Dialog open={scopeOpen} onOpenChange={setScopeOpen}>
         <DialogContent
-          className="sm:max-w-lg flex flex-col overflow-hidden p-0 gap-0"
+          className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
           style={{ maxHeight: "min(80vh, 560px)" }}
         >
           <DialogHeader className="shrink-0 border-b px-6 py-4">
@@ -954,14 +954,14 @@ export default function InterceptPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-5">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-4">
             {scopeLoading ? (
-              <p className="text-sm text-muted-foreground py-4">Loading…</p>
+              <p className="py-4 text-muted-foreground text-sm">Loading…</p>
             ) : (
               toolGroups.map((group, gi) => (
                 <div key={group.label}>
                   {gi > 0 && <Separator className="mb-5" />}
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  <p className="mb-2 font-semibold text-[10px] text-muted-foreground uppercase tracking-wider">
                     {group.label}
                   </p>
                   <div className="space-y-0.5">
@@ -972,7 +972,7 @@ export default function InterceptPage() {
                           checked={enabledTools.has(t.key)}
                           onCheckedChange={(v) => toggleTool(t.key, v)}
                         />
-                        <label htmlFor={`scope-${t.key}`} className="flex-1 min-w-0 cursor-pointer">
+                        <label htmlFor={`scope-${t.key}`} className="min-w-0 flex-1 cursor-pointer">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-sm">{t.key}</span>
                             {t.kind && t.kind !== "builtin" && (
@@ -982,7 +982,7 @@ export default function InterceptPage() {
                             )}
                           </div>
                           {t.description && (
-                            <p className="text-[11px] text-muted-foreground line-clamp-1">{t.description}</p>
+                            <p className="line-clamp-1 text-[11px] text-muted-foreground">{t.description}</p>
                           )}
                         </label>
                       </div>
@@ -993,7 +993,7 @@ export default function InterceptPage() {
             )}
           </div>
 
-          <div className="shrink-0 border-t px-6 py-3 flex justify-end gap-2">
+          <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-3">
             <Button variant="outline" size="sm" onClick={() => setScopeOpen(false)}>
               Cancel
             </Button>

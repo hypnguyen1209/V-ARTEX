@@ -2880,7 +2880,6 @@ export const tokenSessions: SessionTokenUsage[] = (() => {
     if (item.worker === "mainagent") session = "main";
     else if (item.worker === "planner") session = "plan";
     else if (item.intent_id) session = `intent:${item.intent_id}`;
-    if (!session) continue;
     const current = totals.get(session) ?? {
       session,
       input_tokens: 0,
@@ -3431,6 +3430,10 @@ export const settings: Settings = {
   global_proxy: "",
   python_interpreter: "/usr/bin/python3",
   workers: 3,
+  agent_concurrency_enabled: false,
+  agent_concurrency_limit: 8,
+  agent_runs_active: 0,
+  agent_runs_waiting: 0,
   llm_pool_enabled: true,
   llm_pool_bind_fallback: false,
   noa_compaction: false,

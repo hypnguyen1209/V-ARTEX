@@ -20,12 +20,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hypnguyen1209/V-ARTEX/llmrec"
 	"github.com/Autumn-27/norma/agentcore"
 	"github.com/Autumn-27/norma/compaction"
 	"github.com/Autumn-27/norma/llm"
 	acperm "github.com/Autumn-27/norma/permission"
 	"github.com/Autumn-27/norma/transcript"
+	"github.com/hypnguyen1209/V-ARTEX/llmrec"
 )
 
 // Config describes the LLM backend resolved from the environment.
@@ -455,6 +455,16 @@ func clipBody(s string) string {
 // endpoint/key actually work. Returns the round-trip latency and the model's
 // reply text.
 func TestConnection(ctx context.Context, c Config) (time.Duration, string, error) {
+	return testConnection(ctx, c, true)
+}
+
+// TestConnectionQuiet performs the same live probe as TestConnection without
+// logging captured request or response bodies.
+func TestConnectionQuiet(ctx context.Context, c Config) (time.Duration, string, error) {
+	return testConnection(ctx, c, false)
+}
+
+func testConnection(ctx context.Context, c Config, logWire bool) (time.Duration, string, error) {
 	prov, err := c.NewProvider()
 	if err != nil {
 		return 0, "", err
@@ -464,8 +474,11 @@ func TestConnection(ctx context.Context, c Config) (time.Duration, string, error
 	// Capture raw wire responses: connection tests need the gateway's status and response body,
 	// which are lost after norma decodes them into StreamEvent. quotaAwareTransport finds
 	// this Capture in context and fills in the status and body for each HTTP attempt.
-	ctx, capt := llmrec.NewCapture(ctx)
-	defer logTestConnection(c, capt)
+	if logWire {
+		var capt *llmrec.Capture
+		ctx, capt = llmrec.NewCapture(ctx)
+		defer logTestConnection(c, capt)
+	}
 	// Connection testing is a one-shot path without agentcore's session loop, so no session ID
 	// is attached automatically. Endpoints with SessionHeaderKey, such as opencode zen requiring
 	// x-opencode-session (otherwise 400 MissingSessionID), could fail tests while chat works.

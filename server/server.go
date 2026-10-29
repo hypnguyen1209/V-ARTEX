@@ -19,6 +19,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Autumn-27/norma/llm"
+	actool "github.com/Autumn-27/norma/tool"
+	"github.com/Autumn-27/norma/transcript"
 	"github.com/hypnguyen1209/V-ARTEX/agent"
 	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/intercept"
@@ -26,9 +29,6 @@ import (
 	"github.com/hypnguyen1209/V-ARTEX/llmrec"
 	"github.com/hypnguyen1209/V-ARTEX/report"
 	"github.com/hypnguyen1209/V-ARTEX/traffic"
-	"github.com/Autumn-27/norma/llm"
-	actool "github.com/Autumn-27/norma/tool"
-	"github.com/Autumn-27/norma/transcript"
 )
 
 // BuildVersion is the backend application version, injected from cmd/artex at
@@ -3326,23 +3326,29 @@ func (s *Server) settingsPayload() map[string]any {
 	on, backend, braveKey, tavilyKey, proxy := s.m.WebSearch()
 	pyStored, _, _ := s.m.pg.GetSetting(settingPythonInterp)
 	concOn, concLimit := s.m.ConcurrencyLimit()
+	agentOn, agentLimit := s.m.AgentConcurrency()
+	agentStats := s.m.agentRuns.snapshot()
 	if concLimit == 0 {
 		concLimit = defaultConcurrencyLimit // Return a sensible UI default even when disabled.
 	}
 	return map[string]any{
-		"traffic_capture":          s.m.TrafficEnabled(),
-		"agent_traffic_binding":    s.m.pg.GetBool(settingAgentTrafficBinding, false),
-		"llm_record":               s.m.LLMRecordEnabled(),
-		"web_search_enabled":       on,
-		"web_search_backend":       backend,
-		"brave_key_set":            strings.TrimSpace(braveKey) != "",
-		"tavily_key_set":           strings.TrimSpace(tavilyKey) != "",
-		"web_search_proxy":         proxy,                       // Independent outbound HTTP/HTTPS/SOCKS5 proxy; empty means direct.
-		"global_proxy":             s.m.GlobalProxy(),           // Global outbound HTTP/HTTPS/SOCKS5 proxy for all target traffic; empty means direct.
-		"python_interpreter":       strings.TrimSpace(pyStored), // User/detected interpreter; empty uses runtime detection.
-		"workers":                  s.m.Workers(),               // Concurrent workers (default 3), applied to subsequently started tasks.
-		"task_concurrency_enabled": concOn,                      // Task concurrency switch, default off.
-		"task_concurrency_limit":   concLimit,                   // Maximum simultaneous tasks, default 5 when enabled.
+		"traffic_capture":           s.m.TrafficEnabled(),
+		"agent_traffic_binding":     s.m.pg.GetBool(settingAgentTrafficBinding, false),
+		"llm_record":                s.m.LLMRecordEnabled(),
+		"web_search_enabled":        on,
+		"web_search_backend":        backend,
+		"brave_key_set":             strings.TrimSpace(braveKey) != "",
+		"tavily_key_set":            strings.TrimSpace(tavilyKey) != "",
+		"web_search_proxy":          proxy,                       // Independent outbound HTTP/HTTPS/SOCKS5 proxy; empty means direct.
+		"global_proxy":              s.m.GlobalProxy(),           // Global outbound HTTP/HTTPS/SOCKS5 proxy for all target traffic; empty means direct.
+		"python_interpreter":        strings.TrimSpace(pyStored), // User/detected interpreter; empty uses runtime detection.
+		"workers":                   s.m.Workers(),               // Concurrent workers (default 3), applied to subsequently started tasks.
+		"task_concurrency_enabled":  concOn,                      // Task concurrency switch, default off.
+		"task_concurrency_limit":    concLimit,                   // Maximum simultaneous tasks, default 5 when enabled.
+		"agent_concurrency_enabled": agentOn,
+		"agent_concurrency_limit":   agentLimit,
+		"agent_runs_active":         agentStats.Active,
+		"agent_runs_waiting":        agentStats.Waiting,
 		// LLM failover defaults off; global-profile agents switch profiles when unavailable.
 		// bind_fallback matters only when failover is enabled and defaults off.
 		"llm_pool_enabled":       s.m.LLMPoolEnabled(),
@@ -3414,8 +3420,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		PythonInterp     *string `json:"python_interpreter"` // Python interpreter path for custom script tools.
 		Workers          *int    `json:"workers"`            // Concurrent workers (>0), applied to subsequently started tasks.
 		// Concurrent running-task cap: disabled is unlimited; excess new tasks queue and start as slots open.
-		ConcurrencyEnabled *bool `json:"task_concurrency_enabled"`
-		ConcurrencyLimit   *int  `json:"task_concurrency_limit"`
+		ConcurrencyEnabled      *bool `json:"task_concurrency_enabled"`
+		ConcurrencyLimit        *int  `json:"task_concurrency_limit"`
+		AgentConcurrencyEnabled *bool `json:"agent_concurrency_enabled"`
+		AgentConcurrencyLimit   *int  `json:"agent_concurrency_limit"`
 		// LLM failover and bound-profile fallback switches both require rebuilding
 		// the provider chain through changed -> applyLLM below.
 		LLMPoolEnabled      *bool `json:"llm_pool_enabled"`
@@ -3510,6 +3518,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		// Reconcile immediately: disabling releases all queued tasks; a higher cap fills slots without waiting for a tick.
 		go s.reconcileConcurrency()
+	}
+	if req.AgentConcurrencyEnabled != nil || req.AgentConcurrencyLimit != nil {
+		if err := s.m.UpdateAgentConcurrency(req.AgentConcurrencyEnabled, req.AgentConcurrencyLimit); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	if req.PythonInterp != nil {
 		if err := s.m.pg.SetSetting(settingPythonInterp, strings.TrimSpace(*req.PythonInterp)); err != nil {
