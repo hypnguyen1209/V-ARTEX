@@ -87,7 +87,7 @@ After installation, get the one-time setup token from the server console (`docke
 git clone https://github.com/hypnguyen1209/V-ARTEX.git
 cd V-ARTEX
 cp .env.example .env          # Set POSTGRES_PASSWORD and optionally ANTHROPIC_API_KEY
-docker compose up -d          # Pull the autumn27/artex image + postgres
+docker compose up -d          # Pull ghcr.io/hypnguyen1209/v-artex + postgres
 # → http://localhost:8787
 ```
 
