@@ -252,6 +252,7 @@ function fallbackHarness({ live = false, key = "main:0", history, generic } = {}
   );
   const pending = new Map();
   const stores = {};
+  const writes = [];
   const activeKeyRef = { current: key };
   const fallbackMaxRef = { current: {} };
   const systemFallbackCursorRef = { current: 0 };
@@ -269,11 +270,13 @@ function fallbackHarness({ live = false, key = "main:0", history, generic } = {}
     sseLive: live,
     taskId: "task",
     activeKeyRef,
+    storeRef: { current: stores },
     fallbackMaxRef,
     systemFallbackCursorRef,
     atBottomRef: { current: true },
     api: { activityHistory: history, activity: generic },
     patchStore: (session, update) => {
+      writes.push(session);
       stores[session] = update(stores[session] ?? state());
     },
     setTimeout: (callback, delay) => {
@@ -289,6 +292,7 @@ function fallbackHarness({ live = false, key = "main:0", history, generic } = {}
   const cleanup = vm.runInNewContext(script, context);
   return {
     stores,
+    writes,
     pending,
     atBottomRef: context.atBottomRef,
     activeKeyRef,
@@ -392,6 +396,7 @@ test("System fallback scans full generic pages and retains its cursor across tic
   );
   await harness.tick();
   assert.deepEqual(cursors, [0, 500, 502]);
+  assert.equal(harness.writes.length, 1, "unchanged System polling must advance no transcript state");
   assert.equal(harness.systemFallbackCursorRef.current, 502);
   harness.cleanup();
 });
@@ -469,10 +474,40 @@ test("returning to the bottom trims retained history even when the fallback page
   });
   await harness.tick();
   assert.equal(harness.stores["main:0"].items.length, MAX_KEEP + 1);
+  await harness.tick();
+  assert.equal(harness.writes.length, 1, "unchanged scrolled-up history must not patch");
   harness.atBottomRef.current = true;
   await harness.tick();
+  assert.equal(harness.writes.length, 2, "returning to bottom must perform exactly one trim write");
   assert.equal(harness.stores["main:0"].items.length, MAX_KEEP);
   assert.equal(harness.stores["main:0"].earliestSeq, 2);
   assert.equal(harness.stores["main:0"].hasMore, true);
   harness.cleanup();
+});
+
+test("unchanged healthy bounded fallback pages perform no store writes", async () => {
+  const harness = fallbackHarness({ history: async () => ({ items: [activity(7)], hasMore: false }) });
+  await harness.tick();
+  assert.equal(harness.writes.length, 1);
+  const previous = harness.stores["main:0"];
+  await harness.tick();
+  await harness.tick();
+  assert.equal(harness.writes.length, 1, "unchanged responses must never call patchStore");
+  assert.equal(harness.stores["main:0"], previous);
+  harness.cleanup();
+});
+
+test("fallback guards read the latest committed store without restarting polling", () => {
+  const sync = nodes(ast, callNamed("React.useEffect")).find((effect) =>
+    effect.arguments[0]?.getText(ast).includes("storeRef.current = store"),
+  );
+  assert.ok(sync, "the polling guard must keep its store snapshot current");
+  assert.equal(sync.arguments[1].getText(ast), "[store]");
+  const store = { plan: state({ loaded: true }) };
+  const storeRef = { current: {} };
+  const script = ts.transpileModule(`(${sync.arguments[0].getText(ast)})()`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  vm.runInNewContext(script, { store, storeRef });
+  assert.equal(storeRef.current, store);
 });

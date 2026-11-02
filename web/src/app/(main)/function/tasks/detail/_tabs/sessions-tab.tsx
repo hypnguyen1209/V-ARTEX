@@ -547,6 +547,10 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   const [listOpen, setListOpen] = React.useState(false);
   // Per-session lazily-loaded caches, keyed by session_key (main | plan | intent:<id>).
   const [store, setStore] = React.useState<SessionStore>({});
+  const storeRef = React.useRef(store);
+  React.useEffect(() => {
+    storeRef.current = store;
+  }, [store]);
   // Worker sessions derived from exploration intents (paged past the old 300 cap).
   const [intents, setIntents] = React.useState<TaskNode[]>([]);
   const [intentAssets, setIntentAssets] = React.useState<IntentAsset[]>([]);
@@ -1134,15 +1138,16 @@ export function SessionsTab({ taskId }: { taskId: string }) {
           pageHasMore = response.hasMore;
         }
         const maxSeq = items.reduce((max, item) => Math.max(max, item.seq), 0);
-        const newer = maxSeq > (fallbackMaxRef.current[key] ?? -1);
+        const newerSeq = maxSeq > (fallbackMaxRef.current[key] ?? -1);
         fallbackMaxRef.current[key] = Math.max(maxSeq, fallbackMaxRef.current[key] ?? -1);
-        patchStore(key, (state) => {
-          // An unchanged page still recovers an initial request that failed late.
-          const trimmable = key !== activeKeyRef.current || atBottomRef.current;
-          const needsTrim = trimmable && state.items.length > MAX_KEEP;
-          if (!newer && state.loaded && !state.loading && !state.error && !needsTrim) return state;
-          return mergeFallbackPage(state, items, pageHasMore, trimmable);
-        });
+        const state = storeRef.current[key];
+        const trimmable = key !== activeKeyRef.current || atBottomRef.current;
+        const needsRecovery = !state?.loaded || state.loading || !!state.error;
+        const needsTrim = trimmable && (state?.items.length ?? 0) > MAX_KEEP;
+        // Unchanged pages can still recover a late load failure or trim retained
+        // history after scrolling down. Otherwise avoid scheduling a store write.
+        if (!newerSeq && !needsRecovery && !needsTrim) return;
+        patchStore(key, (current) => mergeFallbackPage(current, items, pageHasMore, trimmable));
       } catch {
         // Best-effort fallback; retry after the next delay.
       } finally {
