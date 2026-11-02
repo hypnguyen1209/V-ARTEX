@@ -536,3 +536,183 @@ test("unchanged fallback sequences still initialize an empty session's missing h
   assert.equal(harness.writes.length, 2, "established pagination must not cause repeat writes");
   harness.cleanup();
 });
+
+const reportPath = new URL("../app/(main)/function/tasks/detail/_tabs/report-tab.tsx", import.meta.url);
+const reportSource = readFileSync(reportPath, "utf8");
+const reportAst = ts.createSourceFile(
+  reportPath.pathname,
+  reportSource,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TSX,
+);
+
+test("reports separate load errors from empty success and remount by task", () => {
+  assert.match(reportSource, /<TaskReport key=\{taskId\} taskId=\{taskId\}/);
+  for (const status of ["loading", "error", "ready"]) assert.ok(reportSource.includes(`status: "${status}"`));
+  assert.match(reportSource, /role="alert"/);
+  assert.match(reportSource, /role="status"/);
+});
+
+function reportHarness(request, clipboard = async () => true) {
+  const hooks = [];
+  let cursor = 0;
+  let effects = [];
+  let writesAfterCleanup = 0;
+  let unmounted = false;
+  const element = (type, props) => ({ type, props });
+  const context = {
+    exports: {},
+    React: {
+      useState(initial) {
+        const index = cursor++;
+        hooks[index] ??= { value: initial };
+        return [
+          hooks[index].value,
+          (value) => {
+            if (unmounted) writesAfterCleanup++;
+            hooks[index].value = typeof value === "function" ? value(hooks[index].value) : value;
+          },
+        ];
+      },
+      useRef(initial) {
+        const index = cursor++;
+        hooks[index] ??= { current: initial };
+        return hooks[index];
+      },
+      useEffect(callback, deps) {
+        const index = cursor++;
+        if (!hooks[index] || deps.some((dep, i) => dep !== hooks[index].deps[i])) {
+          effects.push(() => {
+            hooks[index]?.cleanup?.();
+            hooks[index] = { deps, cleanup: callback() };
+          });
+        }
+      },
+    },
+    api: { report: request },
+    copyText: clipboard,
+    toast: { success: () => undefined, error: () => undefined },
+    setTimeout,
+    clearTimeout,
+  };
+  for (const name of [
+    "Markdown",
+    "Button",
+    "Card",
+    "CardContent",
+    "CardHeader",
+    "CardTitle",
+    "CheckIcon",
+    "CopyIcon",
+    "FileTextIcon",
+  ])
+    context[name] = name;
+  const body = reportAst.statements
+    .filter((node) => !ts.isImportDeclaration(node))
+    .map((node) => node.getText(reportAst))
+    .join("\n");
+  const compiled = ts.transpileModule(
+    `${body}\nexports.TaskReport = typeof TaskReport === "undefined" ? undefined : TaskReport;`,
+    {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+    },
+  ).outputText;
+  context.require = () => ({ jsx: element, jsxs: element });
+  vm.runInNewContext(compiled, context);
+  assert.equal(typeof context.exports.TaskReport, "function", "report state must belong to a keyed task component");
+  return {
+    render() {
+      cursor = 0;
+      const tree = context.exports.TaskReport({ taskId: "task" });
+      for (const effect of effects) effect();
+      effects = [];
+      return tree;
+    },
+    cleanup() {
+      for (const hook of hooks) hook?.cleanup?.();
+      unmounted = true;
+    },
+    get writesAfterCleanup() {
+      return writesAfterCleanup;
+    },
+  };
+}
+
+function reportElements(tree) {
+  if (!tree || typeof tree !== "object") return [];
+  const children = tree.props?.children;
+  return [tree, ...(Array.isArray(children) ? children : [children]).flatMap(reportElements)];
+}
+
+const settleReport = () => new Promise(setImmediate);
+
+test("report failure shows Retry, retry requests again, and empty success has no Copy", async () => {
+  let attempts = 0;
+  const harness = reportHarness(async () => {
+    if (++attempts === 1) throw new Error("offline");
+    return "";
+  });
+  assert.ok(reportElements(harness.render()).some((node) => node.props?.role === "status"));
+  await settleReport();
+  const failed = reportElements(harness.render());
+  assert.ok(failed.some((node) => node.props?.role === "alert"));
+  const retry = failed.find((node) => node.type === "Button" && node.props.children === "Retry");
+  assert.ok(retry);
+  retry.props.onClick();
+  harness.render();
+  await settleReport();
+  const empty = reportElements(harness.render());
+  assert.equal(attempts, 2);
+  assert.ok(empty.some((node) => node.props?.children?.includes?.("No report yet")));
+  assert.equal(empty.filter((node) => node.type === "Button").length, 0);
+  harness.cleanup();
+});
+
+test("nonempty reports expose Copy and pending requests cannot write after cleanup", async () => {
+  let resolve;
+  const oldTask = reportHarness(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  oldTask.render();
+  oldTask.cleanup();
+  const nextTask = reportHarness(async () => "new report");
+  const first = reportElements(nextTask.render());
+  assert.equal(first.filter((node) => node.type === "Button").length, 0);
+  resolve("old report");
+  await settleReport();
+  assert.equal(oldTask.writesAfterCleanup, 0);
+  const ready = reportElements(nextTask.render());
+  assert.ok(ready.some((node) => node.type === "Markdown" && node.props.text === "new report"));
+  const copy = ready.find((node) => node.type === "Button");
+  assert.ok(copy);
+  await copy.props.onClick();
+  assert.ok(reportElements(nextTask.render()).some((node) => node.type === "CheckIcon"));
+  nextTask.cleanup();
+  const freshTask = reportHarness(async () => "third report");
+  assert.equal(reportElements(freshTask.render()).filter((node) => node.type === "CheckIcon").length, 0);
+  freshTask.cleanup();
+});
+
+test("pending report copy cannot update state after task cleanup", async () => {
+  let finishCopy;
+  const harness = reportHarness(
+    async () => "report",
+    () =>
+      new Promise((done) => {
+        finishCopy = done;
+      }),
+  );
+  harness.render();
+  await settleReport();
+  const copy = reportElements(harness.render()).find((node) => node.type === "Button");
+  assert.ok(copy);
+  const pending = copy.props.onClick();
+  harness.cleanup();
+  finishCopy(true);
+  await pending;
+  assert.equal(harness.writesAfterCleanup, 0);
+});
