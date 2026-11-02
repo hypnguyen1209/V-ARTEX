@@ -556,6 +556,9 @@ test("reports separate load errors from empty success and remount by task", () =
 
 function reportHarness(request, clipboard = async () => true) {
   const hooks = [];
+  const timers = new Map();
+  let now = 0;
+  let nextTimer = 0;
   let cursor = 0;
   let effects = [];
   let writesAfterCleanup = 0;
@@ -593,8 +596,14 @@ function reportHarness(request, clipboard = async () => true) {
     api: { report: request },
     copyText: clipboard,
     toast: { success: () => undefined, error: () => undefined },
-    setTimeout,
-    clearTimeout,
+    setTimeout(callback, delay) {
+      const id = ++nextTimer;
+      timers.set(id, { callback, due: now + delay });
+      return id;
+    },
+    clearTimeout(id) {
+      timers.delete(id);
+    },
   };
   for (const name of [
     "Markdown",
@@ -622,6 +631,18 @@ function reportHarness(request, clipboard = async () => true) {
   vm.runInNewContext(compiled, context);
   assert.equal(typeof context.exports.TaskReport, "function", "report state must belong to a keyed task component");
   return {
+    advanceTime(milliseconds) {
+      now += milliseconds;
+      for (const [id, timer] of timers) {
+        if (timer.due <= now) {
+          timers.delete(id);
+          timer.callback();
+        }
+      }
+    },
+    get pendingTimers() {
+      return timers.size;
+    },
     render() {
       cursor = 0;
       const tree = context.exports.TaskReport({ taskId: "task" });
@@ -715,4 +736,27 @@ test("pending report copy cannot update state after task cleanup", async () => {
   finishCopy(true);
   await pending;
   assert.equal(harness.writesAfterCleanup, 0);
+});
+
+test("copied feedback resets after 1500ms and unmount cancels its pending reset", async () => {
+  const harness = reportHarness(async () => "report");
+  harness.render();
+  await settleReport();
+  const copy = reportElements(harness.render()).find((node) => node.type === "Button");
+  await copy.props.onClick();
+  assert.ok(reportElements(harness.render()).some((node) => node.type === "CheckIcon"));
+  assert.equal(harness.pendingTimers, 1);
+  harness.advanceTime(1499);
+  assert.ok(reportElements(harness.render()).some((node) => node.type === "CheckIcon"));
+  harness.advanceTime(1);
+  assert.ok(reportElements(harness.render()).some((node) => node.type === "CopyIcon"));
+  assert.equal(harness.pendingTimers, 0);
+
+  await copy.props.onClick();
+  assert.ok(reportElements(harness.render()).some((node) => node.type === "CheckIcon"));
+  assert.equal(harness.pendingTimers, 1);
+  harness.cleanup();
+  assert.equal(harness.pendingTimers, 0, "unmount must cancel the feedback timer");
+  harness.advanceTime(1500);
+  assert.equal(harness.writesAfterCleanup, 0, "cancelled feedback must never update an unmounted report");
 });
