@@ -647,6 +647,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   const snapshotRef = React.useRef(0); // task-level snapshot cursor → SSE since=
   const esRef = React.useRef<EventSource | null>(null);
   const activeKeyRef = React.useRef(mainSessionKey(0)); // current session key (for SSE dispatch/unread)
+  const fallbackMaxRef = React.useRef<Record<string, number>>({});
   const atBottomRef = React.useRef(true); // transcript pinned to bottom?
   const llmToastSeqRef = React.useRef<Set<number>>(new Set());
   const chatStatusRequestRef = React.useRef(0);
@@ -893,6 +894,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
     setMainSegs([{ seq: 0, created_at: "" }]);
     setCurrentSeg(0);
     snapshotRef.current = 0;
+    fallbackMaxRef.current = {};
     llmToastSeqRef.current = new Set();
     reqTokenRef.current = {};
     // Reserve the initial main key so the active-session effect (which fires for main on
@@ -1048,6 +1050,34 @@ export function SessionsTab({ taskId }: { taskId: string }) {
       esRef.current = null;
     };
   }, [taskId, patchStore]);
+
+  React.useEffect(() => {
+    if (sseLive) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      const key = activeKeyRef.current;
+      try {
+        const response = await api.activityHistory(taskId, key, 0, PAGE);
+        if (!alive) return;
+        const maxSeq = response.items.reduce((max, item) => Math.max(max, item.seq), 0);
+        if (maxSeq <= (fallbackMaxRef.current[key] ?? 0)) return;
+        fallbackMaxRef.current[key] = maxSeq;
+        patchStore(key, (state) => ({ ...state, items: mergeBySeq(state.items, response.items) }));
+      } catch {
+        // Best-effort fallback; retry after the next delay.
+      } finally {
+        if (alive) timer = setTimeout(poll, 2000);
+      }
+    };
+
+    timer = setTimeout(poll, 2000);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [sseLive, taskId, patchStore]);
 
   React.useEffect(() => {
     let active = true;
