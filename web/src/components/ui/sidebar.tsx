@@ -4,7 +4,7 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
-import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsMobile, useIsTablet } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -66,6 +66,7 @@ function SidebarProvider({
   onOpenChange?: (open: boolean) => void
 }) {
   const isMobile = useIsMobile()
+  const isTablet = useIsTablet()
   const [openMobile, setOpenMobile] = React.useState(false)
 
   // This is the internal state of the sidebar.
@@ -86,6 +87,17 @@ function SidebarProvider({
     },
     [setOpenProp, open]
   )
+
+  const previousViewport = React.useRef<"mobile" | "tablet" | "desktop" | undefined>(undefined)
+  React.useEffect(() => {
+    if (isTablet === undefined) return
+    const viewport = isMobile ? "mobile" : isTablet ? "tablet" : "desktop"
+    if (previousViewport.current !== viewport) {
+      if (viewport === "tablet") setOpen(false)
+      else if (viewport === "desktop" && previousViewport.current === "tablet") setOpen(true)
+    }
+    previousViewport.current = viewport
+  }, [isTablet, isMobile, setOpen])
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {

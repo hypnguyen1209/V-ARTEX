@@ -39,3 +39,40 @@ test("tasks and global run-budget settings work in mock mode", async ({ page }) 
   await expect(page.getByText("Global agent concurrency settings saved")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
+
+test("tasks table fits its tablet container without horizontal scrolling", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "tablet-chromium");
+  await page.goto("/function/tasks");
+  await expect(page.getByText("4/4 records", { exact: true })).toBeVisible();
+  const table = page.locator('[data-slot="table-container"]').first();
+  await expect(table).toBeVisible();
+  await expect.poll(() => table.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  for (const name of ["Name", "Goal", "Findings C/H/M/L", "Actions"]) {
+    await expect(table.getByRole("columnheader", { name, exact: true })).toBeVisible();
+  }
+  await expect(table.getByRole("checkbox", { name: "Select all tasks on this page" })).toBeVisible();
+  await expect(table.getByRole("button", { name: "ID sorted descending; click to reverse sort order" })).toBeVisible();
+  await expect(table.getByRole("button", { name: "Sort Status descending" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test("sidebar collapses on entering tablet while allowing manual expansion", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "tablet-chromium");
+  await page.goto("/function/tasks");
+  const sidebar = page.locator('[data-slot="sidebar"][data-state]');
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await page.setViewportSize({ width: 1100, height: 768 });
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await page.setViewportSize({ width: 1280, height: 768 });
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await page.setViewportSize({ width: 767, height: 768 });
+  await expect(sidebar).toHaveCount(0);
+  await page.setViewportSize({ width: 768, height: 768 });
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  await page.setViewportSize({ width: 1280, height: 768 });
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+  await page.setViewportSize({ width: 1279, height: 768 });
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+});
