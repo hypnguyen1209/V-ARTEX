@@ -23,10 +23,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/hypnguyen1209/V-ARTEX/agent"
-	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/Autumn-27/norma/llm"
 	"github.com/Autumn-27/norma/skill"
+	"github.com/hypnguyen1209/V-ARTEX/agent"
+	"github.com/hypnguyen1209/V-ARTEX/db"
 )
 
 // validSkillName checks the agentskills.io name constraints, widened so a skill can
@@ -1502,6 +1502,10 @@ func skillPathRune(r rune) bool {
 // maxSkillPathLen caps a relative path so a pathological name can't reach the syscall.
 const maxSkillPathLen = 512
 
+func normalizeSkillAPIPath(file string) string {
+	return path.Clean(strings.ReplaceAll(filepath.ToSlash(file), `\`, "/"))
+}
+
 // skillRelPath validates a relative file path supplied by the client.
 // Returns the cleaned path and an empty error string on success.
 // Validation order matters: character check first (before Clean) so encoding tricks
@@ -1526,13 +1530,13 @@ func skillRelPath(file string) (string, string) {
 		return "", "invalid path: '..' not allowed"
 	}
 	// 3. Reject leading slash and empty segments (double slash).
-	//    Leading slash would survive filepath.Clean as an absolute path.
+	//    Leading slash would survive normalization as an absolute path.
 	if strings.HasPrefix(file, "/") || strings.Contains(file, "//") {
 		return "", "invalid path: must be relative with no empty segments"
 	}
-	// 4. Normalize and final safety re-check after Clean.
-	//    filepath.Clean removes redundant separators and resolves single dots.
-	clean := filepath.Clean(file)
+	// 4. Normalize to an API path and final safety re-check after Clean.
+	//    path.Clean removes redundant separators and resolves single dots.
+	clean := normalizeSkillAPIPath(file)
 	if clean == "." || filepath.IsAbs(clean) || strings.HasPrefix(clean, "..") {
 		return "", "invalid path"
 	}
@@ -1554,6 +1558,7 @@ func walkSkillFiles(root string) ([]string, error) {
 		if relErr != nil || rel == "." {
 			return nil
 		}
+		rel = normalizeSkillAPIPath(rel)
 		if d.IsDir() {
 			entries = append(entries, rel+"/")
 		} else {

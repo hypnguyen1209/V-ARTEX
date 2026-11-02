@@ -64,6 +64,49 @@ func TestSkillRelPath(t *testing.T) {
 	}
 }
 
+func TestNormalizeSkillAPIPath(t *testing.T) {
+	tests := map[string]string{
+		`scripts\run.py`:      "scripts/run.py",
+		`references\api\x.md`: "references/api/x.md",
+		"assets/image.png":    "assets/image.png",
+	}
+	for in, want := range tests {
+		if got := normalizeSkillAPIPath(in); got != want {
+			t.Errorf("normalizeSkillAPIPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestWalkSkillFilesReturnsAPIPaths(t *testing.T) {
+	root := t.TempDir()
+	scripts := filepath.Join(root, "scripts")
+	if err := os.MkdirAll(scripts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scripts, "run.py"), []byte("print(1)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := walkSkillFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"scripts/": false, "scripts/run.py": false}
+	for _, entry := range entries {
+		if strings.Contains(entry, `\`) {
+			t.Errorf("walkSkillFiles returned non-API path %q", entry)
+		}
+		if _, ok := want[entry]; ok {
+			want[entry] = true
+		}
+	}
+	for entry, found := range want {
+		if !found {
+			t.Errorf("walkSkillFiles entries = %q, missing %q", entries, entry)
+		}
+	}
+}
+
 type nopWriteCloser struct{ io.Writer }
 
 func (nopWriteCloser) Close() error { return nil }
