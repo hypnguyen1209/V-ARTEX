@@ -29,7 +29,9 @@ Skill paths are API identifiers, so they remain slash-separated independent of t
 
 ### Tool-name drift tolerance
 
-Agent assembly will add non-conflicting lowercase, snake-case, and uppercase aliases only for tools whose canonical names contain uppercase characters. Each alias delegates all behavior to the canonical tool and overrides only `Name()`. Alias names are added to the deferred list so provider-facing schemas continue to show only canonical tools. Tests will cover name conversion, delegation, collision avoidance, and assembly behavior.
+`Config.NewProvider` will decorate the LLM provider to normalize model-emitted tool names. Each request builds an alias map from its final `CompletionRequest.Tools`, including WebFetch, web_search, background, and Todo tools added by agentcore after assembly. The underlying provider receives the original canonical schemas unchanged. Lowercase, snake-case, and uppercase aliases are generated only for canonical names containing uppercase characters; canonical names win and ambiguous generated aliases are dropped.
+
+The decorator rewrites only assistant `BlockToolUse.Name` values in complete responses and `SEToolUseStart.ToolName` values in streamed responses. It preserves other response fields, events, errors, and early consumer cancellation. Compatibility aliases never enter the registry or `DeferredTools`, so calls follow the canonical permission path without enabling a deferred executor. Existing MCP/skill deferral and unlock behavior remains unchanged. Tests cover conversion, collisions, per-request schemas, streaming preservation, SDK-added tools, and an agentcore/harness hard-deny regression with a nil unlock set.
 
 ### Transcript resilience
 
@@ -46,7 +48,7 @@ The task table will respond to its content width through a container query and p
 ## Error Handling and Safety
 
 - A failed image publication cannot affect GitHub Release artifacts because jobs remain independent after verified builds.
-- Tool aliases never overwrite a canonical or previously registered name.
+- Canonical tool names take priority, ambiguous aliases remain unresolved, and normalized calls retain normal permission checks. Compatibility aliases never register deferred tools.
 - Transcript fallback failures are best-effort and retried on the next tick; they do not disable SSE reconnection.
 - Report failures are visible and retryable rather than being represented as valid empty data.
 - Responsive changes hide only redundant table summaries; task details remain available from the retained row action.
@@ -65,7 +67,7 @@ Implementation follows test-first cycles. Targeted tests will prove each behavio
 
 - Docker deployments and releases reference only the V-ARTEX-owned GHCR image.
 - Nested skill files round-trip on Windows without backslashes entering the API.
-- Drifted calls such as `bash` and `web_fetch` reach their canonical handlers without duplicate provider schemas.
+- Drifted calls such as `bash` and `web_fetch` resolve against each request's final canonical schemas and reach their canonical handlers only after normal permission checks, without duplicate schemas or compatibility aliases in the registry or `DeferredTools`.
 - The active transcript advances without reload when SSE is unavailable.
 - Report errors are distinguishable from empty reports and cannot expose the prior task's copy action.
 - The task page passes overflow checks at desktop, 1024×768 tablet, and Pixel 7 viewports.

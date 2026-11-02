@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	actool "github.com/Autumn-27/norma/tool"
 )
@@ -106,71 +105,6 @@ func BuiltinToolSeeds() []ToolSeed {
 // default inputs are injected. Tools with no matching DB row (MCP/skill/host tools like
 // traffic) pass through untouched. nil = tools unchanged. Wired in server/assembly.go.
 var ToolResolve func(ctx context.Context, agentKey string, tools []actool.CoreTool) []actool.CoreTool
-
-type aliasTool struct {
-	actool.CoreTool
-	name string
-}
-
-func (a *aliasTool) Name() string { return a.name }
-
-func toolAliasNames(name string) []string {
-	lower := strings.ToLower(name)
-	if name == lower {
-		return nil
-	}
-	candidates := []string{lower, camelToSnake(name), strings.ToUpper(name)}
-	seen := map[string]bool{name: true}
-	var aliases []string
-	for _, alias := range candidates {
-		if seen[alias] {
-			continue
-		}
-		seen[alias] = true
-		aliases = append(aliases, alias)
-	}
-	return aliases
-}
-
-func camelToSnake(name string) string {
-	var b strings.Builder
-	b.Grow(len(name))
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if c >= 'A' && c <= 'Z' && i > 0 && name[i-1] != '_' {
-			prev := name[i-1]
-			nextLower := i+1 < len(name) && name[i+1] >= 'a' && name[i+1] <= 'z'
-			if prev >= 'a' && prev <= 'z' || prev >= '0' && prev <= '9' || nextLower {
-				b.WriteByte('_')
-			}
-		}
-		b.WriteByte(c)
-	}
-	return strings.ToLower(b.String())
-}
-
-func addToolAliases(tools []actool.CoreTool, deferred []string) ([]actool.CoreTool, []string) {
-	occupied := make(map[string]bool, len(tools)+len(deferred))
-	for _, tool := range tools {
-		occupied[tool.Name()] = true
-	}
-	for _, name := range deferred {
-		occupied[name] = true
-	}
-	out := append([]actool.CoreTool(nil), tools...)
-	deferredOut := append([]string(nil), deferred...)
-	for _, tool := range tools {
-		for _, name := range toolAliasNames(tool.Name()) {
-			if occupied[name] {
-				continue
-			}
-			occupied[name] = true
-			out = append(out, &aliasTool{CoreTool: tool, name: name})
-			deferredOut = append(deferredOut, name)
-		}
-	}
-	return out, deferredOut
-}
 
 // DecorateTool wraps t so Description()/InputSchema() report the DB overrides and
 // Call() injects scalar parameter defaults (from schema's "default" props) whenever

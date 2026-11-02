@@ -4,7 +4,7 @@
 
 **Goal:** Port six proven reliability fixes into V-ARTEX while keeping the product English-only and dependency-neutral.
 
-**Architecture:** Each fix stays at its existing boundary: distribution configuration, skill-path normalization, agent tool assembly, task-session transport, report UI state, and responsive task layout. Every behavior receives a focused regression test before the minimum production change, followed by the repository's complete Go, frontend, race, and browser gates.
+**Architecture:** Each fix stays at its existing boundary: distribution configuration, skill-path normalization, LLM provider responses, task-session transport, report UI state, and responsive task layout. Every behavior receives a focused regression test before the minimum production change, followed by the repository's complete Go, frontend, race, and browser gates.
 
 **Tech Stack:** Go 1.26, GitHub Actions, Docker Compose/GHCR, React 19, Next.js 16, TypeScript, Node test runner, Playwright, Tailwind CSS 4.
 
@@ -17,7 +17,7 @@
 - `docker-compose.yml`, `README.md`: consume and document the owned image.
 - `cmd/artex/distribution_test.go`: prevent distribution files from returning to an upstream image namespace.
 - `server/server_mgmt.go`, `server/skill_upload_test.go`: normalize API paths independently of the host OS.
-- `agent/toolcatalog.go`, `agent/toolalias_test.go`, `agent/assembly.go`: register hidden, non-conflicting aliases for CamelCase tools.
+- `agent/toolalias.go`, `agent/toolalias_test.go`, `agent/provider.go`: normalize model-emitted tool names using each request's final canonical schemas; keep registry and deferred-tool wiring unchanged.
 - `web/src/components/task-resilience.test.mjs`: source-contract regressions for transcript fallback and report states.
 - `web/src/app/(main)/function/tasks/detail/_tabs/sessions-tab.tsx`: poll the active transcript only while SSE is down.
 - `web/src/app/(main)/function/tasks/detail/_tabs/report-tab.tsx`: model loading/error/ready states and retry.
@@ -240,176 +240,52 @@ git commit -m "fix(server): normalize skill API paths"
 ### Task 3: Tolerate model tool-name drift
 
 **Files:**
-- Create: `agent/toolalias_test.go`
-- Modify: `agent/toolcatalog.go`
-- Modify: `agent/assembly.go`
+- Create: `agent/toolalias.go`, `agent/toolalias_test.go`
+- Modify: `agent/provider.go`
+- Restore canonical-only assembly/catalog behavior in `agent/assembly.go` and `agent/toolcatalog.go` if registry aliases were introduced.
 
-- [ ] **Step 1: Write failing alias tests**
+- [ ] **Step 1: Write failing provider-boundary regression tests**
 
-Create `agent/toolalias_test.go` with tests that require the new API:
+Cover lowercase, snake-case, and uppercase variants for CamelCase canonical names; lowercase canonical tools receive no aliases. Exercise both `Complete` and `Stream` with a fake underlying provider. Assert that the underlying request and canonical tool schemas pass through unchanged, only assistant tool-use names or stream tool-start names change, and response metadata, errors, other events, and early consumer cancellation survive.
 
-```go
-package agent
+Test canonical-name priority, ambiguous generated aliases in either schema order, and rebuilding the map from every request, including tools added or removed between calls.
 
-import (
-	"context"
-	"encoding/json"
-	"slices"
-	"testing"
-
-	actool "github.com/Autumn-27/norma/tool"
-)
-
-func TestToolAliasNames(t *testing.T) {
-	for name, want := range map[string][]string{
-		"WebFetch":  {"webfetch", "web_fetch", "WEBFETCH"},
-		"MultiEdit": {"multiedit", "multi_edit", "MULTIEDIT"},
-		"LS":        {"ls"},
-		"sleep":     nil,
-	} {
-		if got := toolAliasNames(name); !slices.Equal(got, want) {
-			t.Errorf("toolAliasNames(%q) = %v, want %v", name, got, want)
-		}
-	}
-}
-
-func TestAddToolAliasesDelegatesAndAvoidsCollisions(t *testing.T) {
-	called := false
-	base := actool.Build(actool.Spec{
-		Name: "WebFetch", Description: "fetch",
-		Run: func(context.Context, json.RawMessage, *actool.ToolContext) (actool.Result, error) {
-			called = true
-			return actool.Text("ok"), nil
-		},
-	})
-	existing := actool.Build(actool.Spec{Name: "webfetch", Description: "existing"})
-	tools, deferred := addToolAliases([]actool.CoreTool{base, existing}, nil)
-
-	byName := map[string]actool.CoreTool{}
-	for _, tool := range tools {
-		byName[tool.Name()] = tool
-	}
-	if byName["webfetch"] != existing {
-		t.Fatal("alias replaced an existing tool")
-	}
-	alias := byName["web_fetch"]
-	if alias == nil || !slices.Contains(deferred, "web_fetch") {
-		t.Fatal("snake-case alias was not registered as deferred")
-	}
-	if _, err := alias.Call(context.Background(), json.RawMessage(`{}`), nil); err != nil {
-		t.Fatal(err)
-	}
-	if !called {
-		t.Fatal("alias did not delegate to the canonical handler")
-	}
-}
-```
+Use an actual `agentcore` session to prove that SDK-added `WebFetch` is recognized after assembly. Separately emit an alias for a harmless hard-denied canonical tool with a nil unlock set: its permission callback must run and its handler must never run. Assert that compatibility aliases appear in neither the registry nor `DeferredTools`, and do not enable `ExecuteExtraTool`/`SearchExtraTools`. Verify that `Config.NewProvider` installs the decorator and preserves construction errors.
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `go test ./agent -run '^(TestToolAliasNames|TestAddToolAliasesDelegatesAndAvoidsCollisions)$' -count=1`
+Run: `go test ./agent -run 'ToolAlias|ConfigNewProvider' -count=1`
 
-Expected: build FAIL because `toolAliasNames` and `addToolAliases` do not exist.
+Expected before implementation: missing normalizer or behavioral failures for alias resolution and the canonical permission path.
 
-- [ ] **Step 3: Implement aliases in `agent/toolcatalog.go`**
+- [ ] **Step 3: Normalize names at the provider boundary**
 
-Add `strings` to imports, then add:
+Implement an `llm.Provider` decorator in `agent/toolalias.go`. Derive its alias map from each `CompletionRequest.Tools`, which already includes the final SDK-added WebFetch, web_search, background, and Todo tools when enabled. Pass the original request to the underlying provider without adding or changing schemas.
 
-```go
-type aliasTool struct {
-	actool.CoreTool
-	name string
-}
+Canonical names always win. Remove generated aliases shared by different canonical names, independently of schema order. Do not generate aliases for all-lowercase canonical names.
 
-func (a *aliasTool) Name() string { return a.name }
+For `Complete`, rewrite only assistant `BlockToolUse.Name` values. For `Stream`, rewrite only `SEToolUseStart.ToolName` and propagate the consumer's stop immediately. Preserve all other response fields, events, and errors. Wrap the successfully constructed provider in `Config.NewProvider`; return construction errors unchanged.
 
-func toolAliasNames(name string) []string {
-	if name == strings.ToLower(name) {
-		return nil
-	}
-	candidates := []string{strings.ToLower(name), camelToSnake(name), strings.ToUpper(name)}
-	out := make([]string, 0, len(candidates))
-	seen := map[string]bool{name: true}
-	for _, candidate := range candidates {
-		if candidate != "" && !seen[candidate] {
-			seen[candidate] = true
-			out = append(out, candidate)
-		}
-	}
-	return out
-}
-
-func camelToSnake(value string) string {
-	runes := []rune(value)
-	var out strings.Builder
-	for i, current := range runes {
-		if current >= 'A' && current <= 'Z' {
-			if i > 0 {
-				previous := runes[i-1]
-				var next rune
-				if i+1 < len(runes) {
-					next = runes[i+1]
-				}
-				if (previous >= 'a' && previous <= 'z') || (next >= 'a' && next <= 'z') {
-					out.WriteByte('_')
-				}
-			}
-			out.WriteRune(current + ('a' - 'A'))
-			continue
-		}
-		out.WriteRune(current)
-	}
-	return out.String()
-}
-
-func addToolAliases(tools []actool.CoreTool, deferred []string) ([]actool.CoreTool, []string) {
-	taken := map[string]bool{}
-	for _, tool := range tools {
-		taken[tool.Name()] = true
-	}
-	for _, name := range deferred {
-		taken[name] = true
-	}
-	out := tools
-	extra := deferred
-	for _, tool := range tools {
-		for _, alias := range toolAliasNames(tool.Name()) {
-			if taken[alias] {
-				continue
-			}
-			taken[alias] = true
-			out = append(out, &aliasTool{CoreTool: tool, name: alias})
-			extra = append(extra, alias)
-		}
-	}
-	return out, extra
-}
-```
-
-Wire it immediately after `findingWorkflowTools` and before `guardPanic` in `agent/assembly.go`:
-
-```go
-out, def.FindingGuidance = findingWorkflowTools(agentKey, out)
-out, def.Deferred = addToolAliases(out, def.Deferred)
-```
+Keep compatibility aliases out of the registry and `DeferredTools`. Existing MCP/skill deferral and unlock wiring must remain unchanged so canonical calls continue through the normal permission checks.
 
 - [ ] **Step 4: Verify GREEN and the wider agent package**
 
 Run:
 
 ```bash
-gofmt -w agent/toolcatalog.go agent/toolalias_test.go agent/assembly.go
-go test ./agent -run '^(TestToolAliasNames|TestAddToolAliasesDelegatesAndAvoidsCollisions)$' -count=1
+gofmt -w agent/toolalias.go agent/toolalias_test.go agent/provider.go agent/assembly.go agent/toolcatalog.go
+go test ./agent -run 'ToolAlias|ConfigNewProvider' -count=1
 go test ./agent -count=1
+git diff --check
 ```
 
-Expected: PASS.
+Expected: PASS. Self-review provider wrapping, canonical schema passthrough, collision handling, permission enforcement, and unchanged deferred-tool behavior.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add agent/toolcatalog.go agent/toolalias_test.go agent/assembly.go
-git commit -m "fix(agent): accept safe built-in tool aliases"
+git add agent/toolalias.go agent/toolalias_test.go agent/provider.go agent/assembly.go agent/toolcatalog.go docs/superpowers/specs/2026-11-02-artex-global-improvements-design.md docs/superpowers/plans/2026-11-02-artex-global-improvements.md
+git commit -m "fix(agent): normalize drifted tool names safely"
 ```
 
 ### Task 4: Make transcript updates resilient to SSE loss
@@ -751,7 +627,7 @@ git commit -m "fix(web): fit task controls at tablet widths"
 - [ ] **Step 1: Run formatting and static checks**
 
 ```bash
-gofmt -w cmd/artex/distribution_test.go server/server_mgmt.go server/skill_upload_test.go agent/toolcatalog.go agent/toolalias_test.go agent/assembly.go
+gofmt -w cmd/artex/distribution_test.go server/server_mgmt.go server/skill_upload_test.go agent/toolalias.go agent/toolalias_test.go agent/provider.go agent/toolcatalog.go agent/assembly.go
 git diff --check
 POSTGRES_PASSWORD=test docker compose config >/dev/null
 if command -v actionlint >/dev/null 2>&1; then actionlint; fi
