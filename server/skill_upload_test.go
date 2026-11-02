@@ -52,7 +52,7 @@ func TestSkillRelPath(t *testing.T) {
 		}
 	}
 	bad := []string{
-		"", "../etc/passwd", "a/../../b", "/abs/path", "a//b", `..\..\x`,
+		"", "../etc/passwd", "a/../../b", "/abs/path", "a//b", `scripts\run.py`, `..\..\x`,
 		"%2e%2e/x", "a\x00b", "\u4e2d\u6587 \u540d.md", "\u4e2d‮\u6587.md", "a#b.md", "a?b.md",
 		"a:b.md", string([]byte{0xd6, 0xd0}) + ".md", // Raw GBK bytes, invalid UTF-8.
 		strings.Repeat("a", maxSkillPathLen+1),
