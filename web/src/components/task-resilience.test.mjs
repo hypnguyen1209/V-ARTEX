@@ -511,3 +511,28 @@ test("fallback guards read the latest committed store without restarting polling
   vm.runInNewContext(script, { store, storeRef });
   assert.equal(storeRef.current, store);
 });
+
+test("the first nonempty fallback page initializes pagination for a loaded empty session", () => {
+  const { mergeFallbackPage } = loadFallbackState();
+  const updated = mergeFallbackPage(
+    state({ loaded: true }),
+    Array.from({ length: 200 }, (_, i) => activity(301 + i)),
+    true,
+    true,
+  );
+  assert.equal(updated.hasMore, true);
+  assert.equal(updated.earliestSeq, 301);
+});
+
+test("unchanged fallback sequences still initialize an empty session's missing history anchor", async () => {
+  const harness = fallbackHarness({ history: async () => ({ items: [activity(301)], hasMore: true }) });
+  await harness.tick();
+  harness.stores["main:0"] = state({ loaded: true });
+  await harness.tick();
+  assert.equal(harness.writes.length, 2);
+  assert.equal(harness.stores["main:0"].hasMore, true);
+  assert.equal(harness.stores["main:0"].earliestSeq, 301);
+  await harness.tick();
+  assert.equal(harness.writes.length, 2, "established pagination must not cause repeat writes");
+  harness.cleanup();
+});

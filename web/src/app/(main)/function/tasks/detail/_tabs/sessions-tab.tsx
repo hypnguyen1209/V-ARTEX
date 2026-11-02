@@ -169,8 +169,9 @@ function mergeFallbackPage(
   trimmable: boolean,
 ): SessionState {
   let items = mergeBySeq(state.items, incoming);
-  let hasMore = state.loaded ? state.hasMore : pageHasMore;
-  let earliestSeq = state.loaded ? state.earliestSeq : (items[0]?.seq ?? 0);
+  const anchored = state.loaded && state.earliestSeq > 0;
+  let hasMore = anchored ? state.hasMore : pageHasMore;
+  let earliestSeq = anchored ? state.earliestSeq : (items[0]?.seq ?? 0);
   if (trimmable && items.length > MAX_KEEP) {
     items = items.slice(items.length - MAX_KEEP);
     hasMore = true;
@@ -1142,10 +1143,11 @@ export function SessionsTab({ taskId }: { taskId: string }) {
         fallbackMaxRef.current[key] = Math.max(maxSeq, fallbackMaxRef.current[key] ?? -1);
         const state = storeRef.current[key];
         const trimmable = key !== activeKeyRef.current || atBottomRef.current;
-        const needsRecovery = !state?.loaded || state.loading || !!state.error;
+        const needsPagination = items.length > 0 && !state?.earliestSeq;
+        const needsRecovery = !state?.loaded || state.loading || !!state.error || needsPagination;
         const needsTrim = trimmable && (state?.items.length ?? 0) > MAX_KEEP;
-        // Unchanged pages can still recover a late load failure or trim retained
-        // history after scrolling down. Otherwise avoid scheduling a store write.
+        // Unchanged pages can still recover a late load failure, establish the
+        // first history anchor, or trim after scrolling down. Otherwise skip writes.
         if (!newerSeq && !needsRecovery && !needsTrim) return;
         patchStore(key, (current) => mergeFallbackPage(current, items, pageHasMore, trimmable));
       } catch {
