@@ -930,7 +930,7 @@ export default function TasksPage() {
               </div>
             ) : (
               <div className="@container">
-                <Table className="**:data-[slot='table-cell']:px-2 **:data-[slot='table-head']:px-2 @5xl:**:data-[slot='table-cell']:px-4 @5xl:**:data-[slot='table-head']:px-4">
+                <Table className="**:data-[slot='table-cell']:px-2 **:data-[slot='table-head']:px-2">
                   <TableHeader className="[&_tr]:border-t">
                     <TableRow>
                       <TableHead className="w-10">
@@ -958,13 +958,13 @@ export default function TasksPage() {
                         direction={sortDirection}
                         onSort={sortTasksBy}
                       />
-                      <TableHead className="@3xl:table-cell hidden whitespace-normal @5xl:whitespace-nowrap text-center">
+                      <TableHead className="@3xl:table-cell hidden whitespace-normal text-center">
                         Goal Progress
                       </TableHead>
                       <TableHead className="text-center" title="Critical / High / Medium / Low">
-                        Findings <span className="block @5xl:inline font-normal text-muted-foreground">C/H/M/L</span>
+                        Findings <span className="block font-normal text-muted-foreground">C/H/M/L</span>
                       </TableHead>
-                      <TableHead className="@4xl:table-cell hidden whitespace-normal @5xl:whitespace-nowrap text-center">
+                      <TableHead className="@4xl:table-cell hidden whitespace-normal text-center">
                         Running Workers
                       </TableHead>
                       <SortableTaskHead
@@ -1205,16 +1205,18 @@ const TaskRow = React.memo(function TaskRow({
         />
       </TableCell>
       <TableCell>
-        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{task.id}</code>
+        <code className="block max-w-20 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs" title={task.id}>
+          {task.id}
+        </code>
       </TableCell>
       <TableCell className="font-medium">
-        <div className="flex max-w-xs items-center gap-2">
+        <div className="flex @7xl:w-40 w-24 min-w-0 items-center gap-1">
           <TaskNameEditor task={task} onRename={onRename} />
           {task.active && <StarIcon className="size-4 shrink-0 fill-amber-400 text-amber-400" />}
           {taskIsPinned(task) && <PinIcon className="size-4 shrink-0 text-primary" aria-label="Pinned" />}
         </div>
       </TableCell>
-      <TableCell className="@5xl:table-cell hidden max-w-40 text-muted-foreground">
+      <TableCell className="@5xl:table-cell hidden @7xl:max-w-40 max-w-24 text-muted-foreground">
         <Link
           href={`/function/tasks/detail?id=${encodeURIComponent(task.id)}`}
           className="block truncate rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1223,7 +1225,7 @@ const TaskRow = React.memo(function TaskRow({
           {task.description}
         </Link>
       </TableCell>
-      <TableCell className="@5xl:max-w-40 max-w-24 truncate text-muted-foreground" title={task.goal}>
+      <TableCell className="@5xl:max-w-24 @7xl:max-w-40 max-w-16 truncate text-muted-foreground" title={task.goal}>
         {task.goal}
       </TableCell>
       <TableCell>
@@ -1277,7 +1279,7 @@ const TaskRow = React.memo(function TaskRow({
         })()}
       </TableCell>
       <TableCell
-        className="@7xl:table-cell hidden whitespace-nowrap text-right text-xs tabular-nums"
+        className="@7xl:table-cell hidden max-w-28 truncate whitespace-nowrap text-right text-xs tabular-nums"
         title={
           task.tokens
             ? `Input ${task.tokens.input_tokens} · Cache ${task.tokens.cache_read_tokens} · Output ${task.tokens.output_tokens}`
@@ -1297,7 +1299,7 @@ const TaskRow = React.memo(function TaskRow({
         )}
       </TableCell>
       <TableCell className="text-right">
-        <div className="flex items-center justify-end gap-0.5">
+        <div className="ml-auto flex @3xl:w-42 w-24 flex-wrap items-center justify-end gap-0.5">
           <Button size="icon" variant="ghost" asChild aria-label="View task details" title="View task details">
             <Link href={`/function/tasks/detail?id=${encodeURIComponent(task.id)}`}>
               <EyeIcon />
@@ -1360,7 +1362,7 @@ function TaskNameEditor({ task, onRename }: { task: Task; onRename: (task: Task,
           autoFocus
           disabled={saving}
           aria-label={`Task #${task.id} name`}
-          className="h-7 min-w-28 max-w-48 px-2 font-medium"
+          className="h-7 min-w-0 max-w-48 px-2 font-medium"
           onFocus={(event) => event.currentTarget.select()}
           onChange={(event) => setName(event.target.value)}
           onBlur={() => void finishEditing()}
