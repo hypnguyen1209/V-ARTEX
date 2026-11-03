@@ -58,6 +58,7 @@ test("tasks table fits its tablet container without horizontal scrolling", async
 
 for (const scenario of [
   { width: 768, expanded: false },
+  { width: 768, expanded: true },
   { width: 1024, expanded: false },
   { width: 1024, expanded: true },
   { width: 1440, expanded: true },
@@ -100,13 +101,30 @@ for (const scenario of [
             })
           );
         });
-        return { width: container.clientWidth, scroll: container.scrollWidth, actionsVisible: actions.every(Boolean) };
+        const coreControlsVisible = [
+          ...container.querySelectorAll(
+            "tbody td:is(:nth-child(1), :nth-child(2), :nth-child(3), :nth-child(5), :nth-child(6), :nth-child(8), :last-child)",
+          ),
+        ].every((cell) => {
+          const cellBounds = cell.getBoundingClientRect();
+          if (cellBounds.width === 0) return false;
+          return [...cell.querySelectorAll(":scope > *, a, button, [role=checkbox]")].every((control) => {
+            const rect = control.getBoundingClientRect();
+            return rect.left >= cellBounds.left - 1 && rect.right <= cellBounds.right + 1;
+          });
+        });
+        return {
+          width: container.clientWidth,
+          scroll: container.scrollWidth,
+          actionsVisible: actions.every(Boolean),
+          coreControlsVisible,
+        };
       });
     console.log(scenario, await measure());
     await expect
       .poll(async () => {
         const result = await measure();
-        return result.scroll <= result.width + 1 && result.actionsVisible;
+        return result.scroll <= result.width + 1 && result.actionsVisible && result.coreControlsVisible;
       })
       .toBe(true);
     await expectNoHorizontalOverflow(page);

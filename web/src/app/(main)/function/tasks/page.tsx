@@ -930,10 +930,10 @@ export default function TasksPage() {
               </div>
             ) : (
               <div className="@container">
-                <Table className="**:data-[slot='table-cell']:px-2 **:data-[slot='table-head']:px-2">
+                <Table className="@max-xl:table-fixed **:data-[slot='table-cell']:px-1 **:data-[slot='table-head']:px-1 @xl:**:data-[slot='table-cell']:px-2 @xl:**:data-[slot='table-head']:px-2">
                   <TableHeader className="[&_tr]:border-t">
                     <TableRow>
-                      <TableHead className="w-10">
+                      <TableHead className="@xl:w-10 w-6">
                         <Checkbox
                           checked={headerChecked}
                           onCheckedChange={(checked) => toggleSelectedPage(checked === true)}
@@ -945,15 +945,16 @@ export default function TasksPage() {
                         label="ID"
                         activeField={sortField}
                         direction={sortDirection}
-                        className="font-mono"
+                        className="@max-xl:w-12 font-mono"
                         onSort={sortTasksBy}
                       />
-                      <TableHead>Name</TableHead>
+                      <TableHead className="@max-xl:w-16">Name</TableHead>
                       <TableHead className="@5xl:table-cell hidden">Description</TableHead>
-                      <TableHead>Goal</TableHead>
+                      <TableHead className="@max-xl:w-12">Goal</TableHead>
                       <SortableTaskHead
                         field="status"
                         label="Status"
+                        className="@max-xl:w-20"
                         activeField={sortField}
                         direction={sortDirection}
                         onSort={sortTasksBy}
@@ -961,7 +962,7 @@ export default function TasksPage() {
                       <TableHead className="@3xl:table-cell hidden whitespace-normal text-center">
                         Goal Progress
                       </TableHead>
-                      <TableHead className="text-center" title="Critical / High / Medium / Low">
+                      <TableHead className="@max-xl:w-16 text-center" title="Critical / High / Medium / Low">
                         Findings <span className="block font-normal text-muted-foreground">C/H/M/L</span>
                       </TableHead>
                       <TableHead className="@4xl:table-cell hidden whitespace-normal text-center">
@@ -986,7 +987,7 @@ export default function TasksPage() {
                         onSort={sortTasksBy}
                       />
                       <TableHead className="@7xl:table-cell hidden text-right">Token</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead className="@max-xl:w-12 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1205,12 +1206,15 @@ const TaskRow = React.memo(function TaskRow({
         />
       </TableCell>
       <TableCell>
-        <code className="block max-w-20 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs" title={task.id}>
+        <code
+          className="block @xl:max-w-20 max-w-10 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+          title={task.id}
+        >
           {task.id}
         </code>
       </TableCell>
       <TableCell className="font-medium">
-        <div className="flex @7xl:w-40 w-24 min-w-0 items-center gap-1">
+        <div className="flex @7xl:w-40 @xl:w-24 w-16 min-w-0 @xl:flex-row flex-col @xl:items-center items-stretch gap-1">
           <TaskNameEditor task={task} onRename={onRename} />
           {task.active && <StarIcon className="size-4 shrink-0 fill-amber-400 text-amber-400" />}
           {taskIsPinned(task) && <PinIcon className="size-4 shrink-0 text-primary" aria-label="Pinned" />}
@@ -1225,11 +1229,14 @@ const TaskRow = React.memo(function TaskRow({
           {task.description}
         </Link>
       </TableCell>
-      <TableCell className="@5xl:max-w-24 @7xl:max-w-40 max-w-16 truncate text-muted-foreground" title={task.goal}>
+      <TableCell
+        className="@5xl:max-w-24 @7xl:max-w-40 @xl:max-w-16 max-w-10 truncate text-muted-foreground"
+        title={task.goal}
+      >
         {task.goal}
       </TableCell>
       <TableCell>
-        <StatusBadge domain="task" value={task.status} dot />
+        <StatusBadge domain="task" value={task.status} dot className="@max-xl:gap-1 @max-xl:px-1" />
       </TableCell>
       <TableCell className="@3xl:table-cell hidden text-center text-muted-foreground text-xs tabular-nums">
         {typeof task.goals_total === "number" && task.goals_total > 0 ? (
@@ -1299,7 +1306,7 @@ const TaskRow = React.memo(function TaskRow({
         )}
       </TableCell>
       <TableCell className="text-right">
-        <div className="ml-auto flex @3xl:w-42 w-24 flex-wrap items-center justify-end gap-0.5">
+        <div className="ml-auto flex @3xl:w-42 @xl:w-24 w-8 flex-wrap items-center justify-end gap-0.5">
           <Button size="icon" variant="ghost" asChild aria-label="View task details" title="View task details">
             <Link href={`/function/tasks/detail?id=${encodeURIComponent(task.id)}`}>
               <EyeIcon />
