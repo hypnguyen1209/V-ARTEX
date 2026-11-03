@@ -1117,6 +1117,7 @@ export function SessionsTab({ taskId }: { taskId: string }) {
       try {
         let items: Activity[];
         let pageHasMore = false;
+        let replaceHistory = false;
         if (key === "system") {
           let since = systemFallbackCursorRef.current;
           items = [];
@@ -1133,10 +1134,26 @@ export function SessionsTab({ taskId }: { taskId: string }) {
           }
           systemFallbackCursorRef.current = since;
         } else {
-          const response = await api.activityHistory(taskId, key, 0, PAGE);
-          if (!alive) return;
-          items = response.items;
-          pageHasMore = response.hasMore;
+          const cached = storeRef.current[key]?.items ?? [];
+          const tail = cached.reduce((max, item) => Math.max(max, item.seq), 0);
+          let before = 0;
+          items = [];
+          for (;;) {
+            const response = await api.activityHistory(taskId, key, before, PAGE);
+            if (!alive) return;
+            const earliest = response.items.reduce((min, item) => Math.min(min, item.seq), Infinity);
+            if (before && (earliest >= before || response.items.some((item) => item.seq >= before))) return;
+            items = mergeBySeq(response.items, items);
+            pageHasMore = response.hasMore;
+            if (!tail || earliest <= tail || !response.hasMore) break;
+            if (!Number.isFinite(earliest)) return;
+            if (items.length >= MAX_KEEP) {
+              if (key === activeKeyRef.current && !atBottomRef.current) return;
+              replaceHistory = true;
+              break;
+            }
+            before = earliest;
+          }
         }
         const maxSeq = items.reduce((max, item) => Math.max(max, item.seq), 0);
         const newerSeq = maxSeq > (fallbackMaxRef.current[key] ?? -1);
@@ -1149,7 +1166,12 @@ export function SessionsTab({ taskId }: { taskId: string }) {
         // Unchanged pages can still recover a late load failure, establish the
         // first history anchor, or trim after scrolling down. Otherwise skip writes.
         if (!newerSeq && !needsRecovery && !needsTrim) return;
-        patchStore(key, (current) => mergeFallbackPage(current, items, pageHasMore, trimmable));
+        patchStore(key, (current) => {
+          if (!replaceHistory) return mergeFallbackPage(current, items, pageHasMore, trimmable);
+          const newest = items[items.length - 1]?.seq ?? 0;
+          const tail = current.items.filter((item) => item.seq > newest);
+          return mergeFallbackPage({ ...current, items: tail, earliestSeq: 0, hasMore: true }, items, true, trimmable);
+        });
       } catch {
         // Best-effort fallback; retry after the next delay.
       } finally {

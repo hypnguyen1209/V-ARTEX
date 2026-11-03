@@ -150,7 +150,7 @@ test("the active transcript polls recursively only while task SSE is down", () =
   const key = activeKey.name.getText(ast);
 
   const historyCall = nodes(callback, callNamed("api.activityHistory")).find(
-    (call) => call.arguments.map((argument) => argument.getText(ast)).join(",") === `taskId,${key},0,PAGE`,
+    (call) => call.arguments.map((argument) => argument.getText(ast)).join(",") === `taskId,${key},before,PAGE`,
   );
   assert.ok(historyCall, "fallback polling must load the active session's latest history page");
 
@@ -306,6 +306,90 @@ function fallbackHarness({ live = false, key = "main:0", history, generic } = {}
     },
   };
 }
+
+test("fallback bridges multiple sparse history pages and stable repeats do not write", async () => {
+  const all = Array.from({ length: 501 }, (_, i) => activity((i + 1) * 3));
+  const calls = [];
+  const harness = fallbackHarness({
+    history: async (_task, _key, before, limit) => {
+      calls.push(before);
+      const older = before ? all.filter((item) => item.seq < before) : all;
+      return { items: older.slice(-limit), hasMore: older.length > limit };
+    },
+  });
+  harness.stores["main:0"] = state({ loaded: true, items: all.slice(0, 100), earliestSeq: 3 });
+  await harness.tick();
+  assert.deepEqual(calls, [0, 906, 306]);
+  assert.deepEqual(
+    Array.from(harness.stores["main:0"].items, (item) => item.seq),
+    all.map((item) => item.seq),
+  );
+  await harness.tick();
+  assert.equal(harness.writes.length, 1);
+  harness.cleanup();
+});
+
+test("bounded fallback retains a contiguous newest window with recoverable older history", async () => {
+  const { MAX_KEEP } = loadFallbackState();
+  const all = Array.from({ length: MAX_KEEP + 501 }, (_, i) => activity((i + 1) * 2));
+  const history = async (_task, _key, before, limit) => {
+    const older = before ? all.filter((item) => item.seq < before) : all;
+    return { items: older.slice(-limit), hasMore: older.length > limit };
+  };
+  const harness = fallbackHarness({ history });
+  harness.stores["main:0"] = state({ loaded: true, items: all.slice(0, 100), earliestSeq: 2 });
+  harness.atBottomRef.current = false;
+  await harness.tick();
+  assert.equal(harness.writes.length, 0);
+  harness.atBottomRef.current = true;
+  await harness.tick();
+  const retained = harness.stores["main:0"];
+  assert.equal(retained.items.length, MAX_KEEP);
+  assert.equal(retained.hasMore, true);
+  assert.equal(retained.earliestSeq, all[501].seq);
+  const older = await history("task", "main:0", retained.earliestSeq, 200);
+  assert.equal(older.items.at(-1).seq, all[500].seq);
+  await harness.tick();
+  assert.equal(harness.writes.length, 1);
+  harness.cleanup();
+});
+
+test("fallback stops without writing when backward pagination makes no progress", async () => {
+  let calls = 0;
+  const harness = fallbackHarness({
+    history: async () => {
+      calls++;
+      return { items: [activity(300)], hasMore: true };
+    },
+  });
+  harness.stores["main:0"] = state({ loaded: true, items: [activity(1)], earliestSeq: 1 });
+  await harness.tick();
+  assert.equal(calls, 2);
+  assert.equal(harness.writes.length, 0);
+  harness.cleanup();
+});
+
+test("fallback cleanup during a bridge discards intermediate pages", async () => {
+  let resolve;
+  let calls = 0;
+  const harness = fallbackHarness({
+    history: async () => {
+      if (++calls === 1) return { items: [activity(300)], hasMore: true };
+      return new Promise((done) => {
+        resolve = done;
+      });
+    },
+  });
+  harness.stores["main:0"] = state({ loaded: true, items: [activity(1)], earliestSeq: 1 });
+  const tick = harness.tick();
+  await new Promise((done) => setImmediate(done));
+  assert.equal(calls, 2);
+  harness.cleanup();
+  resolve({ items: [activity(1)], hasMore: false });
+  await tick;
+  assert.equal(harness.writes.length, 0);
+  assert.equal(harness.pending.size, 0);
+});
 
 test("healthy SSE starts no fallback timer or request", () => {
   const harness = fallbackHarness({ live: true, history: () => assert.fail("unexpected request") });
