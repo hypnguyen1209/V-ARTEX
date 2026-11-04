@@ -107,11 +107,14 @@ jobs:
             dist/SHA256SUMS
           generate_release_notes: true
 
-  # ④ Push multi-architecture images to Docker Hub using Linux binaries from the binaries job.
+  # ④ Push multi-architecture images to GitHub Container Registry using Linux binaries from the binaries job.
   #    Images only install tools and copy binaries; arm64 only emulates the apt layer for faster builds.
   docker:
     needs: binaries
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       # Get Dockerfile and skills/
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -127,12 +130,13 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: meta
         with:
-          images: autumn27/artex
+          images: ghcr.io/hypnguyen1209/v-artex
           tags: |
             type=ref,event=tag
             type=raw,value=latest

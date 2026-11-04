@@ -52,7 +52,7 @@ func TestSkillRelPath(t *testing.T) {
 		}
 	}
 	bad := []string{
-		"", "../etc/passwd", "a/../../b", "/abs/path", "a//b", `..\..\x`,
+		"", "../etc/passwd", "a/../../b", "/abs/path", "a//b", `scripts\run.py`, `..\..\x`,
 		"%2e%2e/x", "a\x00b", "\u4e2d\u6587 \u540d.md", "\u4e2d‮\u6587.md", "a#b.md", "a?b.md",
 		"a:b.md", string([]byte{0xd6, 0xd0}) + ".md", // Raw GBK bytes, invalid UTF-8.
 		strings.Repeat("a", maxSkillPathLen+1),
@@ -60,6 +60,49 @@ func TestSkillRelPath(t *testing.T) {
 	for _, in := range bad {
 		if got, msg := skillRelPath(in); msg == "" {
 			t.Errorf("skillRelPath(%q) = (%q, \"\"), want rejection", in, got)
+		}
+	}
+}
+
+func TestNormalizeSkillAPIPath(t *testing.T) {
+	tests := map[string]string{
+		`scripts\run.py`:      "scripts/run.py",
+		`references\api\x.md`: "references/api/x.md",
+		"assets/image.png":    "assets/image.png",
+	}
+	for in, want := range tests {
+		if got := normalizeSkillAPIPath(in); got != want {
+			t.Errorf("normalizeSkillAPIPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestWalkSkillFilesReturnsAPIPaths(t *testing.T) {
+	root := t.TempDir()
+	scripts := filepath.Join(root, "scripts")
+	if err := os.MkdirAll(scripts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scripts, "run.py"), []byte("print(1)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := walkSkillFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"scripts/": false, "scripts/run.py": false}
+	for _, entry := range entries {
+		if strings.Contains(entry, `\`) {
+			t.Errorf("walkSkillFiles returned non-API path %q", entry)
+		}
+		if _, ok := want[entry]; ok {
+			want[entry] = true
+		}
+	}
+	for entry, found := range want {
+		if !found {
+			t.Errorf("walkSkillFiles entries = %q, missing %q", entries, entry)
 		}
 	}
 }

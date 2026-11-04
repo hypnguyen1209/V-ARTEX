@@ -162,6 +162,33 @@ function mergeBySeq(current: Activity[], incoming: Activity[]): Activity[] {
   return [...bySeq.values()].sort((p, q) => p.seq - q.seq);
 }
 
+function mergeFallbackPage(
+  state: SessionState,
+  incoming: Activity[],
+  pageHasMore: boolean,
+  trimmable: boolean,
+): SessionState {
+  let items = mergeBySeq(state.items, incoming);
+  const anchored = state.loaded && state.earliestSeq > 0;
+  let hasMore = anchored ? state.hasMore : pageHasMore;
+  let earliestSeq = anchored ? state.earliestSeq : (items[0]?.seq ?? 0);
+  if (trimmable && items.length > MAX_KEEP) {
+    items = items.slice(items.length - MAX_KEEP);
+    hasMore = true;
+    earliestSeq = items[0].seq;
+  }
+  return {
+    ...state,
+    items,
+    loaded: true,
+    loading: false,
+    hasMore,
+    earliestSeq,
+    lastTs: items[items.length - 1]?.ts ?? state.lastTs,
+    error: undefined,
+  };
+}
+
 // statusIcon maps a session status to its icon. Worker terminal states are
 // Distinct status colors: done (green check circle), stopped (amber slash circle), blocked (red X circle),
 // exhausted (purple), running (blue spinner), and pending (gray clock).
@@ -521,6 +548,10 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   const [listOpen, setListOpen] = React.useState(false);
   // Per-session lazily-loaded caches, keyed by session_key (main | plan | intent:<id>).
   const [store, setStore] = React.useState<SessionStore>({});
+  const storeRef = React.useRef(store);
+  React.useEffect(() => {
+    storeRef.current = store;
+  }, [store]);
   // Worker sessions derived from exploration intents (paged past the old 300 cap).
   const [intents, setIntents] = React.useState<TaskNode[]>([]);
   const [intentAssets, setIntentAssets] = React.useState<IntentAsset[]>([]);
@@ -647,6 +678,8 @@ export function SessionsTab({ taskId }: { taskId: string }) {
   const snapshotRef = React.useRef(0); // task-level snapshot cursor → SSE since=
   const esRef = React.useRef<EventSource | null>(null);
   const activeKeyRef = React.useRef(mainSessionKey(0)); // current session key (for SSE dispatch/unread)
+  const fallbackMaxRef = React.useRef<Record<string, number>>({});
+  const systemFallbackCursorRef = React.useRef(0);
   const atBottomRef = React.useRef(true); // transcript pinned to bottom?
   const llmToastSeqRef = React.useRef<Set<number>>(new Set());
   const chatStatusRequestRef = React.useRef(0);
@@ -681,17 +714,17 @@ export function SessionsTab({ taskId }: { taskId: string }) {
           let since = 0;
           let systemItems: Activity[] = [];
           for (;;) {
+            const previous = since;
             const page = await api.activity(taskId, { since, limit: SYSTEM_SCAN_PAGE });
             if (reqTokenRef.current[key] !== token) return;
             systemItems = mergeBySeq(
               systemItems,
-              page.items.filter(
-                (item) => item.worker === "system" || item.kind === "llm_switch" || item.kind === "llm_failover",
-              ),
+              page.items.filter((item) => sessionKeyOf(item) === "system"),
             );
-            if (page.items.length < SYSTEM_SCAN_PAGE || page.cursor <= since) break;
-            since = page.cursor;
+            if (page.cursor > since) since = page.cursor;
+            if (page.items.length < SYSTEM_SCAN_PAGE || page.cursor <= previous) break;
           }
+          systemFallbackCursorRef.current = since;
           patchStore(key, (s) => {
             const items = mergeBySeq(systemItems, s.items);
             return {
@@ -756,8 +789,31 @@ export function SessionsTab({ taskId }: { taskId: string }) {
       const prevH = vp?.scrollHeight ?? 0;
       const prevTop = vp?.scrollTop ?? 0;
       patchStore(key, (s) => ({ ...s, loadingMore: true }));
-      api
-        .activityHistory(taskId, key, st.earliestSeq, PAGE)
+      const loadPage = async () => {
+        if (key === "system") {
+          // System events are sparse in the generic forward stream. Scan to the
+          // reverse-pagination anchor, retaining only the closest older page.
+          let since = 0;
+          let items: Activity[] = [];
+          let hasMore = false;
+          for (;;) {
+            const page = await api.activity(taskId, { since, limit: SYSTEM_SCAN_PAGE });
+            items = mergeBySeq(
+              items,
+              page.items.filter((item) => item.seq < st.earliestSeq && sessionKeyOf(item) === "system"),
+            );
+            if (items.length > PAGE) {
+              items = items.slice(-PAGE);
+              hasMore = true;
+            }
+            if (page.cursor >= st.earliestSeq || page.items.length < SYSTEM_SCAN_PAGE || page.cursor <= since) break;
+            since = page.cursor;
+          }
+          return { items, hasMore };
+        }
+        return api.activityHistory(taskId, key, st.earliestSeq, PAGE);
+      };
+      loadPage()
         .then((r) => {
           patchStore(key, (s) => {
             const items = mergeBySeq(r.items, s.items);
@@ -893,6 +949,8 @@ export function SessionsTab({ taskId }: { taskId: string }) {
     setMainSegs([{ seq: 0, created_at: "" }]);
     setCurrentSeg(0);
     snapshotRef.current = 0;
+    fallbackMaxRef.current = {};
+    systemFallbackCursorRef.current = 0;
     llmToastSeqRef.current = new Set();
     reqTokenRef.current = {};
     // Reserve the initial main key so the active-session effect (which fires for main on
@@ -1048,6 +1106,85 @@ export function SessionsTab({ taskId }: { taskId: string }) {
       esRef.current = null;
     };
   }, [taskId, patchStore]);
+
+  React.useEffect(() => {
+    if (sseLive) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      const key = activeKeyRef.current;
+      try {
+        let items: Activity[];
+        let pageHasMore = false;
+        let replaceHistory = false;
+        if (key === "system") {
+          let since = systemFallbackCursorRef.current;
+          items = [];
+          for (;;) {
+            const previous = since;
+            const page = await api.activity(taskId, { since, limit: SYSTEM_SCAN_PAGE });
+            if (!alive) return;
+            items = mergeBySeq(
+              items,
+              page.items.filter((item) => sessionKeyOf(item) === "system"),
+            );
+            if (page.cursor > since) since = page.cursor;
+            if (page.items.length < SYSTEM_SCAN_PAGE || page.cursor <= previous) break;
+          }
+          systemFallbackCursorRef.current = since;
+        } else {
+          const cached = storeRef.current[key]?.items ?? [];
+          const tail = cached.reduce((max, item) => Math.max(max, item.seq), 0);
+          let before = 0;
+          items = [];
+          for (;;) {
+            const response = await api.activityHistory(taskId, key, before, PAGE);
+            if (!alive) return;
+            const earliest = response.items.reduce((min, item) => Math.min(min, item.seq), Infinity);
+            if (before && (earliest >= before || response.items.some((item) => item.seq >= before))) return;
+            items = mergeBySeq(response.items, items);
+            pageHasMore = response.hasMore;
+            if (!tail || earliest <= tail || !response.hasMore) break;
+            if (!Number.isFinite(earliest)) return;
+            if (items.length >= MAX_KEEP) {
+              if (key === activeKeyRef.current && !atBottomRef.current) return;
+              replaceHistory = true;
+              break;
+            }
+            before = earliest;
+          }
+        }
+        const maxSeq = items.reduce((max, item) => Math.max(max, item.seq), 0);
+        const newerSeq = maxSeq > (fallbackMaxRef.current[key] ?? -1);
+        fallbackMaxRef.current[key] = Math.max(maxSeq, fallbackMaxRef.current[key] ?? -1);
+        const state = storeRef.current[key];
+        const trimmable = key !== activeKeyRef.current || atBottomRef.current;
+        const needsPagination = items.length > 0 && !state?.earliestSeq;
+        const needsRecovery = !state?.loaded || state.loading || !!state.error || needsPagination;
+        const needsTrim = trimmable && (state?.items.length ?? 0) > MAX_KEEP;
+        // Unchanged pages can still recover a late load failure, establish the
+        // first history anchor, or trim after scrolling down. Otherwise skip writes.
+        if (!newerSeq && !needsRecovery && !needsTrim) return;
+        patchStore(key, (current) => {
+          if (!replaceHistory) return mergeFallbackPage(current, items, pageHasMore, trimmable);
+          const newest = items[items.length - 1]?.seq ?? 0;
+          const tail = current.items.filter((item) => item.seq > newest);
+          return mergeFallbackPage({ ...current, items: tail, earliestSeq: 0, hasMore: true }, items, true, trimmable);
+        });
+      } catch {
+        // Best-effort fallback; retry after the next delay.
+      } finally {
+        if (alive) timer = setTimeout(poll, 2000);
+      }
+    };
+
+    timer = setTimeout(poll, 2000);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [sseLive, taskId, patchStore]);
 
   React.useEffect(() => {
     let active = true;
