@@ -4,8 +4,8 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/Autumn-27/norma/agentcore"
-	"github.com/Autumn-27/norma/noaadapter"
+	"github.com/hypnguyen1209/norma/agentcore"
+	"github.com/hypnguyen1209/norma/noaadapter"
 )
 
 // noaWarn returns a diagnostics sink tagging non-fatal noa messages with the

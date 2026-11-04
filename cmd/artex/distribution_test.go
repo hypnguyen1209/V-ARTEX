@@ -38,3 +38,21 @@ func TestDistributionUsesOwnedContainerImage(t *testing.T) {
 		t.Error("release workflow still requires Docker Hub secrets")
 	}
 }
+
+func TestDistributionUsesOwnedNormaModule(t *testing.T) {
+	root := filepath.Join("..", "..")
+	want := "github.com/hypnguyen1209/norma"
+	for _, name := range []string{"go.mod", "README.md"} {
+		data, err := os.ReadFile(filepath.Join(root, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		if strings.Contains(text, "github.com/Autumn-27/norma") {
+			t.Errorf("%s still references the upstream Norma module", name)
+		}
+		if !strings.Contains(text, want) {
+			t.Errorf("%s does not reference %s", name, want)
+		}
+	}
+}

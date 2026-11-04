@@ -15,7 +15,7 @@ import (
 	"github.com/hypnguyen1209/V-ARTEX/guard"
 	"github.com/hypnguyen1209/V-ARTEX/intercept"
 	"github.com/hypnguyen1209/V-ARTEX/llmrec"
-	"github.com/Autumn-27/norma/llm"
+	"github.com/hypnguyen1209/norma/llm"
 )
 
 // judgeWorkerLane is the usage-ledger "worker" label for intercept fallback-judge

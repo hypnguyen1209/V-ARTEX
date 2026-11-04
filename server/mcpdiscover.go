@@ -8,8 +8,8 @@ import (
 
 	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/mcphttp"
-	"github.com/Autumn-27/norma/mcp"
-	actool "github.com/Autumn-27/norma/tool"
+	"github.com/hypnguyen1209/norma/mcp"
+	actool "github.com/hypnguyen1209/norma/tool"
 )
 
 // mcpClient is the shared surface of a connected MCP server (stdio, Streamable HTTP,

@@ -7,7 +7,7 @@ import (
 	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/intercept"
 	"github.com/hypnguyen1209/V-ARTEX/traffic"
-	actool "github.com/Autumn-27/norma/tool"
+	actool "github.com/hypnguyen1209/norma/tool"
 )
 
 func migrateEnglishDefaults(ctx context.Context, pg *db.DB) error {

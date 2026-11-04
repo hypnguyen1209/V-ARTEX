@@ -10,8 +10,8 @@ import (
 	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/guard"
 	"github.com/hypnguyen1209/V-ARTEX/intercept"
-	"github.com/Autumn-27/norma/llm"
-	"github.com/Autumn-27/norma/tool"
+	"github.com/hypnguyen1209/norma/llm"
+	"github.com/hypnguyen1209/norma/tool"
 )
 
 // Real PostgreSQL + SDK hooks: Worker reviews receive the current call only.

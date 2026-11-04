@@ -12,8 +12,8 @@ import (
 
 	"github.com/hypnguyen1209/V-ARTEX/agent"
 	"github.com/hypnguyen1209/V-ARTEX/db"
-	"github.com/Autumn-27/norma/llm"
-	"github.com/Autumn-27/norma/transcript"
+	"github.com/hypnguyen1209/norma/llm"
+	"github.com/hypnguyen1209/norma/transcript"
 )
 
 func TestSettlementKindsRemainDistinct(t *testing.T) {

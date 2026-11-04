@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/hypnguyen1209/V-ARTEX/db"
-	"github.com/Autumn-27/norma/permission"
-	actool "github.com/Autumn-27/norma/tool"
+	"github.com/hypnguyen1209/norma/permission"
+	actool "github.com/hypnguyen1209/norma/tool"
 )
 
 // Custom tool execution (docs/custom-tool-design.md). Non-system tool rows dispatch

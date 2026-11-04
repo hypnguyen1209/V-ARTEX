@@ -17,8 +17,8 @@ import (
 	"github.com/hypnguyen1209/V-ARTEX/agent"
 	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/intercept"
-	"github.com/Autumn-27/norma/llm"
-	actool "github.com/Autumn-27/norma/tool"
+	"github.com/hypnguyen1209/norma/llm"
+	actool "github.com/hypnguyen1209/norma/tool"
 )
 
 type retestProvider struct {

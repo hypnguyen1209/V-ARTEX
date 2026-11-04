@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Autumn-27/norma/agentcore"
-	"github.com/Autumn-27/norma/harness"
-	"github.com/Autumn-27/norma/llm"
-	acperm "github.com/Autumn-27/norma/permission"
-	actool "github.com/Autumn-27/norma/tool"
+	"github.com/hypnguyen1209/norma/agentcore"
+	"github.com/hypnguyen1209/norma/harness"
+	"github.com/hypnguyen1209/norma/llm"
+	acperm "github.com/hypnguyen1209/norma/permission"
+	actool "github.com/hypnguyen1209/norma/tool"
 )
 
 type toolAliasFakeProvider struct {

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/hypnguyen1209/V-ARTEX/db"
-	actool "github.com/Autumn-27/norma/tool"
+	actool "github.com/hypnguyen1209/norma/tool"
 )
 
 // assetInterceptCandidates extracts domain/IP/URL candidates from an incoming asset for interception matching.

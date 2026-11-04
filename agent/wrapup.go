@@ -3,7 +3,7 @@ package agent
 import (
 	"strings"
 
-	"github.com/Autumn-27/norma/harness"
+	"github.com/hypnguyen1209/norma/harness"
 )
 
 // Wrap-up / settlement prompt: when an agent reaches its turn budget (MaxTurns)

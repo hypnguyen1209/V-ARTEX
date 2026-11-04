@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/hypnguyen1209/V-ARTEX/db"
-	"github.com/Autumn-27/norma/agentcore"
-	"github.com/Autumn-27/norma/llm"
+	"github.com/hypnguyen1209/norma/agentcore"
+	"github.com/hypnguyen1209/norma/llm"
 )
 
 type captureUsageProvider struct {

@@ -19,9 +19,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Autumn-27/norma/llm"
-	actool "github.com/Autumn-27/norma/tool"
-	"github.com/Autumn-27/norma/transcript"
+	"github.com/hypnguyen1209/norma/llm"
+	actool "github.com/hypnguyen1209/norma/tool"
+	"github.com/hypnguyen1209/norma/transcript"
 	"github.com/hypnguyen1209/V-ARTEX/agent"
 	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/intercept"

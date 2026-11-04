@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/Autumn-27/norma/llm"
+	"github.com/hypnguyen1209/norma/llm"
 )
 
 // Detect and continue thinking-only turns with no text/tools; see steerHooks.Stop.

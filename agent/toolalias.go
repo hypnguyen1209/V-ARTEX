@@ -5,7 +5,7 @@ import (
 	"iter"
 	"strings"
 
-	"github.com/Autumn-27/norma/llm"
+	"github.com/hypnguyen1209/norma/llm"
 )
 
 // toolAliasProvider accepts common model spellings at the provider boundary so

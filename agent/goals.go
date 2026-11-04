@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/hypnguyen1209/V-ARTEX/db"
-	"github.com/Autumn-27/norma/agentcore"
-	"github.com/Autumn-27/norma/llm"
-	acperm "github.com/Autumn-27/norma/permission"
-	actool "github.com/Autumn-27/norma/tool"
-	"github.com/Autumn-27/norma/transcript"
+	"github.com/hypnguyen1209/norma/agentcore"
+	"github.com/hypnguyen1209/norma/llm"
+	acperm "github.com/hypnguyen1209/norma/permission"
+	actool "github.com/hypnguyen1209/norma/tool"
+	"github.com/hypnguyen1209/norma/transcript"
 )
 
 // goalsDefaultTmpl is the built-in EDITABLE body (section [A]) of the goals-decomposer

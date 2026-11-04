@@ -9,7 +9,7 @@ import (
 
 	"github.com/hypnguyen1209/V-ARTEX/db"
 	"github.com/hypnguyen1209/V-ARTEX/traffic"
-	"github.com/Autumn-27/norma/llm"
+	"github.com/hypnguyen1209/norma/llm"
 )
 
 func TestConversationAutoTitleRecognizesEnglishAndLegacyDefaults(t *testing.T) {

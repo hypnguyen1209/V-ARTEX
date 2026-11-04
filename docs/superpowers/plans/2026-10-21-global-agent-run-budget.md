@@ -759,7 +759,7 @@ func TestRunIntentWaitsForGlobalWorkerPermit(t *testing.T) {
 }
 ```
 
-Add imports for `sync/atomic`, `github.com/hypnguyen1209/V-ARTEX/agent`, and `github.com/Autumn-27/norma/llm`.
+Add imports for `sync/atomic`, `github.com/hypnguyen1209/V-ARTEX/agent`, and `github.com/hypnguyen1209/norma/llm`.
 
 - [ ] **Step 2: Run the integration test and verify RED**
 

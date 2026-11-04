@@ -31,8 +31,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/hypnguyen1209/V-ARTEX/db"
-	"github.com/Autumn-27/norma/permission"
-	actool "github.com/Autumn-27/norma/tool"
+	"github.com/hypnguyen1209/norma/permission"
+	actool "github.com/hypnguyen1209/norma/tool"
 	mproxy "github.com/lqqyt2423/go-mitmproxy/proxy"
 	_ "modernc.org/sqlite"
 )

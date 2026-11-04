@@ -20,11 +20,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Autumn-27/norma/agentcore"
-	"github.com/Autumn-27/norma/compaction"
-	"github.com/Autumn-27/norma/llm"
-	acperm "github.com/Autumn-27/norma/permission"
-	"github.com/Autumn-27/norma/transcript"
+	"github.com/hypnguyen1209/norma/agentcore"
+	"github.com/hypnguyen1209/norma/compaction"
+	"github.com/hypnguyen1209/norma/llm"
+	acperm "github.com/hypnguyen1209/norma/permission"
+	"github.com/hypnguyen1209/norma/transcript"
 	"github.com/hypnguyen1209/V-ARTEX/llmrec"
 )
 

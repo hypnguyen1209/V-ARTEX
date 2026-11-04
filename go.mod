@@ -3,9 +3,9 @@ module github.com/hypnguyen1209/V-ARTEX
 go 1.26.3
 
 require (
-	github.com/Autumn-27/norma v0.4.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
+	github.com/hypnguyen1209/norma v0.4.3-v-artex.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/klauspost/compress v1.18.6
 	github.com/lqqyt2423/go-mitmproxy v1.9.2

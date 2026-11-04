@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/hypnguyen1209/V-ARTEX/db"
-	actool "github.com/Autumn-27/norma/tool"
+	actool "github.com/hypnguyen1209/norma/tool"
 )
 
 // Platform operations for built-in Auto: create/edit skills, custom tools, and MCP.

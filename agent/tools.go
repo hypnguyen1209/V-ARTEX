@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	acperm "github.com/Autumn-27/norma/permission"
-	actool "github.com/Autumn-27/norma/tool"
+	acperm "github.com/hypnguyen1209/norma/permission"
+	actool "github.com/hypnguyen1209/norma/tool"
 	"github.com/hypnguyen1209/V-ARTEX/db"
 )
 

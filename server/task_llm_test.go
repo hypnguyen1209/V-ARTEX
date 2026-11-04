@@ -13,8 +13,8 @@ import (
 
 	"github.com/hypnguyen1209/V-ARTEX/agent"
 	"github.com/hypnguyen1209/V-ARTEX/db"
-	"github.com/Autumn-27/norma/harness"
-	"github.com/Autumn-27/norma/llm"
+	"github.com/hypnguyen1209/norma/harness"
+	"github.com/hypnguyen1209/norma/llm"
 )
 
 type scriptedLLMProvider struct {

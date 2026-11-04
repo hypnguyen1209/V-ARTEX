@@ -315,7 +315,7 @@ In this version, history is available through vulnerability details and sessions
 
 ## System Architecture
 
-ARTEX is an **autonomous penetration testing system driven by multiple LLM agents**: a Go monolithic backend (with an embedded Next.js frontend) + PostgreSQL. The [`norma`](https://github.com/Autumn-27/norma) SDK provides agent capabilities (`agentcore` / `tool` / `permission` / `harness` / `memory` / `transcript`). Its core is a **dual-graph architecture**, supported by two mechanisms for autonomy: **execution trace sharing between workers** and **a planner todolist shared across rounds to keep attack chains on track**.
+ARTEX is an **autonomous penetration testing system driven by multiple LLM agents**: a Go monolithic backend (with an embedded Next.js frontend) + PostgreSQL. The [`norma`](https://github.com/hypnguyen1209/norma) SDK provides agent capabilities (`agentcore` / `tool` / `permission` / `harness` / `memory` / `transcript`). Its core is a **dual-graph architecture**, supported by two mechanisms for autonomy: **execution trace sharing between workers** and **a planner todolist shared across rounds to keep attack chains on track**.
 
 ### Architectural Layers
 

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/hypnguyen1209/V-ARTEX/llmrec"
-	"github.com/Autumn-27/norma/llm"
+	"github.com/hypnguyen1209/norma/llm"
 )
 
 // End-to-end through a real norma provider: the Capture rides the context into

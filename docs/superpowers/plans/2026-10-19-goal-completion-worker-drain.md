@@ -38,7 +38,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/Autumn-27/norma/llm"
+	"github.com/hypnguyen1209/norma/llm"
 )
 
 func TestGoalSettlementHookBlocksProbesAndAllowsWriteback(t *testing.T) {

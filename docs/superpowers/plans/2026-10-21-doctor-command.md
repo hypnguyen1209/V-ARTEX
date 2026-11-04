@@ -586,7 +586,7 @@ Expected: tests PASS.
 
 - [ ] **Step 1: Add a failing quiet-provider test**
 
-Extend the imports in `agent/provider_capture_test.go` with `bytes`, `context`, `log`, and `github.com/Autumn-27/norma/llm`. Append:
+Extend the imports in `agent/provider_capture_test.go` with `bytes`, `context`, `log`, and `github.com/hypnguyen1209/norma/llm`. Append:
 
 ```go
 func TestConnectionQuietDoesNotLogWireData(t *testing.T) {
